@@ -2,13 +2,13 @@ use super::{EditorAction, EditorView, VoiceTranscriptionOptions};
 use crate::ai::blocklist::InputType;
 use crate::appearance::Appearance;
 use crate::editor::EditorElement;
-use crate::server::server_api::TranscribeError;
 use crate::server::telemetry::TelemetryEvent;
 use crate::settings::{AISettings, VoiceInputToggleKey};
 use crate::themes::theme::Fill;
 use crate::ui_components::buttons::{icon_button, icon_button_with_color};
 use crate::ui_components::icons;
 use crate::view_components::{FeaturePopup, NewFeaturePopupLabel};
+use crate::voice::transcriber::TranscribeError;
 use crate::workspace::ToastStack;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use settings::Setting as _;
@@ -236,14 +236,14 @@ impl EditorView {
                 // If the keypress is not valid in the current state, we ignore it.
                 match &self.voice_input_state {
                     // For example, the user could press Fn in a different app, then switch focus
-                    // to Warp and let it go - we should NOT activate voice input in this case.
+                    // to Zap and let it go - we should NOT activate voice input in this case.
                     VoiceInputState::Stopped => {
                         if matches!(state, warpui::event::KeyState::Released) {
                             return false;
                         }
                     }
                     // Note that in reality, this case is unreachable because we stop voice input
-                    // if the user is not focused on Warp (since we lose the ability to listen to modifier
+                    // if the user is not focused on Zap (since we lose the ability to listen to modifier
                     // key events). Thus, the user cannot enter a state where we're listening for voice input
                     // but the key is not held already.
                     VoiceInputState::Listening => {

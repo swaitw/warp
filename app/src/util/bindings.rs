@@ -35,7 +35,6 @@ pub enum CustomAction {
     ShowAboutWarp,
     ShowSettings,
     ConfigureKeybindings,
-    ShowAccount,
     ShowAppearance,
     ReferAFriend,
     ViewChangelog,
@@ -87,7 +86,8 @@ pub enum CustomAction {
     CopyBlock,
     CopyBlockCommand,
     CopyBlockOutput,
-    ViewSharedBlocks,
+    // Zap Wave 6-8:`ViewSharedBlocks` 随 `ShowBlocksView` 设置页与
+    // `workspace:show_settings_shared_blocks_page` keybinding 一同物理删。
     CloseTab,
     CloseOtherTabs,
     CloseTabsRight,
@@ -111,25 +111,21 @@ pub enum CustomAction {
     NewPersonalWorkflow,
     NewPersonalNotebook,
     NewPersonalEnvVars,
-    NewTeamWorkflow,
-    NewTeamNotebook,
-    NewTeamEnvVars,
     SearchDrive,
-    OpenTeamSettings,
-    ShareCurrentSession,
-    #[cfg(windows)]
+    // Also used on Linux: `EditorView` only binds Paste to `ctrl-shift-v` by default (see
+    // `cmd_or_ctrl_shift`), so Linux needs the same plain `ctrl-v` compensating binding as Windows.
+    #[cfg(any(windows, target_os = "linux"))]
     WindowsPaste,
     #[cfg(windows)]
     WindowsCopy,
-    /// Also applies to legacy Warp AI (toggles the panel)
+    /// Also applies to legacy Zap AI (toggles the panel)
     NewAgentModePane,
-    /// Also applies to legacy Warp AI (attaches the selection to the panel editor)
+    /// Also applies to legacy Zap AI (attaches the selection to the panel editor)
     AttachSelectionAsAgentModeContext,
     OpenAIFactCollection,
     OpenMCPServerCollection,
     ToggleProjectExplorer,
     NewPersonalAIPrompt,
-    NewTeamAIPrompt,
     OpenRepository,
     NewTerminalTab,
     NewAgentTab,
@@ -141,8 +137,8 @@ pub enum CustomAction {
 lazy_static! {
     /// Maps for converting from custom tags back to the action enum
     /// This layer of indirection is necessary because the UI framework can't
-    /// know about particular Warp specific actions, so it deals with all actions
-    /// as plain isizes.  Within Warp though we want to deal with them as the enum type.
+    /// know about particular Zap specific actions, so it deals with all actions
+    /// as plain isizes.  Within Zap though we want to deal with them as the enum type.
     pub static ref CUSTOM_TAG_TO_ACTION: HashMap<isize, CustomAction> = HashMap::from_iter(all::<CustomAction>().map(|action| {
         (action as isize, action)
     }));
@@ -269,7 +265,7 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         CustomAction::Cut => Keystroke::parse("cmdorctrl-x").ok(),
         CustomAction::Copy => Keystroke::parse(cmd_or_ctrl_shift("c")).ok(),
         CustomAction::Paste => Keystroke::parse(cmd_or_ctrl_shift("v")).ok(),
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         CustomAction::WindowsPaste => Keystroke::parse("ctrl-v").ok(),
         #[cfg(windows)]
         CustomAction::WindowsCopy => Keystroke::parse("ctrl-c").ok(),
@@ -453,8 +449,6 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         | CustomAction::CloseOtherTabs
         | CustomAction::CloseTabsRight
         | CustomAction::ReferAFriend
-        | CustomAction::ViewSharedBlocks
-        | CustomAction::ShowAccount
         | CustomAction::ShowAppearance
         | CustomAction::SaveCurrentConfig
         | CustomAction::TriggerWelcomeBlock
@@ -464,16 +458,10 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         | CustomAction::NewPersonalWorkflow
         | CustomAction::NewPersonalNotebook
         | CustomAction::NewPersonalEnvVars
-        | CustomAction::NewTeamWorkflow
-        | CustomAction::NewTeamNotebook
-        | CustomAction::NewTeamEnvVars
         | CustomAction::SearchDrive
-        | CustomAction::OpenTeamSettings
-        | CustomAction::ShareCurrentSession
         | CustomAction::OpenAIFactCollection
         | CustomAction::OpenMCPServerCollection
         | CustomAction::NewPersonalAIPrompt
-        | CustomAction::NewTeamAIPrompt
         | CustomAction::NewAgentTab => None,
     }
 }

@@ -119,8 +119,8 @@ use warp_editor::editor::NavigationKey;
 use warpui::actions::StandardAction;
 use warpui::clipboard::ClipboardContent;
 use warpui::elements::{
-    ChildView, Container, CornerRadius, CrossAxisAlignment, Flex, Hoverable, MainAxisSize,
-    ParentElement, Shrinkable, DEFAULT_UI_LINE_HEIGHT_RATIO,
+    get_rich_content_position_id, ChildView, Container, CornerRadius, CrossAxisAlignment, Flex,
+    Hoverable, MainAxisSize, ParentElement, SavePosition, Shrinkable, DEFAULT_UI_LINE_HEIGHT_RATIO,
 };
 use warpui::elements::{MouseStateHandle, Radius};
 use warpui::fonts::{FamilyId, Properties, Weight};
@@ -261,7 +261,7 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::Paste,
             id!("EditorView") & !id!("IMEOpen"),
         ),
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         FixedBinding::custom(
             CustomAction::WindowsPaste,
             EditorAction::Paste,
@@ -415,7 +415,7 @@ pub fn init(ctx: &mut AppContext) {
         // This might seem like a no-op since `ctrl-right` changes desktops on Mac by default.
         // However, many Mac users coming from fish shell have asked for this binding.
         // They've already disabled the desktop change shortcut, and are expecting that this
-        // binding also works in Warp. We should not break their workflow.
+        // binding also works in Zap. We should not break their workflow.
         FixedBinding::new(
             "ctrl-right",
             EditorAction::MoveForwardOneWord,
@@ -3683,6 +3683,13 @@ impl EditorView {
 
     pub fn can_select<C: ModelAsRef>(&self, ctx: &C) -> bool {
         self.model().as_ref(ctx).can_select()
+    }
+
+    /// Whether this editor masks its contents as a password field. Password fields disable
+    /// copy/cut (see [`Self::copy`]/[`Self::cut`]) and should hide those actions in any
+    /// external context menu (e.g. the settings right-click menu) while still allowing paste.
+    pub fn is_password(&self) -> bool {
+        self.is_password
     }
 
     pub fn interaction_state<C: ModelAsRef>(&self, ctx: &C) -> InteractionState {
@@ -8548,7 +8555,7 @@ impl TypedActionView for EditorView {
             UnhandledModifierKey(keystroke) => {
                 if self.can_select(ctx) {
                     // This event helps us to keep track of what key bindings users
-                    // try to use in the editor but are currently not available in Warp.
+                    // try to use in the editor but are currently not available in Zap.
                     ctx.emit(Event::UnhandledModifierKeyOnEditor(keystroke.clone()))
                 }
             }
@@ -8692,7 +8699,7 @@ impl View for EditorView {
             .with_cursor(Cursor::IBeam)
             .finish();
 
-        if let Some(controls) = self.render_controls(ctx) {
+        let content = if let Some(controls) = self.render_controls(ctx) {
             let mut row = Flex::row()
                 .with_main_axis_size(MainAxisSize::Max)
                 .with_cross_axis_alignment(CrossAxisAlignment::End);
@@ -8701,7 +8708,9 @@ impl View for EditorView {
             row.finish()
         } else {
             hoverable
-        }
+        };
+
+        SavePosition::new(content, &get_rich_content_position_id(&self.view_id)).finish()
     }
 
     fn keymap_context(&self, ctx: &AppContext) -> warpui::keymap::Context {

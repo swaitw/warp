@@ -63,10 +63,10 @@ use crate::{
     rendering,
     util::post_inc,
     Action, AddWindowOptions, AnyModel, AnyModelHandle, AnyView, ApplicationBundleInfo, CursorInfo,
-    Effect, Element, Entity, EntityId, Event, GetSingletonModelHandle, ModelAsRef, ModelContext,
-    ModelHandle, NextNewWindowsHasThisWindowsBoundsUponClose, Presenter, ReadModel, ReadView,
-    SingletonEntity, SpawnedFuture, TaskId, TypedActionView, UpdateModel, UpdateView, View,
-    ViewAsRef, ViewContext, ViewHandle, WindowId, WindowInvalidation,
+    CurrentRenderWindowGuard, Effect, Element, Entity, EntityId, Event, GetSingletonModelHandle,
+    ModelAsRef, ModelContext, ModelHandle, NextNewWindowsHasThisWindowsBoundsUponClose, Presenter,
+    ReadModel, ReadView, SingletonEntity, SpawnedFuture, TaskId, TypedActionView, UpdateModel,
+    UpdateView, View, ViewAsRef, ViewContext, ViewHandle, WindowId, WindowInvalidation,
 };
 
 use super::{
@@ -955,7 +955,7 @@ impl AppContext {
         self.presenters.get(&window_id).cloned()
     }
 
-    fn invalidate_all_views_for_window(&mut self, window_id: WindowId) {
+    pub fn invalidate_all_views_for_window(&mut self, window_id: WindowId) {
         let Some(window) = self.windows.get(&window_id) else {
             return;
         };
@@ -2712,6 +2712,13 @@ impl AppContext {
 
     /// Builds a new scene for the given window.
     fn build_scene(&mut self, window_id: WindowId, window: &dyn WindowContext) -> Rc<Scene> {
+        // Make the window being rendered available to window-blind theme
+        // accessors for the duration of this render pass (view rendering happens
+        // inside the `presenter.invalidate`/`build_scene` calls below). The guard
+        // restores the previous ambient on every exit path, including the early
+        // returns below.
+        let _render_window_guard = CurrentRenderWindowGuard::new(window_id);
+
         let mut scene = Rc::new(Scene::new(
             window.backing_scale_factor(),
             self.rendering_config(),
@@ -4261,11 +4268,6 @@ impl AppContext {
         });
     }
 
-    // openWarp 闭源遥测剥离 P4d:`record_app_focus` / `record_app_blur` /
-    // `try_record_daily_app_focus_duration` 三个 AppContext 方法 + `AppFocusInfo`
-    // 字段已删,原仅用于 Daily App Focus Duration 事件上报到 Rudder。调用站点
-    // 在 app/src/lib.rs::app_callbacks 同步删除。
-
     pub fn is_screen_reader_enabled(&self) -> Option<bool> {
         self.platform_delegate.is_screen_reader_enabled()
     }
@@ -4463,6 +4465,11 @@ impl AppContext {
     }
 
     pub fn render_view(&self, window_id: WindowId, view_id: EntityId) -> Result<Box<dyn Element>> {
+        // Make the window available to window-blind theme accessors in case this
+        // view tree is built outside `build_scene` (position queries, view
+        // transfer, tests).
+        let _render_window_guard = CurrentRenderWindowGuard::new(window_id);
+
         // surfacing the error of a missing window earlier
         let window = self
             .windows
@@ -4476,6 +4483,9 @@ impl AppContext {
     }
 
     pub fn render_views(&self, window_id: WindowId) -> Result<HashMap<EntityId, Box<dyn Element>>> {
+        // See `render_view` above.
+        let _render_window_guard = CurrentRenderWindowGuard::new(window_id);
+
         self.windows
             .get(&window_id)
             .map(|w| {

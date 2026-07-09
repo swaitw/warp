@@ -1,4 +1,4 @@
-//! This module contains utilities for dealing with file/directory paths throughout Warp.
+//! This module contains utilities for dealing with file/directory paths throughout Zap.
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env::{self, VarError};
@@ -474,7 +474,7 @@ pub fn convert_wsl_to_windows_host_path(
             for component in unix_path
                 .with_windows_encoding()
                 .components()
-                .skip_while(|component| *component == TypedComponent::Unix(UnixComponent::RootDir))
+                .skip(1)
             {
                 windows_path.push(component.as_bytes());
             }

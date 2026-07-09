@@ -10,7 +10,7 @@
 //!   2. 不依赖 `HashMap` iterate 顺序
 //!   3. 不依赖外部状态(时间戳、随机、PID 等)
 //!
-//! 这套测试是 OpenWarp 的"防退化护栏"——后续任何修改 prompt
+//! 这套测试是 Zap 的"防退化护栏"——后续任何修改 prompt
 //! 构造路径的改动只要破坏字节级稳定性,这里就会断言失败。
 
 use crate::ai::agent::{MCPContext, MCPServer};
@@ -179,6 +179,41 @@ fn serialize_mcp_tool_call_is_deterministic() {
         pos_a < pos_z,
         "prost_types::Struct 应按 BTreeMap key 字典序"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Issue #245: carrier with invalid JSON args must fall back to empty object
+// ---------------------------------------------------------------------------
+
+/// When the model emits a tool call with invalid JSON escape sequences (e.g. `\e`, `\``),
+/// the carrier message stores the raw string in server_message_data.
+/// On the next turn, serialize_outgoing_tool_call must return a Value::Object (not
+/// Value::String) so that genai serializes it as a JSON object for `arguments`,
+/// not a doubly-wrapped JSON string that the provider would reject with "Invalid \escape".
+#[test]
+fn carrier_with_invalid_json_args_falls_back_to_empty_object() {
+    use api::message;
+    // Simulate a carrier message: tool = None, server_message_data = "fn_name\n<invalid_json>"
+    let tc = message::ToolCall {
+        tool_call_id: "call-invalid".to_owned(),
+        tool: None,
+    };
+    let server_message_data = "shell\n{\"command\": \"echo \\epath\"}";
+
+    let (fn_name, args_value) =
+        chat_stream::serialize_outgoing_tool_call_for_test(&tc, None, server_message_data);
+
+    assert_eq!(fn_name, "shell");
+    // Must NOT be a String (which would cause double-wrapping and Invalid \escape on the wire)
+    assert!(
+        !args_value.is_string(),
+        "args must be a JSON object/value, not a raw string (would cause Invalid \\escape)"
+    );
+    // Must be a valid JSON value that serde_json can serialize
+    let serialized = serde_json::to_string(&args_value).expect("args_value must be serializable");
+    // The serialized form must itself be valid JSON
+    serde_json::from_str::<serde_json::Value>(&serialized)
+        .expect("serialized args must be valid JSON");
 }
 
 // ---------------------------------------------------------------------------

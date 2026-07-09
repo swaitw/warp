@@ -11,8 +11,7 @@ use warpui::{AppContext, Entity, EntityId, ModelContext, SingletonEntity};
 
 use crate::{
     auth::{
-        auth_manager::{AuthManager, AuthManagerEvent},
-        AuthStateProvider,
+        AuthStateProvider, {AuthManager, AuthManagerEvent},
     },
     network::{NetworkStatus, NetworkStatusEvent, NetworkStatusKind},
     workspaces::user_workspaces::{UserWorkspaces, UserWorkspacesEvent},
@@ -304,7 +303,7 @@ impl LLMInfo {
 /// The set of LLMs available for a feature.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AvailableLLMs {
-    /// The Warp "default" LLM.
+    /// The Zap "default" LLM.
     default_id: LLMId,
     choices: Vec<LLMInfo>,
 
@@ -538,7 +537,7 @@ pub struct LLMPreferences {
 impl LLMPreferences {
     pub fn new(ctx: &mut ModelContext<Self>) -> Self {
         // BYOP-only 模式: picker 完全由用户配置的 agent_providers 填充,
-        // 完全不再消费 warp 后端的 GraphQL 模型列表。
+        // 完全不再消费上游云端模型列表。
         // 缓存(MODELS_BY_FEATURE_CACHE_KEY)也跳过 — 启动时直接从 settings 重建。
         let models_by_feature = crate::ai::agent_providers::build_byop_models_by_feature(&*ctx);
 

@@ -1,102 +1,13 @@
-//! General-purpose administrative commands in the Warp CLI.
+//! General-purpose administrative commands in the Zap CLI.
 
 use anyhow::{Context, Result};
 use serde::Serialize;
 use warp_cli::agent::OutputFormat;
 use warpui::{platform::TerminationMode, AppContext, SingletonEntity};
 
-use crate::auth::auth_manager::{AuthManager, AuthManagerEvent};
-use crate::auth::user::PrincipalType;
 use crate::auth::AuthStateProvider;
+use crate::auth::PrincipalType;
 use crate::workspaces::user_workspaces::UserWorkspaces;
-
-/// Kick off a device authorization login flow and handle auth events.
-pub fn login(ctx: &mut AppContext) -> Result<()> {
-    let auth_state = AuthStateProvider::as_ref(ctx).get();
-    let has_cached_credentials = auth_state.is_logged_in();
-
-    // If the user is already logged in, we require that the user log out before logging
-    // back in to ensure their existing state isn't replaced (especially if using both the CLI
-    // and the desktop app). In this case, try refreshing their credentials first. If the user
-    // is trying to log in because the cached credentials are invalid, we should let them do so.
-    // Track whether we've started the device auth flow. Failure events
-    // that arrive before device auth has started are leftover refresh
-    // errors and should be ignored rather than treated as terminal.
-    let mut started_device_auth = !has_cached_credentials;
-    ctx.subscribe_to_model(
-        &AuthManager::handle(ctx),
-        move |_, event, ctx| match event {
-            AuthManagerEvent::AuthComplete => {
-                if !started_device_auth {
-                    // Refresh succeeded - credentials are still valid.
-                    let auth_state = AuthStateProvider::as_ref(ctx).get();
-                    match (auth_state.username_for_display(), auth_state.user_email()) {
-                        (Some(username), Some(email)) if username != email => {
-                            println!("You are already logged in as {username} ({email}).")
-                        }
-                        (Some(name), _) | (None, Some(name)) => {
-                            println!("You are already logged in as {name}.")
-                        }
-                        (None, None) => {
-                            println!("You are already logged in.")
-                        }
-                    }
-                    ctx.terminate_app(TerminationMode::ForceTerminate, None);
-                } else {
-                    // Device auth succeeded.
-                    println!("Logged in successfully");
-                    ctx.terminate_app(TerminationMode::ForceTerminate, None);
-                }
-            }
-            AuthManagerEvent::AuthFailed(_) => {
-                if !started_device_auth {
-                    // Refresh failed - start a fresh device auth flow.
-                    started_device_auth = true;
-                    AuthManager::handle(ctx).update(ctx, |auth_manager, ctx| {
-                        auth_manager.authorize_device(ctx);
-                    });
-                } else {
-                    // Device auth failed.
-                    let err_msg = match event {
-                        AuthManagerEvent::AuthFailed(err) => {
-                            format!("Authentication failed: {err:#}")
-                        }
-                        _ => "Authentication failed".to_string(),
-                    };
-                    ctx.terminate_app(
-                        TerminationMode::ForceTerminate,
-                        Some(Err(anyhow::anyhow!(err_msg))),
-                    );
-                }
-            }
-            AuthManagerEvent::ReceivedDeviceAuthorizationCode {
-                verification_url,
-                verification_url_complete,
-                user_code,
-            } => {
-                if let Some(url) = verification_url_complete {
-                    println!("To log in, open this URL in your browser:\n{url}");
-                } else {
-                    println!(
-                        "To log in, visit {verification_url} and enter this code: {user_code}"
-                    );
-                }
-            }
-            _ => {}
-        },
-    );
-
-    // Either refresh existing credentials or start device auth from scratch.
-    AuthManager::handle(ctx).update(ctx, |auth_manager, ctx| {
-        if has_cached_credentials {
-            auth_manager.refresh_user(ctx);
-        } else {
-            auth_manager.authorize_device(ctx);
-        }
-    });
-
-    Ok(())
-}
 
 #[derive(Serialize)]
 struct WhoamiOutput {
@@ -217,20 +128,5 @@ pub fn whoami(ctx: &mut AppContext, output_format: OutputFormat) -> Result<()> {
         });
     });
 
-    Ok(())
-}
-
-/// Log out of Warp using the same logic as the app.
-pub fn logout(ctx: &mut AppContext) -> Result<()> {
-    let auth_state = AuthStateProvider::as_ref(ctx).get();
-    if !auth_state.is_logged_in() {
-        println!("You are not logged in.");
-        ctx.terminate_app(TerminationMode::ForceTerminate, None);
-        return Ok(());
-    }
-
-    crate::auth::log_out(ctx);
-    println!("Logged out successfully.");
-    ctx.terminate_app(TerminationMode::ForceTerminate, None);
     Ok(())
 }

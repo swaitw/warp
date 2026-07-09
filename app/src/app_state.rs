@@ -13,13 +13,13 @@ use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::blocklist::InputConfig;
 use crate::ai::blocklist::SerializedBlockListItem;
 use crate::code::editor_management::CodeSource;
-use crate::drive::OpenWarpDriveObjectSettings;
+use crate::drive::ZapDriveObjectSettings;
 use crate::root_view::quake_mode_window_id;
 use crate::server::ids::SyncId;
-use crate::settings_view::{environments_page::EnvironmentsPage, SettingsSection};
+use crate::settings_view::SettingsSection;
 use crate::tab::SelectedTabColor;
 use crate::terminal::ShellLaunchData;
-use crate::themes::theme::AnsiColorIdentifier;
+use crate::themes::theme::{AnsiColorIdentifier, ThemeKind};
 use crate::workspace::view::left_panel::ToolPanelView;
 use crate::workspace::WorkspaceRegistry;
 use warpui::SingletonEntity as _;
@@ -57,6 +57,9 @@ pub struct WindowSnapshot {
     pub left_panel_width: Option<f32>,
     pub right_panel_width: Option<f32>,
     pub agent_management_filters: Option<PersistedAgentManagementFilters>,
+    /// The per-window theme override for this window, if the user set one via the
+    /// theme chooser's "This window" scope. Re-applied on restore.
+    pub theme_override: Option<ThemeKind>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -120,19 +123,21 @@ pub struct LeafSnapshot {
 pub enum LeafContents {
     Terminal(TerminalPaneSnapshot),
     Notebook(NotebookPaneSnapshot),
+    /// A read-only image viewer pane backed by a local file.
+    Image {
+        path: Option<PathBuf>,
+    },
     AIDocument(AIDocumentPaneSnapshot),
     Code(CodePaneSnapShot),
     EnvVarCollection(EnvVarCollectionPaneSnapshot),
-    EnvironmentManagement(EnvironmentManagementPaneSnapshot),
+    // Zap Wave 7-3:`EnvironmentManagement` LeafContents variant 随 Ambient Agent UI
+    // 子系统物理删。
     Workflow(WorkflowPaneSnapshot),
     Settings(SettingsPaneSnapshot),
     AIFact(AIFactPaneSnapshot),
     ExecutionProfileEditor,
     CodeReview(CodeReviewPaneSnapshot),
     AmbientAgent(AmbientAgentPaneSnapshot),
-    /// The in-app network log pane. Not persisted across restarts because the
-    /// backing log is an in-memory ring buffer that starts empty on launch.
-    NetworkLog,
     /// An entrypoint pane type to launch other pane types from a search palette. The default view
     /// when creating a tab.
     Welcome {
@@ -143,6 +148,11 @@ pub enum LeafContents {
     /// SSH 服务器编辑器 pane(openWarp 独有)。引用 `ssh_servers.node_id` 主键
     /// 加载/保存。**不持久化** — 重启后用户从左侧 SSH 管理器树重新打开。
     SshServer {
+        node_id: String,
+    },
+    /// SFTP 文件浏览器 pane。引用 `ssh_servers.node_id` 主键关联远端服务器。
+    /// **不持久化** — 重启后用户从左侧 SSH 管理器树重新打开。
+    Sftp {
         node_id: String,
     },
 }
@@ -160,20 +170,25 @@ impl LeafContents {
     /// restoration to fail and the whole tab to disappear on restart.
     pub(crate) fn is_persisted(&self) -> bool {
         match self {
-            // Network log: the backing log is an in-memory ring buffer that
-            // starts empty on launch; persisting would also regress back to
-            // an on-disk log via the app-state database.
-            LeafContents::NetworkLog
-            // Environment management panes are opened on-demand via workspace
-            // actions and have no persistable state.
-            | LeafContents::EnvironmentManagement(_)
+            // Zap Wave 7-3:`EnvironmentManagement` arm 随 variant 一同物理删。
             // SSH server editor:数据(host/user/...)持久化在 ssh_servers 表里,
             // pane 本身只是 view,关掉再打开没差别。
-            | LeafContents::SshServer { .. } => false,
+            LeafContents::SshServer { .. } => false,
+            // SFTP 浏览器:远端文件系统依赖活跃 SSH 连接,pane 不可恢复。
+            LeafContents::Sftp { .. } => false,
+            // Image viewer panes are intentionally not persisted: they render in-session but
+            // are not restored after restart.
+            LeafContents::Image { .. } => false,
+            // 远端文件代码 pane:远端 buffer 依赖活跃 SSH 连接,`RemoteFileTree`
+            // source 不可恢复(`is_restorable() == false`)。若写入持久化会留下
+            // 一条 restore 阶段被跳过的孤儿 `Code` 行,导致整个 tab 丢失 ——
+            // 因此带远端 source 的代码 pane 整体不持久化。
+            LeafContents::Code(CodePaneSnapShot::Local { source, .. }) => {
+                source.as_ref().map(|s| s.is_restorable()).unwrap_or(true)
+            }
             LeafContents::Terminal(_)
             | LeafContents::Notebook(_)
             | LeafContents::AIDocument(_)
-            | LeafContents::Code(_)
             | LeafContents::EnvVarCollection(_)
             | LeafContents::Workflow(_)
             | LeafContents::Settings(_)
@@ -192,7 +207,7 @@ impl LeafContents {
 pub struct AmbientAgentPaneSnapshot {
     pub uuid: Vec<u8>,
     // `task_id` is purposefully optional,
-    // as you can have a valid state (i.e. an empty cloud mode pane) where it is None.
+    // as you can have a valid state (i.e. an empty ambient-agent pane) where it is None.
     pub task_id: Option<AmbientAgentTaskId>,
 }
 
@@ -215,7 +230,7 @@ pub struct TerminalPaneSnapshot {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum NotebookPaneSnapshot {
-    CloudNotebook {
+    NotebookObject {
         /// The ID of the notebook that was open in this pane. There are 3 possibilities:
         /// 1. The pane contains a newly-created notebook that has not been edited yet. It might not
         ///    have an ID yet (client or server), so this will be `None`.
@@ -225,7 +240,7 @@ pub enum NotebookPaneSnapshot {
         ///    server ID.
         notebook_id: Option<SyncId>,
         // Settings for the notebook pane when it's opened (such as a folder to focus upon opening)
-        settings: OpenWarpDriveObjectSettings,
+        settings: ZapDriveObjectSettings,
     },
     LocalFileNotebook {
         /// The path to the local file that was open in this pane. This may be `None` if
@@ -261,26 +276,23 @@ pub enum CodePaneSnapShot {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum WorkflowPaneSnapshot {
-    CloudWorkflow {
+    WorkflowObject {
         workflow_id: Option<SyncId>,
         // Settings for the workflow pane when it's opened (such as a folder to focus upon opening)
-        settings: OpenWarpDriveObjectSettings,
+        settings: ZapDriveObjectSettings,
     },
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum EnvVarCollectionPaneSnapshot {
-    // CloudEnvVarCollection snapshots operate under the same heuristics
-    // as NotebookPaneSnapshot::CloudNotebook
-    CloudEnvVarCollection {
+    // EnvVarCollectionObject snapshots operate under the same heuristics
+    // as NotebookPaneSnapshot::NotebookObject
+    EnvVarCollectionObject {
         env_var_collection_id: Option<SyncId>,
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct EnvironmentManagementPaneSnapshot {
-    pub mode: EnvironmentsPage,
-}
+// Zap Wave 7-3:`EnvironmentManagementPaneSnapshot` 随 LeafContents variant 一同物理删。
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SettingsPaneSnapshot {
@@ -307,9 +319,11 @@ pub enum CodeReviewPaneSnapshot {
 pub enum LeftPanelDisplayedTab {
     FileTree,
     GlobalSearch,
-    WarpDrive,
+    ZapDrive,
     ConversationListView,
     SshManager,
+    ServerFileBrowser,
+    SkillManager,
 }
 
 impl From<ToolPanelView> for LeftPanelDisplayedTab {
@@ -317,9 +331,11 @@ impl From<ToolPanelView> for LeftPanelDisplayedTab {
         match view {
             ToolPanelView::ProjectExplorer => LeftPanelDisplayedTab::FileTree,
             ToolPanelView::GlobalSearch { .. } => LeftPanelDisplayedTab::GlobalSearch,
-            ToolPanelView::WarpDrive => LeftPanelDisplayedTab::WarpDrive,
+            ToolPanelView::ZapDrive => LeftPanelDisplayedTab::ZapDrive,
             ToolPanelView::ConversationListView => LeftPanelDisplayedTab::ConversationListView,
             ToolPanelView::SshManager => LeftPanelDisplayedTab::SshManager,
+            ToolPanelView::ServerFileBrowser => LeftPanelDisplayedTab::ServerFileBrowser,
+            ToolPanelView::SkillManager => LeftPanelDisplayedTab::SkillManager,
         }
     }
 }

@@ -5,10 +5,10 @@ use clap::Parser;
 use integration::test::*;
 use integration::Builder;
 use warp_cli::WorkerCommand;
-use warp_core::channel::{Channel, ChannelConfig, ChannelState, OzConfig, WarpServerConfig};
+use warp_core::channel::{Channel, ChannelConfig, ChannelState};
 use warp_core::AppId;
 
-/// The Warp integration test runner.
+/// The Zap integration test runner.
 #[derive(Debug, Default, Parser, Clone)]
 #[command(name = "warp-integration-test")]
 #[clap(args_conflicts_with_subcommands = true)]
@@ -30,28 +30,12 @@ pub fn main() -> Result<()> {
                 "dev",
                 "warp",
                 if cfg!(target_os = "macos") {
-                    "Warp-Integration"
+                    "Zap-Integration"
                 } else {
                     "WarpIntegration"
                 },
             ),
             logfile_name: "warp_integration.log".into(),
-            server_config: WarpServerConfig {
-                firebase_auth_api_key: "".into(),
-                // Use an IP in the IANA testing range, with the TCP discard port, to
-                // black-hole server traffic.
-                server_root_url: "http://192.0.2.0:9".into(),
-                rtc_server_url: "ws://192.0.2.0:9/graphql/v2".into(),
-                session_sharing_server_url: None,
-            },
-            oz_config: OzConfig {
-                // Use an IP in the IANA testing range, with the TCP discard port, to
-                // black-hole server traffic.
-                oz_root_url: "http://192.0.2.0:9".into(),
-                workload_audience_url: None,
-            },
-            telemetry_config: None,
-            crash_reporting_config: None,
             autoupdate_config: None,
             mcp_static_config: None,
         },
@@ -99,12 +83,20 @@ pub fn main() -> Result<()> {
                 "Integration test binary should have set an ORIGINAL_HOME environment variable",
             );
             assert_ne!(home, original_home, "HOME should not be the same as ORIGINAL_HOME!");
+        } else if #[cfg(windows)] {
+            let userprofile = std::env::var("USERPROFILE").expect(
+                "Should have a value for the USERPROFILE environment variable",
+            );
+            let original_userprofile = std::env::var("ORIGINAL_USERPROFILE").expect(
+                "Integration test binary should have set an ORIGINAL_USERPROFILE environment variable",
+            );
+            assert_ne!(userprofile, original_userprofile, "USERPROFILE should not be the same as ORIGINAL_USERPROFILE!");
         } else {
             unimplemented!("Need to add support for hermetic integration tests for the current platform!");
         }
     }
 
-    #[cfg_attr(not(unix), allow(unreachable_code))]
+    #[cfg_attr(not(any(unix, windows)), allow(unreachable_code))]
     warp::run_integration_test(driver)
 }
 
@@ -263,6 +255,7 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_ssh_into_sh);
     register_test!(test_ssh_into_ash);
     register_test!(test_ssh_with_shell_override);
+    register_test!(test_ssh_server_group_dropdown);
     register_test!(test_custom_open_completions_menu_binding);
     register_test!(test_color_overrides_in_prompt_dont_crash);
     register_test!(test_copy_prompt_from_block_honor_ps1_disabled);
@@ -320,10 +313,7 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_history_command_is_linked_to_local_workflow);
     register_test!(test_up_arrow_history_enters_shift_tab_for_workflow);
 
-    register_test!(test_websocket_does_not_begin_on_startup);
-    register_test!(test_websocket_begins_on_startup);
-    register_test!(test_websocket_begins_after_joining_a_team);
-    register_test!(test_websocket_begins_after_creating_an_object);
+    // Zap(本地化,Phase 5):websocket 集成测试随 Listener 物理删除。
 
     register_test!(test_secret_is_obfuscated_on_copy);
     register_test!(test_secret_tooltip_shows_on_click);
@@ -404,6 +394,7 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_selection_ai_to_last_semantic);
     register_test!(test_selection_ai_to_last_lines);
     register_test!(test_selection_last_to_ai_simple);
+    register_test!(test_copy_on_select_within_ai_simple);
     register_test!(test_selection_last_to_ai_semantic);
     register_test!(test_selection_last_to_ai_lines);
     register_test!(test_restored_ai_block_renders_mermaid_and_local_images);
@@ -435,6 +426,27 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_goto_line_jumps_to_line);
     register_test!(test_goto_line_with_column);
     register_test!(test_goto_line_clamps_out_of_range);
+
+    // SFTP browser popup tests
+    register_test!(test_sftp_pane_opens_in_workspace);
+    register_test!(test_sftp_pane_focus_and_keyboard);
+    register_test!(test_sftp_pane_close);
+    register_test!(test_sftp_pane_tab_switch);
+    register_test!(test_sftp_pane_disconnected_render);
+    // SFTP mock backend UI integration tests
+    register_test!(test_sftp_mock_backend_connected);
+    register_test!(test_sftp_toolbar_refresh);
+    register_test!(test_sftp_toolbar_new_folder);
+    register_test!(test_sftp_toolbar_upload);
+    register_test!(test_sftp_toolbar_up);
+    register_test!(test_sftp_click_file_row_selects);
+    register_test!(test_sftp_right_click_opens_menu);
+    register_test!(test_sftp_ctx_menu_delete);
+    register_test!(test_sftp_ctx_menu_rename);
+    register_test!(test_sftp_breadcrumb_root_click);
+    register_test!(test_sftp_keyboard_backspace_up);
+    register_test!(test_sftp_keyboard_delete);
+    register_test!(test_sftp_keyboard_escape_close_dialog);
 
     // Keyboard protocol tests
     register_test!(test_keyboard_protocol_disabled_shift_enter);

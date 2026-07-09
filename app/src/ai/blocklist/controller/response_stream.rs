@@ -1,22 +1,24 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
+use crate::ai::api_error::AIApiError;
 use anyhow::anyhow;
 use chrono::{DateTime, Local, TimeDelta};
 use futures::channel::oneshot;
+use futures_util::StreamExt;
 use uuid::Uuid;
 use warp_multi_agent_api::response_event;
 use warpui::{Entity, ModelContext};
 
 use crate::{
     ai::agent::{
-        api::{self, generate_multi_agent_output, ConvertToAPITypeError},
+        api::{self, ConvertToAPITypeError},
         conversation::AIConversationId,
         AIAgentInput, AIIdentifiers, CancellationReason,
     },
     ai::blocklist::BlocklistAIHistoryModel,
+    ai::byop_readiness::BlockedByopReadinessError,
     network::NetworkStatus,
     report_error, send_telemetry_from_ctx,
-    server::server_api::ServerApiProvider,
 };
 use warpui::SingletonEntity;
 
@@ -56,6 +58,9 @@ struct ByopDispatch {
     /// 选中模型的上下文窗口(tokens)。0/None ⇒ 用户未填且 catalog 也无,
     /// chat_stream 跳过 context_window_usage 计算,UI 维持 100% 占位。
     context_window: Option<u32>,
+    /// ユーザー設定 (image/pdf/audio 三態 Override) を反映済みの attachment caps。
+    /// `resolve_for_model` で計算。UI 表示と runtime 動作が同じ caps を参照する。
+    attachment_caps: crate::ai::agent_providers::attachment_caps::AttachmentCaps,
 }
 
 /// 标题生成专用的 BYOP 配置(可能与主 base 模型同 provider 也可能不同)。
@@ -97,7 +102,7 @@ fn byop_dispatch_info(
 
     // 标题生成:只在首轮触发(避免每轮重复打标题)。
     // 解析 active title_model:可能是 base_model 自己,也可能是用户独立选的另一个 BYOP 模型。
-    // 任一模型不是 BYOP 编码(比如 fallback 到非 BYOP 默认),则跳过 — OpenWarp 主路径都是 BYOP,
+    // 任一模型不是 BYOP 编码(比如 fallback 到非 BYOP 默认),则跳过 — Zap 主路径都是 BYOP,
     // 实际 fallback 到 base 时,base 自己就是 BYOP。
     let llm_prefs = crate::ai::llms::LLMPreferences::as_ref(ctx);
     let title_gen = if needs_create_task {
@@ -120,6 +125,24 @@ fn byop_dispatch_info(
     };
 
     let reasoning_effort = llm_prefs.get_reasoning_effort(None, provider.api_type, &model_id);
+    let attachment_caps = provider
+        .models
+        .iter()
+        .find(|m| m.id == model_id)
+        .map(|m| {
+            crate::ai::agent_providers::attachment_caps::resolve_for_model(
+                &provider.id,
+                provider.api_type,
+                m,
+            )
+        })
+        .unwrap_or_else(|| {
+            log::warn!(
+                "[byop] model '{}' not found in provider.models — falling back to caps_for (user overrides ignored)",
+                model_id
+            );
+            crate::ai::agent_providers::attachment_caps::caps_for(provider.api_type, &model_id)
+        });
     Some(ByopDispatch {
         base_url: provider.base_url,
         api_key,
@@ -134,6 +157,7 @@ fn byop_dispatch_info(
         lrc_command_id: params.lrc_command_id.clone(),
         lrc_should_spawn_subagent: params.lrc_should_spawn_subagent,
         context_window,
+        attachment_caps,
     })
 }
 
@@ -167,6 +191,10 @@ fn pending_title_generation_from_byop(
 pub struct ResponseStreamId(String);
 
 impl ResponseStreamId {
+    pub fn new_local() -> Self {
+        Self(Uuid::new_v4().to_string())
+    }
+
     pub fn for_shared_session(init_event: &response_event::StreamInit) -> Self {
         // Make the stream ID unique per viewing by appending a local UUID
         // This prevents collisions when replaying the same conversation multiple times
@@ -176,7 +204,7 @@ impl ResponseStreamId {
 
     #[cfg(test)]
     pub fn new_for_test() -> Self {
-        Self(Uuid::new_v4().to_string())
+        Self::new_local()
     }
 }
 
@@ -232,7 +260,6 @@ impl ResponseStream {
         can_attempt_resume_on_error: bool,
         ctx: &mut ModelContext<Self>,
     ) -> Self {
-        let server_api = ServerApiProvider::as_ref(ctx).get();
         let (cancellation_tx, cancellation_rx) = oneshot::channel();
         let start_time = Local::now();
 
@@ -249,24 +276,27 @@ impl ResponseStream {
             async move {
                 if let Some(byop) = byop_dispatch {
                     crate::ai::agent_providers::chat_stream::generate_byop_output(
-                        params_clone,
-                        byop.base_url,
-                        byop.api_key,
-                        byop.model_id,
-                        byop.api_type,
-                        byop.reasoning_effort,
-                        byop.extra_headers,
-                        byop.root_task_id,
-                        byop.target_task_id,
-                        byop.needs_create_task,
-                        byop.lrc_command_id,
-                        byop.lrc_should_spawn_subagent,
-                        byop.context_window,
-                        cancellation_rx,
+                        crate::ai::agent_providers::chat_stream::ByopOutputInput {
+                            params: params_clone,
+                            base_url: byop.base_url,
+                            api_key: byop.api_key,
+                            model_id: byop.model_id,
+                            api_type: byop.api_type,
+                            reasoning_effort: byop.reasoning_effort,
+                            extra_headers: byop.extra_headers,
+                            task_id: byop.root_task_id,
+                            target_task_id: byop.target_task_id,
+                            needs_create_task: byop.needs_create_task,
+                            lrc_command_id: byop.lrc_command_id,
+                            lrc_should_spawn_subagent: byop.lrc_should_spawn_subagent,
+                            context_window: byop.context_window,
+                            cancellation_rx,
+                            attachment_caps: byop.attachment_caps,
+                        },
                     )
                     .await
                 } else {
-                    generate_multi_agent_output(server_api, params_clone, cancellation_rx).await
+                    byop_required_response_stream(cancellation_rx).await
                 }
             },
             move |me, stream, ctx| {
@@ -302,7 +332,7 @@ impl ResponseStream {
         self.params.lrc_should_spawn_subagent
     }
 
-    /// OpenWarp BYOP 本地会话压缩:返回本流是否在跑 SummarizeConversation,
+    /// Zap BYOP 本地会话压缩:返回本流是否在跑 SummarizeConversation,
     /// 以及 overflow 标记。controller 在 handle_response_stream_finished 的
     /// Done 分支据此调 commit_summarization 把摘要落到 conversation.compaction_state。
     pub fn summarization_overflow(&self) -> Option<bool> {
@@ -349,30 +379,32 @@ impl ResponseStream {
         let request_id = Uuid::new_v4();
         self.current_request_id = Some(request_id);
         let params = self.params.clone();
-        let server_api = ServerApiProvider::as_ref(ctx).get();
         let byop_dispatch = byop_dispatch_info(&params, &self.ai_identifiers, ctx);
         let _ = ctx.spawn(
             async move {
                 if let Some(byop) = byop_dispatch {
                     crate::ai::agent_providers::chat_stream::generate_byop_output(
-                        params,
-                        byop.base_url,
-                        byop.api_key,
-                        byop.model_id,
-                        byop.api_type,
-                        byop.reasoning_effort,
-                        byop.extra_headers,
-                        byop.root_task_id,
-                        byop.target_task_id,
-                        byop.needs_create_task,
-                        byop.lrc_command_id,
-                        byop.lrc_should_spawn_subagent,
-                        byop.context_window,
-                        cancellation_rx,
+                        crate::ai::agent_providers::chat_stream::ByopOutputInput {
+                            params,
+                            base_url: byop.base_url,
+                            api_key: byop.api_key,
+                            model_id: byop.model_id,
+                            api_type: byop.api_type,
+                            reasoning_effort: byop.reasoning_effort,
+                            extra_headers: byop.extra_headers,
+                            task_id: byop.root_task_id,
+                            target_task_id: byop.target_task_id,
+                            needs_create_task: byop.needs_create_task,
+                            lrc_command_id: byop.lrc_command_id,
+                            lrc_should_spawn_subagent: byop.lrc_should_spawn_subagent,
+                            context_window: byop.context_window,
+                            cancellation_rx,
+                            attachment_caps: byop.attachment_caps,
+                        },
                     )
                     .await
                 } else {
-                    generate_multi_agent_output(server_api, params, cancellation_rx).await
+                    byop_required_response_stream(cancellation_rx).await
                 }
             },
             move |me, stream, ctx| {
@@ -421,6 +453,10 @@ impl ResponseStream {
             }
             Err(e) => {
                 log::error!("Failed to send request to multi-agent API: {e:?}");
+                let api_error = convert_to_api_error(e);
+                ctx.emit(ResponseStreamEvent::ReceivedEvent(Consumable::new(Err(
+                    Arc::new(api_error),
+                ))));
                 self.on_response_stream_complete(request_id, ctx);
             }
         }
@@ -523,32 +559,16 @@ impl ResponseStream {
                     self.should_resume_conversation_after_stream_finished = true;
                 }
 
-                #[cfg(feature = "crash_reporting")]
-                sentry::with_scope(
-                    |scope| {
-                        scope.set_tag(
-                            "has_received_client_actions",
-                            self.has_received_client_actions,
-                        );
-                        scope.set_tag("error", format!("{e:?}"));
-                        scope.set_tag("is_retryable", e.is_retryable());
-                        scope.set_tag("is_online", is_online);
-                        scope.set_tag("retry_count", self.retry_count);
-                    },
-                    || {
-                        report_error!(anyhow!(e.clone()).context(format!(
-                            "MultiAgent request failed after {} retries",
-                            self.retry_count
-                        )));
-                    },
+                log::warn!(
+                    "MultiAgent request failed after {} retries: has_received_client_actions={}, is_retryable={}, is_online={is_online}",
+                    self.retry_count,
+                    self.has_received_client_actions,
+                    e.is_retryable()
                 );
-                #[cfg(not(feature = "crash_reporting"))]
-                {
-                    report_error!(anyhow!(e.clone()).context(format!(
-                        "MultiAgent request failed after {} retries",
-                        self.retry_count
-                    )));
-                }
+                report_error!(anyhow!(e.clone()).context(format!(
+                    "MultiAgent request failed after {} retries",
+                    self.retry_count
+                )));
 
                 ctx.emit(ResponseStreamEvent::ReceivedEvent(Consumable::new(event)));
             }
@@ -561,6 +581,22 @@ impl ResponseStream {
         }
         ctx.emit(ResponseStreamEvent::AfterStreamFinished { cancellation: None });
         self.cancellation_tx = None;
+    }
+}
+
+fn convert_to_api_error(error: ConvertToAPITypeError) -> AIApiError {
+    match &error {
+        ConvertToAPITypeError::Other(inner)
+            if inner.downcast_ref::<BlockedByopReadinessError>().is_some() =>
+        {
+            let blocked = inner
+                .downcast_ref::<BlockedByopReadinessError>()
+                .expect("checked blocked readiness error");
+            AIApiError::Other(BlockedByopReadinessError::new(blocked.category()).into())
+        }
+        ConvertToAPITypeError::Ignore
+        | ConvertToAPITypeError::Unimplemented(_)
+        | ConvertToAPITypeError::Other(_) => AIApiError::Other(anyhow!(error.to_string())),
     }
 }
 
@@ -608,4 +644,17 @@ pub enum ResponseStreamEvent {
 
 impl Entity for ResponseStream {
     type Event = ResponseStreamEvent;
+}
+
+async fn byop_required_response_stream(
+    cancellation_rx: oneshot::Receiver<()>,
+) -> Result<api::ResponseStream, ConvertToAPITypeError> {
+    log::debug!("No BYOP provider selected for Zap agent request");
+    let error_stream = futures::stream::once(async {
+        Err(Arc::new(AIApiError::Other(anyhow!(
+            "Zap requires a configured BYOP provider in Settings"
+        ))))
+    })
+    .take_until(cancellation_rx);
+    Ok(Box::pin(error_stream))
 }

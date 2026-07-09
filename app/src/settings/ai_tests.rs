@@ -1,10 +1,10 @@
 use super::*;
 use crate::{
     ai::request_usage_model::{RequestLimitInfo, RequestLimitRefreshDuration},
+    server_time::ServerTimestamp,
     test_util::settings::initialize_settings_for_tests,
 };
 use chrono::Utc;
-use warp_graphql::scalars::time::ServerTimestamp;
 use warpui::{App, SingletonEntity};
 
 fn create_test_request_limit_info(
@@ -23,8 +23,6 @@ fn create_test_request_limit_info(
         is_unlimited_voice: false,
         voice_request_limit: 0,
         voice_requests_used_since_last_refresh: 0,
-        is_unlimited_codebase_indices: false,
-        max_codebase_indices: 0,
         max_files_per_repo: 5000,
         embedding_generation_batch_size: 100,
     }

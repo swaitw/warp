@@ -1,13 +1,13 @@
-# Warp 桌面端 — 简体中文
-# 缺失的 key 会自动 fallback 到 en/warp.ftl,所以可以分批补译。
-# 术语统一:Agent → 智能体 / Block → 命令块 / Drive → 云盘 / Workflow → 工作流 / Profile → 配置
+# Zap 桌面端 — 简体中文
+# 缺失的 key 会自动 fallback 到 en/warp.ftl，所以可以分批补译。
+# 术语统一：Agent → 智能体 / Block → 命令块 / Drive → 云盘 / Workflow → 工作流 / Profile → 配置
 
 # =============================================================================
 # SECTION: common (Owner: foundation)
 # =============================================================================
 
-app-name = Warp
-app-tagline = 面向个人与团队的云端终端
+app-name = Zap
+app-tagline = 面向个人与团队的本地智能终端
 
 common-ok = 确定
 common-cancel = 取消
@@ -31,6 +31,7 @@ common-editing = 正在编辑
 common-viewing = 正在查看
 common-restored = 已恢复
 common-continued = 已继续
+common-deleted = 已删除
 common-send-feedback = 发送反馈
 common-something-went-wrong = 出了点问题
 common-no-results-found = 未找到结果。
@@ -79,7 +80,7 @@ common-new = 新增
 common-no-results = 无结果
 common-learn-more = 了解更多
 common-skip = 跳过
-common-get-warping = 开始使用 Warp
+common-get-warping = 开始使用 Zap
 common-try-again = 重试
 common-settings = 设置
 common-premium = 高级版
@@ -118,8 +119,8 @@ agent-management-artifact-plan = 计划
 agent-management-artifact-screenshot = 截图
 agent-management-artifact-file = 文件
 agent-management-source-scheduled = 定时
-agent-management-source-local-agent = Warp（本地智能体）
-agent-management-source-cloud-agent = Warp（云端智能体）
+agent-management-source-local-agent = Zap（本地智能体）
+agent-management-source-cloud-agent = Zap（本地智能体）
 agent-management-source-oz-web = Oz Web
 agent-management-source-github-action = GitHub Action
 agent-management-no-session-available = 无可用会话
@@ -130,19 +131,19 @@ agent-management-metadata-harness = 执行器：{ $harness }
 agent-management-metadata-run-time = 运行时长：{ $run_time }
 agent-management-metadata-credits-used = 已用额度：{ $usage }
 agent-management-environment-selected = 环境：{ $environment }
-agent-management-loading-cloud-runs = 正在加载云端智能体运行
+agent-management-loading-cloud-runs = 正在加载智能体运行
 
 # =============================================================================
 # SECTION: workspace-runtime (Owner: agent-i18n-remaining)
 # =============================================================================
 
-workspace-menu-update-warp-manually = 手动更新 Warp
+workspace-menu-update-warp-manually = 手动更新 Zap
 workspace-menu-whats-new = 最新变化
 workspace-menu-settings = 设置
 workspace-menu-keyboard-shortcuts = 快捷键
 workspace-menu-documentation = 文档
 workspace-menu-feedback = 反馈
-workspace-menu-view-warp-logs = 查看 Warp 日志
+workspace-menu-view-warp-logs = 查看 Zap 日志
 workspace-menu-slack = Slack
 workspace-toast-failed-load-conversation = 加载对话失败。
 workspace-toast-failed-load-conversation-for-forking = 加载要 fork 的对话失败。
@@ -157,18 +158,62 @@ workspace-toast-disabled-synchronized-inputs = 已停用所有同步输入。
 workspace-toast-conversation-deleted = 对话已删除
 workspace-search-repos-placeholder = 搜索仓库
 workspace-search-tabs-placeholder = 搜索标签页...
+terminal-onekey-search-placeholder = 搜索已保存的 SSH 凭据…
+terminal-onekey-search-no-results = 未匹配到任何 SSH 凭据
 workspace-rearrange-toolbar-items = 重新排列工具栏项目
 workspace-new-session-agent = 智能体
 workspace-new-session-terminal = 终端
-workspace-new-session-cloud-oz = 云端 Oz
+workspace-new-session-cloud-oz = 智能体标签页
 workspace-new-session-local-docker-sandbox = 本地 Docker 沙箱
 workspace-new-worktree-config = 新建 worktree 配置
 workspace-new-tab-config = 新建标签页配置
 workspace-reopen-closed-session = 重新打开已关闭的会话
-workspace-update-and-relaunch-warp = 更新并重启 Warp
-workspace-updating-to-version = 正在更新到 ({ $version })
-workspace-update-warp-manually = 手动更新 Warp
-workspace-view-all-cloud-runs = 查看所有云端运行
+app-menu-new-window = 新建窗口
+app-menu-save-new = 另存为新配置...
+app-menu-launch-configurations = 启动配置
+app-menu-warp = Zap
+app-menu-preferences = 偏好设置
+app-menu-privacy-policy = 隐私政策...
+app-menu-debug = 调试
+app-menu-set-default-terminal = 将 Zap 设为默认终端
+app-menu-file = 文件
+app-menu-edit = 编辑
+app-menu-use-warp-prompt = 使用 Zap 提示符
+app-menu-copy-on-select-terminal = 在终端中选中即复制
+app-menu-synchronize-inputs = 同步输入
+app-menu-view = 视图
+app-menu-toggle-mouse-reporting = 切换鼠标上报
+app-menu-toggle-scroll-reporting = 切换滚动上报
+app-menu-toggle-focus-reporting = 切换焦点上报
+app-menu-compact-mode = 紧凑模式
+app-menu-tab = 标签页
+app-menu-ai = AI
+app-menu-blocks = 命令块
+app-menu-drive = Drive
+app-menu-show-in-band-command-blocks = 显示内嵌命令块
+app-menu-hide-in-band-command-blocks = 隐藏内嵌命令块
+app-menu-show-warpified-ssh-blocks = 显示 Zap 化 SSH 块
+app-menu-hide-warpified-ssh-blocks = 隐藏 Zap 化 SSH 块
+app-menu-show-initialization-block = 显示初始化命令块
+app-menu-hide-initialization-block = 隐藏初始化命令块
+app-menu-window = 窗口
+app-menu-enable-shell-debug-mode = 为新会话启用 Shell 调试模式 (-x)
+app-menu-disable-shell-debug-mode = 为新会话停用 Shell 调试模式 (-x)
+app-menu-enable-pty-recording = 启用 PTY 录制模式 (warp.pty.recording)
+app-menu-disable-pty-recording = 停用 PTY 录制模式 (warp.pty.recording)
+app-menu-enable-in-band-generators = 为新会话启用内嵌生成器
+app-menu-disable-in-band-generators = 为新会话停用内嵌生成器
+app-menu-manually-toggle-network-status = 手动切换网络状态
+app-menu-export-default-settings-csv = 将默认设置导出为 CSV 到主目录
+app-menu-create-anonymous-user = 创建匿名用户
+app-menu-send-feedback = 发送反馈...
+app-menu-help = 帮助
+app-menu-warp-documentation = Zap 文档...
+app-menu-github-issues = GitHub Issues...
+app-menu-warp-slack-community = Zap Slack 社区...
+workspace-update-and-relaunch-warp = 更新并重启 Zap
+workspace-updating-to-version = 正在更新到（{ $version }）
+workspace-update-warp-manually = 手动更新 Zap
 pane-get-started-title = 开始使用
 pane-new-tab-title = 新建标签页
 
@@ -182,7 +227,7 @@ terminal-banner-more-info = 更多信息
 terminal-banner-completions-not-working-middle = ）。在{" "}
 terminal-banner-settings = 设置
 terminal-banner-completions-not-working-suffix =  中启用 tmux warpification 可能会解决此问题。
-terminal-banner-shell-config-incompatible = 你的 shell 配置与 Warp 不兼容...{"  "}
+terminal-banner-shell-config-incompatible = 你的 shell 配置与 Zap 不兼容...{"  "}
 terminal-banner-did-you-intend = 你是否想用{" "}
 terminal-banner-move-cursor =  移动光标？
 terminal-toast-powershell-subshells-not-supported = 不支持 PowerShell 子 shell
@@ -190,12 +235,18 @@ terminal-dont-ask-again = 不再询问
 terminal-clear-upload = 清除上传
 terminal-manage-defaults = 管理默认值
 terminal-free-credits = 免费额度
-terminal-cloud-agent-run = 云端智能体运行
+terminal-cloud-agent-run = 智能体运行
 terminal-agent-header-for-terminal = 用于终端
+ssh-remote-choice-title = 为此远程会话选择体验：
+ssh-remote-choice-install-extension = 安装 Zap 的 SSH 扩展
+ssh-remote-choice-install-extension-desc = 安装 Warp 扩展以在此会话中启用文件浏览、代码评审和智能命令补全等智能体功能。
+ssh-remote-choice-continue-without-installing = 不安装并继续
+ssh-remote-choice-continue-without-installing-desc = 你仍可获得 Zap 化体验，但不包含智能体功能。
+ssh-remote-choice-manage-warpify-settings = 管理 Warpify 设置
 ai-document-show-version-history = 显示版本历史
 ai-document-update-agent = 更新智能体
-ai-document-save-and-sync-tooltip = 保存并将此计划自动同步到你的 Warp Drive
-ai-document-show-in-warp-drive = 在 Warp Drive 中查看
+ai-document-save-and-sync-tooltip = 保存并将此计划自动同步到你的 Zap Drive
+ai-document-show-in-warp-drive = 在 Zap Drive 中查看
 ai-document-save-as-markdown-file = 另存为 markdown 文件
 ai-document-attach-to-active-session = 附加到当前会话
 ai-document-copy-plan-id = 复制计划 ID
@@ -227,7 +278,7 @@ ai-rule-edit-rule = 编辑规则
 ai-rule-delete-rule = 删除规则
 ai-aws-refresh-credentials = 刷新 AWS 凭据
 ai-footer-enable-notifications = 启用通知
-ai-footer-enable-notifications-tooltip = 安装 Warp 插件以在 Warp 中启用丰富的智能体通知
+ai-footer-enable-notifications-tooltip = 安装 Warp 插件以在 Zap 中启用丰富的智能体通知
 ai-footer-notifications-setup-instructions = 通知设置说明
 ai-footer-install-plugin-instructions-tooltip = 查看安装 Warp 插件的说明
 ai-footer-update-warp-plugin = 更新 Warp 插件
@@ -261,6 +312,8 @@ code-replace-all = 全部替换
 code-goto-line-placeholder = 行号:列号
 code-open-file-unavailable-remote-tooltip = 远程会话无法打开文件
 code-view-markdown-preview = 查看 Markdown 预览
+markdown-display-mode-rendered = 预览
+markdown-display-mode-raw = 源码
 code-review-commit-and-create-pr = 提交并创建 PR
 notebook-link-text-placeholder = 文本
 notebook-link-url-placeholder = 链接（网页或文件）
@@ -275,19 +328,19 @@ editor-custom-keybinding = 自定义...
 editor-change-keybinding = 更改快捷键
 autosuggestion-ignore-this-suggestion = 忽略此建议
 codex-use-latest-model = 使用最新 Codex 模型
-openwarp-launch-visit-repo = 访问仓库
-openwarp-launch-title = Warp 现已开源
-openwarp-launch-description = 你和我们的社区现在可以使用智能体优先的工作流参与构建 Warp。
-openwarp-launch-contribute-title = 参与贡献
-openwarp-launch-contribute-description = Warp 客户端代码现已开源。你可以先使用 /feedback skill 创建 issue，并阅读这里的贡献指南。
-openwarp-launch-contribute-link-text = 这里
-openwarp-launch-oad-title = 开放自动化开发
-openwarp-launch-oad-description = Warp 仓库由智能体优先的工作流管理，并由我们的云端智能体编排平台 Oz 提供支持。
-openwarp-launch-auto-model-title = 介绍“auto（开放权重）”
-openwarp-launch-auto-model-description = 我们新增了一个 auto 模型，可为任务选择最佳开放权重模型，例如 Kimi 或 MiniMax。
+zap-launch-visit-repo = 访问仓库
+zap-launch-title = Zap 现已开源
+zap-launch-description = 你和我们的社区现在可以使用智能体优先的工作流参与构建 Zap。
+zap-launch-contribute-title = 参与贡献
+zap-launch-contribute-description = Zap 客户端代码现已开源。你可以先使用 /feedback skill 创建 issue，并阅读这里的贡献指南。
+zap-launch-contribute-link-text = 这里
+zap-launch-oad-title = 开放自动化开发
+zap-launch-oad-description = Zap 仓库由智能体优先的本地工作流管理，并由 Oz 本地智能体体验提供支持。
+zap-launch-auto-model-title = 介绍「auto（开放权重）」
+zap-launch-auto-model-description = 我们新增了一个 auto 模型，可为任务选择最佳开放权重模型，例如 Kimi 或 MiniMax。
 hoa-see-whats-new = 查看新变化
 hoa-finish = 完成
-session-config-get-warping = 开始使用 Warp
+session-config-get-warping = 开始使用 Zap
 uri-custom-uri-invalid = 自定义 URI 无效。
 context-node-install-nvm = 安装 nvm
 context-node-install-node = nvm install node
@@ -307,14 +360,14 @@ settings-startup-shell-executable-path-placeholder = 可执行文件路径
 settings-agent-providers-base-url-placeholder = https://api.deepseek.com/v1
 drive-sharing-only-people-invited = 仅受邀者
 drive-sharing-anyone-with-link = 拥有链接的任何人
-drive-sharing-only-invited-teammates = 仅受邀团队成员
-drive-sharing-teammates-with-link = 拥有链接的团队成员
+drive-sharing-only-invited-teammates = 仅限本地访问
+drive-sharing-teammates-with-link = 拥有链接的本地访问
 terminal-warpify-subshell = Warpify subshell
-terminal-warpify-subshell-tooltip = 在此会话中启用 Warp shell 集成
+terminal-warpify-subshell-tooltip = 在此会话中启用 Zap shell 集成
 terminal-use-agent = 使用智能体
-terminal-use-agent-tooltip = 让 Warp 智能体协助
+terminal-use-agent-tooltip = 让 Zap 智能体协助
 terminal-give-control-back-to-agent = 将控制权交还给智能体
-terminal-resume-agent-tooltip = 让 Warp 智能体继续
+terminal-resume-agent-tooltip = 让 Zap 智能体继续
 terminal-voice-input-tooltip = 语音输入
 terminal-attach-file-tooltip = 附加文件
 terminal-slash-commands-tooltip = 斜杠命令
@@ -323,9 +376,8 @@ terminal-profiles = 配置
 terminal-manage-profiles = 管理配置
 terminal-continue-locally = 在本地继续
 terminal-fork-conversation-locally-tooltip = 将此对话 fork 到本地
-terminal-open-in-warp = 在 Warp 中打开
-terminal-open-conversation-in-warp-tooltip = 在 Warp 桌面端打开此对话
-terminal-share-session = 分享会话...
+terminal-open-in-warp = 在 Zap 中打开
+terminal-open-conversation-in-warp-tooltip = 在 Zap 桌面端打开此对话
 terminal-stop-sharing = 停止分享
 terminal-copy-session-sharing-link = 复制会话分享链接
 terminal-shared-session-make-editor = 设为编辑者
@@ -335,31 +387,31 @@ terminal-choose-execution-profile-tooltip = 选择 AI 执行配置
 terminal-choose-agent-model-tooltip = 选择智能体模型
 terminal-input-cli-agent-rich-input-hint = 告诉智能体要构建什么...
 terminal-input-enter-prompt-for-agent = 输入给 { $agent } 的提示...
-terminal-input-cloud-agent-hint = 启动云端智能体
+terminal-input-cloud-agent-hint = 启动智能体
 terminal-input-a11y-label = 命令输入。
 terminal-input-a11y-helper = 输入 shell 命令，按 Enter 执行。按 cmd-up 导航到之前执行命令的输出。按 cmd-l 重新聚焦命令输入框。
 terminal-input-ai-command-search-hint = 输入 '#' 获取 AI 命令建议
 terminal-input-run-commands-hint = 运行命令
-terminal-input-agent-hint-deploy-react-vercel = 让 Warp 处理任何任务，例如将 React 应用部署到 Vercel 并配置环境变量
-terminal-input-agent-hint-debug-python-ci = 让 Warp 处理任何任务，例如帮我调试 Python 测试在 CI 中失败的原因
-terminal-input-agent-hint-setup-microservice = 让 Warp 处理任何任务，例如用 Docker 搭建新的微服务并创建部署流水线
-terminal-input-agent-hint-fix-node-memory-leak = 让 Warp 处理任何任务，例如查找并修复 Node.js 应用中的内存泄漏
-terminal-input-agent-hint-backup-postgres = 让 Warp 处理任何任务，例如为 PostgreSQL 数据库创建备份脚本并设置定时任务
-terminal-input-agent-hint-migrate-mysql-postgres = 让 Warp 处理任何任务，例如帮我把数据从 MySQL 迁移到 PostgreSQL
-terminal-input-agent-hint-monitor-aws = 让 Warp 处理任何任务，例如为 AWS 基础设施设置监控和告警
-terminal-input-agent-hint-build-fastapi = 让 Warp 处理任何任务，例如用 FastAPI 为移动应用构建 REST API
-terminal-input-agent-hint-optimize-sql = 让 Warp 处理任何任务，例如帮我优化运行缓慢的 SQL 查询
-terminal-input-agent-hint-github-actions = 让 Warp 处理任何任务，例如创建 GitHub Actions 工作流，在合并后自动部署
-terminal-input-agent-hint-redis-cache = 让 Warp 处理任何任务，例如为 Web 应用设置 Redis 缓存
-terminal-input-agent-hint-kubernetes-pods = 让 Warp 处理任何任务，例如帮我排查 Kubernetes Pod 持续崩溃的原因
-terminal-input-agent-hint-bigquery-pipeline = 让 Warp 处理任何任务，例如构建数据流水线来处理 CSV 文件并加载到 BigQuery
-terminal-input-agent-hint-ssl-https = 让 Warp 处理任何任务，例如设置 SSL 证书并为域名配置 HTTPS
-terminal-input-agent-hint-refactor-legacy-code = 让 Warp 处理任何任务，例如帮我将这段遗留代码重构为现代设计模式
-terminal-input-agent-hint-unit-tests = 让 Warp 处理任何任务，例如为认证服务创建单元测试
-terminal-input-agent-hint-elk-logs = 让 Warp 处理任何任务，例如为分布式系统设置 ELK 日志聚合
-terminal-input-agent-hint-oauth-express = 让 Warp 处理任何任务，例如帮我在 Express.js 应用中实现 OAuth2 认证
-terminal-input-agent-hint-optimize-docker = 让 Warp 处理任何任务，例如优化 Docker 镜像以减少构建时间和体积
-terminal-input-agent-hint-ab-testing = 让 Warp 处理任何任务，例如为 Web 应用搭建 A/B 测试基础设施
+terminal-input-agent-hint-deploy-react-vercel = 让 Zap 处理任何任务，例如将 React 应用部署到 Vercel 并配置环境变量
+terminal-input-agent-hint-debug-python-ci = 让 Zap 处理任何任务，例如帮我调试 Python 测试在 CI 中失败的原因
+terminal-input-agent-hint-setup-microservice = 让 Zap 处理任何任务，例如用 Docker 搭建新的微服务并创建部署流水线
+terminal-input-agent-hint-fix-node-memory-leak = 让 Zap 处理任何任务，例如查找并修复 Node.js 应用中的内存泄漏
+terminal-input-agent-hint-backup-postgres = 让 Zap 处理任何任务，例如为 PostgreSQL 数据库创建备份脚本并设置定时任务
+terminal-input-agent-hint-migrate-mysql-postgres = 让 Zap 处理任何任务，例如帮我把数据从 MySQL 迁移到 PostgreSQL
+terminal-input-agent-hint-monitor-aws = 让 Zap 处理任何任务，例如为 AWS 基础设施设置监控和告警
+terminal-input-agent-hint-build-fastapi = 让 Zap 处理任何任务，例如用 FastAPI 为移动应用构建 REST API
+terminal-input-agent-hint-optimize-sql = 让 Zap 处理任何任务，例如帮我优化运行缓慢的 SQL 查询
+terminal-input-agent-hint-github-actions = 让 Zap 处理任何任务，例如创建 GitHub Actions 工作流，在合并后自动部署
+terminal-input-agent-hint-redis-cache = 让 Zap 处理任何任务，例如为 Web 应用设置 Redis 缓存
+terminal-input-agent-hint-kubernetes-pods = 让 Zap 处理任何任务，例如帮我排查 Kubernetes Pod 持续崩溃的原因
+terminal-input-agent-hint-bigquery-pipeline = 让 Zap 处理任何任务，例如构建数据流水线来处理 CSV 文件并加载到 BigQuery
+terminal-input-agent-hint-ssl-https = 让 Zap 处理任何任务，例如设置 SSL 证书并为域名配置 HTTPS
+terminal-input-agent-hint-refactor-legacy-code = 让 Zap 处理任何任务，例如帮我将这段遗留代码重构为现代设计模式
+terminal-input-agent-hint-unit-tests = 让 Zap 处理任何任务，例如为认证服务创建单元测试
+terminal-input-agent-hint-elk-logs = 让 Zap 处理任何任务，例如为分布式系统设置 ELK 日志聚合
+terminal-input-agent-hint-oauth-express = 让 Zap 处理任何任务，例如帮我在 Express.js 应用中实现 OAuth2 认证
+terminal-input-agent-hint-optimize-docker = 让 Zap 处理任何任务，例如优化 Docker 镜像以减少构建时间和体积
+terminal-input-agent-hint-ab-testing = 让 Zap 处理任何任务，例如为 Web 应用搭建 A/B 测试基础设施
 terminal-input-steer-agent-hint = 指导正在运行的智能体
 terminal-input-steer-agent-backspace-hint = 指导正在运行的智能体，或按 Backspace 退出
 terminal-input-follow-up-hint = 继续追问
@@ -384,8 +436,8 @@ terminal-message-plan-with-agent = {" "}让智能体规划
 terminal-message-continue-conversation = {" "}继续对话
 terminal-message-to-execute = {" "}执行
 terminal-message-to-send = {" "}发送
-terminal-message-open-conversation-title = {" "}打开“{ $title }”
-terminal-message-autodetected = {" "}(已自动识别){" "}
+terminal-message-open-conversation-title = {" "}打开「{ $title }」
+terminal-message-autodetected = {" "}（已自动识别）{" "}
 terminal-message-to-override = {" "}覆盖
 terminal-message-to-navigate = {" "}导航
 terminal-message-to-cycle-tabs = {" "}切换标签页
@@ -395,7 +447,7 @@ terminal-message-open-plan = {" "}打开计划
 terminal-starting-shell = 正在启动 shell...
 terminal-input-no-skills-found = 未找到技能
 terminal-model-specs-title = 模型规格
-terminal-model-specs-description = Warp 对模型在执行器中的表现、额度消耗速率和任务速度的基准测试。
+terminal-model-specs-description = Zap 对模型在执行器中的表现、额度消耗速率和任务速度的基准测试。
 terminal-model-specs-reasoning-level-title = 推理级别
 terminal-model-specs-reasoning-level-description = 更高推理级别会消耗更多额度并带来更高延迟，但在复杂任务上表现更好。
 terminal-model-auto-mode-title = 自动模式
@@ -458,7 +510,7 @@ env-vars-variables-label = 变量
 # SECTION: onboarding-callout (Owner: agent-i18n-remaining)
 # =============================================================================
 
-onboarding-callout-meet-input-title = 认识 Warp 输入框
+onboarding-callout-meet-input-title = 认识 Zap 输入框
 onboarding-callout-meet-input-text-prefix = 你的终端输入框同时支持终端命令和智能体提示，并会自动识别你的输入类型。使用
 onboarding-callout-meet-input-text-suffix = 可将输入锁定为智能体模式（自然语言）或终端模式（命令）。
 onboarding-callout-talk-agent-title = 与智能体对话
@@ -473,9 +525,9 @@ onboarding-callout-meet-terminal-text-suffix = 来启动智能体或发送给智
 onboarding-callout-nl-overrides-title = 自然语言覆盖
 onboarding-callout-nl-overrides-text-prefix = 你始终可以使用
 onboarding-callout-nl-support-title = 自然语言支持
-onboarding-callout-nl-support-text-prefix = 默认情况下自然语言输入处于关闭状态。启用后，你可以直接用自然语言输入请求，Warp 会为智能体自动识别查询。你也始终可以使用
+onboarding-callout-nl-support-text-prefix = 默认情况下自然语言输入处于关闭状态。启用后，你可以直接用自然语言输入请求，Zap 会为智能体自动识别查询。你也始终可以使用
 onboarding-callout-enable-nl-detection = 启用自然语言识别
-onboarding-callout-new-agent-title = 认识 Warp 全新的智能体体验
+onboarding-callout-new-agent-title = 认识 Zap 全新的智能体体验
 onboarding-callout-new-agent-text = 智能体对话现在会作为终端之外的独立视图存在。你可以随时按 ESC 返回终端。
 onboarding-callout-updated-agent-input-title = 升级后的智能体输入框
 onboarding-callout-updated-agent-input-project-text = 默认情况下，你的智能体输入框会同时识别自然语言和命令。使用 ! 可将输入锁定为 bash 模式以编写命令。\n\n提交下方查询即可让智能体初始化此项目，或按 ⊗ 清空输入后自行开始！
@@ -489,9 +541,9 @@ onboarding-callout-back-terminal = 返回终端
 # =============================================================================
 
 language-widget-label = 语言
-language-widget-secondary = 重启 Warp 以让此更改完全生效。
+language-widget-secondary = 重启 Zap 以让此更改完全生效。
 language-restart-required-title = 语言已切换
-language-restart-required-body = Warp 的界面语言已更新。部分文字会立即切换,完整生效需要重启 Warp。
+language-restart-required-body = Zap 的界面语言已更新。部分文字会立即切换，完整生效需要重启 Zap。
 
 # =============================================================================
 # SECTION: settings (Owner: agent-settings)
@@ -500,42 +552,41 @@ language-restart-required-body = Warp 的界面语言已更新。部分文字会
 # --- ANCHOR-SUB-MOD-NAV (agent-settings-mod) ---
 # settings_view/mod.rs SettingsSection 标签 + 上下文菜单分屏/关闭操作
 
-# 侧边栏 / SettingsSection 标签 (Display impl)
+# 侧边栏 / SettingsSection 标签（Display impl）
 settings-section-about = 关于
-settings-section-account = 账户
+# Zap: settings-section-account 随 Account 设置页一同删除。
 settings-section-mcp-servers = MCP 服务器
 settings-section-billing-and-usage = 账单与用量
 settings-section-appearance = 外观
 settings-section-features = 功能
 settings-section-keybindings = 快捷键
-settings-section-privacy = 隐私
 settings-section-referrals = 推荐
 settings-section-shared-blocks = 共享命令块
-settings-section-teams = 团队
-settings-section-warp-drive = Warp Drive
+settings-section-warp-drive = Zap Drive
 settings-section-warpify = Warpify
+settings-section-network = 网络
+settings-section-cloud-sync = 云同步
 settings-section-ai = AI
-settings-section-warp-agent = Warp 智能体
+settings-section-warp-agent = Zap 智能体
 settings-section-agent-profiles = 配置
 settings-section-agent-mcp-servers = MCP 服务器
 settings-section-agent-providers = 提供商
 settings-section-knowledge = Rules
 settings-section-third-party-cli-agents = 第三方 CLI 智能体
 settings-section-code = 代码
-settings-section-code-indexing = LSP 管理
 settings-section-editor-and-code-review = 编辑器与代码评审
 settings-section-cloud-environments = 环境
-settings-section-oz-cloud-api-keys = Oz Cloud API 密钥
+settings-section-oz-cloud-api-keys = Agent API 密钥
 settings-title = 设置
 
-# 上下文菜单项(分屏 / 关闭窗格)
+# 上下文菜单项（分屏 / 关闭窗格）
 settings-pane-split-right = 向右拆分窗格
 settings-pane-split-left = 向左拆分窗格
 settings-pane-split-down = 向下拆分窗格
 settings-pane-split-up = 向上拆分窗格
 settings-pane-close = 关闭窗格
 
-# 调试开关设置描述(命令面板)
+# 调试开关设置描述（命令面板）
 settings-debug-show-init-block = 显示初始化命令块
 settings-debug-hide-init-block = 隐藏初始化命令块
 settings-debug-show-inband-blocks = 显示行内命令块
@@ -544,68 +595,54 @@ settings-debug-hide-inband-blocks = 隐藏行内命令块
 # --- ANCHOR-SUB-ABOUT (agent-settings-about) ---
 
 # about_page.rs
-settings-about-copyright = 版权所有 2026 Warp
+settings-about-copyright = 版权所有 2026 Zap
 settings-about-automatic-updates-label = 自动检查更新
-settings-about-automatic-updates-description = 开启后,OpenWarp 会在后台定期检查是否有新版本;发现新版本后会在上方提示并提供 GitHub 下载链接。OpenWarp 不会自动下载或安装更新。
+settings-about-automatic-updates-description = 开启后，Zap 会在后台定期检查是否有新版本;发现新版本后自动下载安装包到本地缓存,等您主动点击「立即安装」时才会启动安装程序,期间不会改动当前正在运行的 Zap。
 settings-about-update-checking = 正在检查更新…
 settings-about-update-up-to-date = 已是最新版本。
 settings-about-update-available = 发现新版本 { $version }。
+settings-about-update-downloading = 正在下载 { $version }… { $progress }
+settings-about-update-downloading-init = 正在下载 { $version }…
+settings-about-update-ready = { $version } 已下载,可立即安装。
 settings-about-update-check-now = 检查更新
 settings-about-update-open-release = 前往 GitHub 下载
+settings-about-update-install-now = 立即安装
+settings-about-update-install-hint-macos = 安装包将打开,请把 Zap 拖到「应用程序」文件夹完成升级。
+settings-about-update-install-hint-windows = 安装向导将启动,按提示完成升级。
+settings-about-update-install-hint-linux = AppImage 将就地更新并重启 Zap。
+settings-about-export-logs = 导出日志…
+settings-about-export-logs-description = 将最近的应用日志(以及存在时的 MCP / 自动更新日志)和一份诊断摘要打包为 zip，由您选择保存位置，便于分享给排查人员。
+settings-about-export-logs-success = 日志已导出到 { $path }
+settings-about-export-logs-failure = 导出日志失败：{ $error }
 
-# main_page.rs — referral / account
-settings-main-referral-cta = 与朋友和同事分享 Warp,获得奖励
-settings-main-refer-a-friend = 推荐朋友
-settings-main-sign-up = 注册
-settings-main-plan-free = 免费版
-settings-main-compare-plans = 对比方案
-settings-main-contact-support = 联系支持
-settings-main-manage-billing = 管理账单
-settings-main-upgrade-to-turbo = 升级到 Turbo 方案
-settings-main-upgrade-to-lightspeed = 升级到 Lightspeed 方案
+# Zap：main_page.rs 相关文案随 Account 设置页一同删除。
 
-# main_page.rs — settings sync
-settings-main-settings-sync-label = 设置同步
-
-# main_page.rs — version / autoupdate
-settings-main-version-label = 版本
-settings-main-status-up-to-date = 已是最新
-settings-main-cta-check-for-updates = 检查更新
-settings-main-status-checking = 正在检查更新...
-settings-main-status-downloading = 正在下载更新...
-settings-main-status-update-available = 有可用更新
-settings-main-cta-relaunch-warp = 重启 Warp
-settings-main-status-updating = 正在更新...
-settings-main-status-installed-update = 更新已安装
-settings-main-status-cant-install = 有新版本的 Warp 可用,但无法安装
-settings-main-status-cant-launch = 新版本的 Warp 已安装,但无法启动。
-settings-main-cta-update-manually = 手动更新 Warp
 
 # --- ANCHOR-SUB-MCP (agent-settings-mcp) ---
 settings-mcp-page-title = MCP 服务器
 settings-mcp-logout-success-named = 已成功登出 {$name} MCP 服务器
 settings-mcp-logout-success = 已成功登出 MCP 服务器
-settings-mcp-install-modal-busy = 请先完成当前 MCP 安装,然后再打开另一个安装链接。
+settings-mcp-install-modal-busy = 请先完成当前 MCP 安装，然后再打开另一个安装链接。
 settings-mcp-unknown-server = 未知的 MCP 服务器 '{$name}'
 settings-mcp-install-from-link-failed = MCP 服务器 '{$name}' 无法通过此链接安装。
 
 # ---- destructive_mcp_confirmation_dialog.rs ----
-settings-mcp-confirm-delete-local-title = 删除 MCP 服务器?
-settings-mcp-confirm-delete-local-description = 这将从你所有的设备上卸载并移除此 MCP 服务器。
-settings-mcp-confirm-delete-shared-title = 删除共享的 MCP 服务器?
-settings-mcp-confirm-delete-shared-description = 此操作不仅会为你自己删除此 MCP 服务器,还会从 Warp 以及所有团队成员的设备上卸载并移除此 MCP 服务器。
-settings-mcp-confirm-unshare-title = 从团队中移除共享的 MCP 服务器?
-settings-mcp-confirm-unshare-description = 这将从 Warp 以及所有团队成员的设备上卸载并移除此 MCP 服务器。
+settings-mcp-confirm-delete-local-title = 删除 MCP 服务器？
+settings-mcp-confirm-delete-local-description = 这将从本设备卸载并移除此 MCP 服务器。
+settings-mcp-confirm-delete-shared-title = 删除 MCP 服务器？
+settings-mcp-confirm-delete-shared-description = 此操作会从这台设备移除已保存的 MCP 服务器。
+settings-mcp-confirm-unshare-title = 移除已保存的 MCP 服务器？
+settings-mcp-confirm-unshare-description = 此操作会从这台设备移除已保存的 MCP 服务器。
 settings-mcp-confirm-delete-button = 删除 MCP
-settings-mcp-confirm-remove-from-team-button = 从团队移除
+settings-mcp-confirm-remove-from-team-button = 移除本地副本
 settings-mcp-confirm-cancel-button = 取消
 
 # ---- edit_page.rs ----
 settings-mcp-edit-save = 保存
 settings-mcp-edit-edit-variables = 编辑变量
 settings-mcp-edit-delete = 删除 MCP
-settings-mcp-edit-remove-from-team = 从团队移除
-settings-mcp-edit-editing-disabled-banner = 仅团队管理员和 MCP 服务器的创建者可以编辑此 MCP 服务器。
+settings-mcp-edit-remove-from-team = 移除本地副本
+settings-mcp-edit-editing-disabled-banner = 此视图无法编辑该 MCP 服务器。
 settings-mcp-edit-add-new-title = 添加新 MCP 服务器
 settings-mcp-edit-edit-named-title = 编辑 { $name } MCP 服务器
 settings-mcp-edit-edit-title = 编辑 MCP 服务器
@@ -616,33 +653,33 @@ settings-mcp-edit-multiple-servers-error = 编辑单个服务器时无法添加�
 
 # ---- installation_modal.rs ----
 settings-mcp-install-modal-title = 安装 { $name }
-settings-mcp-install-modal-source-shared = 团队共享
+settings-mcp-install-modal-source-shared = 已保存预设
 settings-mcp-install-modal-source-other-device = 来自其他设备
 settings-mcp-install-modal-cancel = 取消
 settings-mcp-install-modal-install = 安装
 settings-mcp-install-modal-no-server = 未选择 MCP 服务器
 
 # ---- list_page.rs ----
-settings-mcp-list-description = 添加 MCP 服务器以扩展 Warp Agent 的能力。MCP 服务器通过标准化接口向 agent 暴露数据源或工具,本质上类似插件。你可以添加自定义服务器,或使用预设快速开始使用流行的服务器。你也可以在此找到团队共享给你的服务器。
+settings-mcp-list-description = 添加 MCP 服务器以扩展 Zap Agent 的能力。MCP 服务器通过标准化接口向 agent 暴露数据源或工具，本质上类似插件。你可以添加自定义服务器，或使用预设快速开始使用流行的服务器。
 settings-mcp-list-learn-more = 了解更多。
-settings-mcp-list-empty-state = 添加 MCP 服务器后,它将显示在此处。
+settings-mcp-list-empty-state = 添加 MCP 服务器后，它将显示在此处。
 settings-mcp-list-no-search-results = 未找到搜索结果
 settings-mcp-list-search-placeholder = 搜索 MCP 服务器
 settings-mcp-list-add-button = 添加
 settings-mcp-list-file-based-toggle-label = 自动启动来自第三方 agent 的服务器
-settings-mcp-list-file-based-description = 自动检测并启动来自全局范围的第三方 AI agent 配置文件(例如位于你的主目录)中的 MCP 服务器。在仓库内部检测到的服务器永远不会自动启动,必须在下方"检测自"分组中单独启用。
+settings-mcp-list-file-based-description = 自动检测并启动来自全局范围的第三方 AI agent 配置文件（例如位于你的主目录）中的 MCP 服务器。在仓库内部检测到的服务器永远不会自动启动，必须在下方「检测自」分组中单独启用。
 settings-mcp-list-file-based-supported-providers = 查看支持的 provider。
 settings-mcp-list-template-available-to-install = 可安装
 settings-mcp-list-file-based-detected = 来自配置文件的检测
 settings-mcp-list-toast-server-updated = MCP 服务器已更新
 settings-mcp-list-section-my-mcps = 我的 MCP
-settings-mcp-list-section-shared-by-warp-and-team = 由 Warp 和 { $name } 共享
-settings-mcp-list-section-shared-by-warp-and-other-devices = 由 Warp 和其他设备共享
-settings-mcp-list-section-shared-from-warp = 来自 Warp 的共享
+settings-mcp-list-section-shared-by-warp-and-team = 来自 Zap 和 { $name }
+settings-mcp-list-section-shared-by-warp-and-other-devices = 由 Zap 和其他设备共享
+settings-mcp-list-section-shared-from-warp = 来自 Zap 的共享
 settings-mcp-list-section-detected-from = 检测自 { $provider }
 settings-mcp-list-chip-global = 全局
 settings-mcp-list-chip-shared-by-creator = 由 { $creator } 共享
-settings-mcp-list-chip-shared-by-team-member = 由团队成员共享
+settings-mcp-list-chip-shared-by-team-member = 已保存预设
 settings-mcp-list-chip-from-another-device = 来自其他设备
 
 # ---- server_card.rs ----
@@ -664,9 +701,9 @@ settings-mcp-card-status-shutting-down = 正在关闭…
 # ---- update_modal.rs ----
 settings-mcp-update-modal-default-name = 服务器
 settings-mcp-update-modal-title = 更新 { $name }
-settings-mcp-update-modal-description = 此服务器有 { $count } 个可用更新,你想使用哪一个?
+settings-mcp-update-modal-description = 此服务器有 { $count } 个可用更新，你想使用哪一个？
 settings-mcp-update-modal-publisher-another-device = 其他设备
-settings-mcp-update-modal-publisher-team-member = 团队成员
+settings-mcp-update-modal-publisher-team-member = 本地来源
 settings-mcp-update-modal-update-from = 来自 { $publisher } 的更新
 settings-mcp-update-modal-version = 版本 { $version }
 settings-mcp-update-modal-cancel = 取消
@@ -674,8 +711,8 @@ settings-mcp-update-modal-update = 更新
 settings-mcp-update-modal-no-updates = 暂无可用更新
 
 # --- ANCHOR-SUB-PLATFORM (agent-settings-platform) ---
-settings-platform-section-title = Oz Cloud API 密钥
-settings-platform-description = 创建并管理 API 密钥,允许其他 Oz 云端 agent 访问你的 Warp 账户。
+settings-platform-section-title = Agent API 密钥
+settings-platform-description = 创建并管理 API 密钥，允许本地 agent 访问你的 Zap 账户。
     了解更多请访问
 settings-platform-documentation-link = 文档。
 settings-platform-create-button = + 创建 API 密钥
@@ -692,16 +729,16 @@ settings-platform-value-never = 从未
 settings-platform-scope-personal = 个人
 settings-platform-scope-team = 团队
 settings-platform-zero-state-title = 暂无 API 密钥
-settings-platform-zero-state-description = 创建密钥以管理对 Warp 的外部访问
-settings-platform-create-api-key-description-personal = 此 API 密钥与你的用户绑定,可用于向你的 Warp 账户发起请求。
-settings-platform-create-api-key-description-team = 此 API 密钥与你的团队绑定,可用于代表你的团队发起请求。
-settings-platform-create-api-key-name-placeholder = Warp API 密钥
+settings-platform-zero-state-description = 创建密钥以管理对 Zap 的外部访问
+settings-platform-create-api-key-description-personal = 此 API 密钥与你的用户绑定，可用于向你的 Zap 账户发起请求。
+settings-platform-create-api-key-description-team = 此 API 密钥与你的团队绑定，可用于代表你的团队发起请求。
+settings-platform-create-api-key-name-placeholder = Zap API 密钥
 settings-platform-create-api-key-expiration-one-day = 1 天
 settings-platform-create-api-key-expiration-thirty-days = 30 天
 settings-platform-create-api-key-expiration-ninety-days = 90 天
 settings-platform-create-api-key-label-type = 类型
 settings-platform-create-api-key-label-expiration = 过期时间
-settings-platform-create-api-key-error-no-current-team = 无法创建团队 API 密钥,因为当前没有团队。
+settings-platform-create-api-key-error-no-current-team = 无法创建团队 API 密钥，因为当前没有团队。
 settings-platform-create-api-key-error-create-failed = API 密钥创建失败。请重试。
 settings-platform-create-api-key-secret-once = 此密钥只会显示一次。请复制并安全保存。
 settings-platform-create-api-key-copied = 已复制
@@ -711,7 +748,7 @@ settings-platform-create-api-key-create = 创建密钥
 settings-platform-create-api-key-toast-secret-copied = 密钥已复制。
 
 # --- ANCHOR-SUB-KEYBINDINGS (agent-settings-keybindings) ---
-settings-keybindings-search-placeholder = 按名称或按键搜索(例如 "cmd d")
+settings-keybindings-search-placeholder = 按名称或按键搜索（例如 "cmd d"）
 settings-keybindings-conflict-warning = 此快捷键与其他快捷键冲突
 settings-keybindings-button-default = 默认
 settings-keybindings-button-cancel = 取消
@@ -721,14 +758,14 @@ settings-keybindings-press-new-shortcut = 按下新的快捷键
 settings-keybindings-description = 在下方为已有操作添加你自己的自定义快捷键。
 settings-keybindings-use-prefix = 使用
 settings-keybindings-use-suffix = 可随时在侧边栏中参考这些快捷键。
-settings-keybindings-not-synced-tooltip = 快捷键不会同步到云端
+settings-keybindings-not-synced-tooltip = 快捷键仅保存在本机
 settings-keybindings-subheader = 配置键盘快捷键
 settings-keybindings-command-column = 命令
 
 # --- ANCHOR-SUB-REFERRALS (agent-settings-referrals) ---
-settings-referrals-page-title = 邀请朋友加入 Warp
-settings-referrals-anonymous-header = 注册以参与 Warp 推荐计划
-settings-referrals-sign-up = 注册
+settings-referrals-page-title = 邀请朋友加入 Zap
+settings-referrals-anonymous-header = 本地 Zap 构建不提供推荐计划
+settings-referrals-sign-up = 本地不可用
 settings-referrals-link-label = 链接
 settings-referrals-email-label = 邮箱
 settings-referrals-link-error = 加载邀请码失败。
@@ -738,14 +775,14 @@ settings-referrals-email-send-button = 发送
 settings-referrals-email-sending-button = 发送中...
 settings-referrals-link-copied-toast = 链接已复制。
 settings-referrals-email-success-toast = 邮件发送成功。
-settings-referrals-email-failure-toast = 邮件发送失败,请重试。
+settings-referrals-email-failure-toast = 邮件发送失败，请重试。
 settings-referrals-email-empty-error = 请输入邮箱。
-settings-referrals-email-invalid-error = 请确认下列邮箱有效:{ $email }
-settings-referrals-reward-intro = 推荐朋友即可获得 Warp 专属周边*
+settings-referrals-email-invalid-error = 请确认下列邮箱有效：{ $email }
+settings-referrals-reward-intro = 推荐朋友即可获得 Zap 专属周边*
 settings-referrals-claimed-count-singular = 当前推荐
 settings-referrals-claimed-count-plural = 当前推荐
 settings-referrals-terms-link = 部分条款适用。
-settings-referrals-terms-contact = { " " }如对推荐计划有任何疑问,请联系 referrals@warp.dev。
+settings-referrals-terms-contact = { " " }如对推荐计划有任何疑问，请联系 referrals@warp.dev。
 settings-referrals-reward-theme = 专属主题
 settings-referrals-reward-keycaps = 键帽 + 贴纸
 settings-referrals-reward-tshirt = T 恤
@@ -757,7 +794,7 @@ settings-referrals-reward-backpack = 双肩包
 
 # --- ANCHOR-SUB-WARPIFY (agent-settings-warpify) ---
 settings-warpify-page-title = Warpify
-settings-warpify-description-prefix = 配置 Warp 是否尝试对特定 Shell 执行 "Warpify"(为其添加命令块、输入模式等支持)。
+settings-warpify-description-prefix = 配置 Zap 是否尝试对特定 Shell 执行 "Warpify"（为其添加命令块、输入模式等支持）。
 settings-warpify-learn-more = 了解更多
 settings-warpify-section-subshells = 子 Shell
 settings-warpify-section-subshells-subtitle = 支持的子 Shell:bash、zsh、fish。
@@ -766,18 +803,98 @@ settings-warpify-section-ssh-subtitle = 对交互式 SSH 会话启用 Warpify。
 settings-warpify-added-commands = 已添加的命令
 settings-warpify-denylisted-commands = 拒绝列表中的命令
 settings-warpify-denylisted-hosts = 拒绝列表中的主机
-settings-warpify-command-placeholder = 命令(支持正则)
-settings-warpify-host-placeholder = 主机(支持正则)
+settings-warpify-command-placeholder = 命令（支持正则）
+settings-warpify-host-placeholder = 主机（支持正则）
 settings-warpify-enable-ssh = 对 SSH 会话启用 Warpify
 settings-warpify-install-ssh-extension = 安装 SSH 扩展
-settings-warpify-install-ssh-extension-description = 控制远程主机未安装 Warp 的 SSH 扩展时的安装行为。
+settings-warpify-install-ssh-extension-description = 控制远程主机未安装 Zap 的 SSH 扩展时的安装行为。
 settings-warpify-use-tmux = 使用 Tmux Warpify
-settings-warpify-tmux-description = tmux ssh 包装器在许多默认方式无效的场景下能正常工作,但可能需要你手动点击按钮才能 Warpify。在新标签页中生效。
+settings-warpify-tmux-description = tmux ssh 包装器在许多默认方式无效的场景下能正常工作，但可能需要你手动点击按钮才能 Warpify。在新标签页中生效。
 settings-warpify-ssh-tmux-toggle-binding-label = 用于 Warpify 的 SSH 会话检测
+
+# --- ANCHOR-SUB-NETWORK (network-settings) ---
+# 全局 HTTP 代理设置页(见 Issue #72)。
+settings-network-page-title = 网络
+settings-network-header = HTTP 代理
+settings-network-description = 为所有出站 HTTP / WebSocket 请求配置全局代理。改完字段后按回车保存。\n新发起的请求(BYOP 拉模型列表 / 测试连接 / 对话加载 等)立即生效;autoupdate / changelog 等启动时构造的长周期 Client 需重启应用后生效。
+settings-network-mode-label = 代理模式
+settings-network-mode-description = System 跟随系统 / 环境变量(默认);Custom 使用下方 URL;Off 完全禁用代理。
+settings-network-mode-system = 系统代理
+settings-network-mode-custom = 自定义
+settings-network-mode-off = 关闭
+settings-network-url-label = 代理 URL
+settings-network-url-placeholder = http://proxy.example.com:8080
+settings-network-url-description = 例:http://proxy.corp:8080
+settings-network-username-label = 用户名
+settings-network-username-placeholder = 用户名(可选)
+settings-network-username-description = 若代理需要 Basic Auth,在此填用户名。
+settings-network-password-label = 密码
+settings-network-password-placeholder = 密码(提交后保存到系统密钥库)
+settings-network-password-description = 提交后保存到 OS 密钥库(不写入 settings.toml)。
+settings-network-no-proxy-label = 例外列表 (no_proxy)
+settings-network-no-proxy-placeholder = localhost,127.0.0.1,.internal
+settings-network-no-proxy-description = 逗号分隔的 host 列表。
+settings-network-save = 保存
+settings-network-clear = 清除
+settings-network-test-button = 测试连接
+settings-network-test-idle-tcp = 对代理 host:port 做 TCP 探测,只验证代理本身可达不验证出网 — 适合只能走内网的代理。
+settings-network-test-idle-http = 用当前配置对 {$url} 发一次 GET。验证出网连通性。
+settings-network-test-running = 测试中…
+settings-network-test-success-tcp = ✅ 代理可达(耗时 {$latency} 毫秒)
+settings-network-test-success-http = ✅ 出网正常(耗时 {$latency} 毫秒)
+settings-network-test-failed-tcp = ❌ 代理不可达:{$error}
+settings-network-test-failed-http = ❌ 连接失败:{$error}
+
+# --- ANCHOR-SUB-CLOUD-SYNC (agent-settings-cloud-sync) ---
+# 云同步设置页面
+settings-cloud-sync-description = 通过 GitHub Gist 或 Gitee Gist 配置云同步。您的设置将被加密并存储为私密 Gist。
+settings-cloud-sync-scope-note = 当前仅同步 SSH 管理的服务器配置数据。
+settings-cloud-sync-platform-label = 同步平台
+settings-cloud-sync-platform-description = 选择用于同步的云服务
+settings-cloud-sync-token-label = 访问令牌
+settings-cloud-sync-token-description = 具有 gist 权限的个人访问令牌
+settings-cloud-sync-token-placeholder = 输入访问令牌...
+settings-cloud-sync-operations-header = 同步操作
+settings-cloud-sync-upload-label = 上传
+settings-cloud-sync-download-label = 下载
+settings-cloud-sync-status-header = 同步状态
+settings-cloud-sync-local-version-label = 本地版本
+settings-cloud-sync-last-time-label = 上次同步时间
+settings-cloud-sync-last-platform-label = 上次同步平台
+settings-cloud-sync-local-version = 本地版本：{$version}
+settings-cloud-sync-last-time = 上次同步时间：{$time}
+settings-cloud-sync-last-platform = 上次同步平台：{$platform}
+settings-cloud-sync-na = 不可用
+settings-cloud-sync-never = 从未同步
+settings-cloud-sync-syncing-upload = 正在上传到 {$platform}...
+settings-cloud-sync-syncing-download = 正在从 {$platform} 下载...
+settings-cloud-sync-success-upload = 上传到 {$platform} 成功（版本 v{$version}）
+settings-cloud-sync-success-download = 从 {$platform} 下载成功（版本 v{$version}）
+settings-cloud-sync-already-up-to-date = 已是最新版本（v{$version}），无需同步
+settings-cloud-sync-failed = 失败：{$error}
+settings-cloud-sync-conflict-status = 版本冲突：本地 v{$local} vs 远程 v{$remote}
+settings-cloud-sync-conflict-status-equal = 版本相同：本地 v{$local} = 远程 v{$remote}
+settings-cloud-sync-token-not-configured = {$platform} Token 未配置
+settings-cloud-sync-conflict-title = 版本冲突
+settings-cloud-sync-conflict-description = 远程版本（v{$remote}）比本地（v{$local}）更新。强制上传将覆盖远程数据。
+settings-cloud-sync-conflict-description-equal = 远程版本与本地版本相同。强制上传将覆盖远程数据。
+settings-cloud-sync-force-upload = 强制上传
+settings-cloud-sync-download-confirm-title = 确认下载
+settings-cloud-sync-download-confirm-description = 下载将用远程版本替换所有本地 SSH 服务器配置。此操作无法撤销。
+settings-cloud-sync-download-confirm-button = 确认下载
+settings-cloud-sync-upload-confirm-title = 确认上传
+settings-cloud-sync-upload-confirm-description = 上传将用本地版本覆盖远程的所有 SSH 服务器配置。Gist 不保留历史版本,此操作无法撤销。
+settings-cloud-sync-upload-confirm-button = 确认上传
+settings-cloud-sync-clear = 清除
+settings-cloud-sync-validating = 正在验证令牌...
+settings-cloud-sync-token-valid = 令牌有效（{$username}）
+settings-cloud-sync-token-invalid = 无效令牌：{$error}
+settings-cloud-sync-auto-sync-label = 自动同步
+settings-cloud-sync-auto-sync-description = 启用后，配置变更时自动上传到云端，应用启动时自动从云端下载
 
 # --- ANCHOR-SUB-AI-PAGE (agent-settings-ai-page) ---
 # 章节 / 副标题
-settings-ai-warp-agent-header = Warp 智能体
+settings-ai-warp-agent-header = Zap 智能体
 settings-ai-active-ai-section = 主动 AI
 settings-ai-input-section = 输入
 settings-ai-mcp-servers-section = MCP 服务器
@@ -799,7 +916,6 @@ settings-ai-next-command-label = 下一条命令
 settings-ai-prompt-suggestions-label = 提示建议
 settings-ai-suggested-code-banners-label = 代码建议横幅
 settings-ai-natural-language-autosuggestions-label = 自然语言自动建议
-settings-ai-shared-block-title-generation-label = 共享 Block 标题生成
 settings-ai-git-operations-autogen-label = 提交与 Pull Request 生成
 
 # 权限下拉项
@@ -818,38 +934,38 @@ settings-ai-execute-commands = 执行命令
 settings-ai-interact-running-commands = 与运行中的命令交互
 settings-ai-call-mcp-servers = 调用 MCP 服务器
 settings-ai-command-denylist = 命令拒绝列表
-settings-ai-command-denylist-description = 匹配命令的正则表达式,Warp 智能体执行这些命令前必须征得许可。
+settings-ai-command-denylist-description = 匹配命令的正则表达式，Zap 智能体执行这些命令前必须征得许可。
 settings-ai-command-allowlist = 命令允许列表
-settings-ai-command-allowlist-description = 匹配命令的正则表达式,Warp 智能体可自动执行这些命令。
+settings-ai-command-allowlist-description = 匹配命令的正则表达式，Zap 智能体可自动执行这些命令。
 settings-ai-directory-allowlist = 目录允许列表
 settings-ai-directory-allowlist-description = 授予智能体对指定目录的文件访问权限。
 settings-ai-mcp-allowlist = MCP 允许列表
-settings-ai-mcp-allowlist-description = 允许 Warp 智能体调用这些 MCP 服务器。
+settings-ai-mcp-allowlist-description = 允许 Zap 智能体调用这些 MCP 服务器。
 settings-ai-mcp-denylist = MCP 拒绝列表
-settings-ai-mcp-denylist-description = Warp 智能体调用此列表中的任何 MCP 服务器前都必须征得许可。
+settings-ai-mcp-denylist-description = Zap 智能体调用此列表中的任何 MCP 服务器前都必须征得许可。
 settings-ai-info-banner-managed-by-workspace = 你的部分权限由工作区管理。
 
 # 模型 / 配置
 settings-ai-base-model = 基础模型
-settings-ai-base-model-description = 此模型作为 Warp 智能体背后的主要引擎,驱动大部分交互,并在需要时调用其他模型完成规划或代码生成等任务。Warp 可能根据模型可用性自动切换备用模型,或将其用于会话摘要等辅助任务。
+settings-ai-base-model-description = 此模型作为 Zap 智能体背后的主要引擎，驱动大部分交互，并在需要时调用其他模型完成规划或代码生成等任务。Zap 可能根据模型可用性自动切换备用模型，或将其用于会话摘要等辅助任务。
 settings-ai-show-model-picker-in-prompt = 在提示中显示模型选择器
 settings-ai-codebase-context = 代码库上下文
-settings-ai-codebase-context-description = 允许 Warp 智能体生成代码库的概要作为上下文。代码从不存储到我们的服务器。
+settings-ai-codebase-context-description = 允许 Zap 智能体生成代码库的概要作为上下文。代码从不存储到我们的服务器。
 settings-ai-add-profile = 新建配置
-settings-ai-agents-description = 设定智能体的运行边界:它能访问什么、拥有多少自主权、以及何时必须征得你的同意。你也可以微调自然语言输入、代码库感知等行为。
-settings-ai-profiles-description = 配置让你定义智能体的运行方式 —— 包括它可执行的动作、何时需要审批,以及编码、规划等任务使用的模型。你也可以将其作用于具体项目。
+settings-ai-agents-description = 设定智能体的运行边界：它能访问什么、拥有多少自主权、以及何时必须征得你的同意。你也可以微调自然语言输入、代码库感知等行为。
+settings-ai-profiles-description = 配置让你定义智能体的运行方式 —— 包括它可执行的动作、何时需要审批，以及编码、规划等任务使用的模型。你也可以将其作用于具体项目。
 
 # 匿名 / 组织限制
-settings-ai-sign-up = 注册
-settings-ai-anonymous-create-account = 要使用 AI 功能,请先创建账户。
-settings-ai-org-disallows-remote-session = 当活动窗格包含来自远程会话的内容时,你的组织禁止使用 AI
-settings-ai-org-enforced-tooltip = 此选项由你所在组织的设置强制启用,无法自定义。
+settings-ai-sign-up = 启用本地 AI
+settings-ai-anonymous-create-account = 本地 AI 功能不需要账户。
+settings-ai-org-enforced-tooltip = 此选项由你所在组织的设置强制启用，无法自定义。
 settings-ai-restricted-billing = 因账单问题受限
 settings-ai-unlimited = 不限量
 
 # AI 输入区段
 settings-ai-show-input-hint-text = 显示输入提示文本
 settings-ai-show-agent-tips = 显示智能体提示
+settings-ai-show-agent-zero-state-hints = 显示 Agent 快捷键提示
 settings-ai-include-agent-commands-in-history = 将智能体执行的命令纳入历史
 settings-ai-autodetect-agent-prompts = 在终端输入中自动检测智能体提示
 settings-ai-autodetect-terminal-commands = 在智能体输入中自动检测终端命令
@@ -871,7 +987,7 @@ settings-ai-rules-label = 规则
 settings-ai-suggested-rules-label = 规则建议
 settings-ai-suggested-rules-description = 让 AI 根据你的交互建议要保存的规则。
 settings-ai-manage-rules = 管理规则
-settings-ai-rules-description = 规则帮助 Warp 智能体遵循你的约定,无论是针对代码库还是特定工作流。
+settings-ai-rules-description = 规则帮助 Zap 智能体遵循你的约定，无论是针对代码库还是特定工作流。
 
 # 语音
 settings-ai-voice-input-label = 语音输入
@@ -879,8 +995,8 @@ settings-ai-voice-key = 激活语音输入的按键
 settings-ai-voice-key-hint = 按住以激活。
 
 # 其他区段
-settings-ai-show-use-agent-footer = 显示"使用智能体"页脚
-settings-ai-use-agent-footer-description = 在长时间运行的命令中提示使用启用了"完整终端使用"的智能体。
+settings-ai-show-use-agent-footer = 显示「使用智能体」页脚
+settings-ai-use-agent-footer-description = 在长时间运行的命令中提示使用启用了「完整终端使用」的智能体。
 settings-ai-show-conversation-history = 在工具面板中显示会话历史
 settings-ai-thinking-display = 智能体思考显示
 settings-ai-thinking-display-description = 控制推理/思考过程的显示方式。
@@ -896,24 +1012,29 @@ settings-ai-auto-show-rich-input-tooltip = 需要为你的编码智能体安装 
 settings-ai-auto-open-rich-input = 编码智能体会话启动时自动打开富输入
 settings-ai-auto-dismiss-rich-input = 提交提示后自动关闭富输入
 settings-ai-toolbar-commands-label = 启用工具栏的命令
-settings-ai-toolbar-commands-description = 添加正则表达式,匹配的命令将显示编码智能体工具栏。
+settings-ai-toolbar-commands-description = 添加正则表达式，匹配的命令将显示编码智能体工具栏。
+settings-ai-per-agent-section = 已安装的智能体
+settings-ai-per-agent-scanning = 正在查找已安装的智能体...
+settings-ai-per-agent-empty = 未找到已安装的 CLI 智能体。
+settings-ai-per-agent-agent-col = 智能体
+settings-ai-per-agent-toolbar-col = 工具栏
+settings-ai-per-agent-tab-menu-col = 新标签页
+settings-ai-per-agent-titlebar-col = 标题栏
 settings-ai-coding-agent-other = 其他
 settings-ai-coding-agent-select-header = 选择编码智能体
 
-# 实验性 / Cloud Agent
-settings-ai-cloud-agent-computer-use = 在 Cloud Agent 中启用计算机使用
-settings-ai-cloud-agent-computer-use-description = 在 Warp 应用中启动的 Cloud Agent 会话中启用计算机使用。
-settings-ai-orchestration-label = 编排
-settings-ai-orchestration-description = 启用多智能体编排,允许智能体派生并协调并行的子智能体。
+# 实验性 / 智能体
+settings-ai-cloud-agent-computer-use = 在智能体中启用计算机使用
+settings-ai-cloud-agent-computer-use-description = 在 Zap 应用中启动的智能体会话中启用计算机使用。
 
 # AWS Bedrock
 settings-ai-aws-bedrock-toggle = 使用 AWS Bedrock 凭证
-settings-ai-aws-bedrock-description = Warp 加载并发送本地 AWS CLI 凭证以使用 Bedrock 支持的模型。
-settings-ai-aws-bedrock-description-managed = Warp 加载并发送本地 AWS CLI 凭证以使用 Bedrock 支持的模型。此设置由你的组织管理。
+settings-ai-aws-bedrock-description = Zap 加载并发送本地 AWS CLI 凭证以使用 Bedrock 支持的模型。
+settings-ai-aws-bedrock-description-managed = Zap 加载并发送本地 AWS CLI 凭证以使用 Bedrock 支持的模型。此设置由你的组织管理。
 settings-ai-aws-login-command = 登录命令
 settings-ai-aws-profile = AWS Profile
 settings-ai-aws-auto-login = 自动运行登录命令
-settings-ai-aws-auto-login-description = 启用后,AWS Bedrock 凭证过期时将自动运行登录命令。
+settings-ai-aws-auto-login-description = 启用后，AWS Bedrock 凭证过期时将自动运行登录命令。
 settings-ai-refresh = 刷新
 
 # --- ANCHOR-SUB-FEATURES (agent-settings-features) ---
@@ -938,11 +1059,12 @@ settings-features-show-changelog-after-update = 更新后显示更新日志提�
 settings-features-mouse-scroll-multiplier = 鼠标滚轮每次滚动的行数
 settings-features-auto-open-code-review = 自动打开代码评审面板
 settings-features-max-rows-per-block = 命令块最大行数
-settings-features-ssh-wrapper = Warp SSH 包装器
-settings-features-receive-desktop-notifications = 接收来自 Warp 的桌面通知
+settings-features-ssh-wrapper = Zap SSH 包装器
+settings-features-ssh-auto-discovery = 自动发现 SSH 主机
+settings-features-receive-desktop-notifications = 接收来自 Zap 的桌面通知
 settings-features-show-in-app-agent-notifications = 显示应用内 Agent 通知
-settings-features-confirm-close-shared-session = 关闭共享会话前确认
-settings-features-global-hotkey-label = 全局快捷键:
+settings-features-confirm-close-shared-session = 关闭只读会话前确认
+settings-features-global-hotkey-label = 全局快捷键：
 settings-features-global-hotkey-not-supported-on-wayland = Wayland 下不支持。
 settings-features-autocomplete-symbols = 自动补全引号、圆括号和方括号
 settings-features-error-underlining = 命令错误下划线提示
@@ -952,9 +1074,9 @@ settings-features-command-corrections = 建议修正后的命令
 settings-features-expand-aliases = 输入时展开别名
 settings-features-middle-click-paste = 中键点击粘贴
 settings-features-vim-mode = 使用 Vim 快捷键编辑代码和命令
-settings-features-at-context-menu = 在终端模式下启用 “@” 上下文菜单
+settings-features-at-context-menu = 在终端模式下启用「@」上下文菜单
 settings-features-slash-commands-in-terminal = 在终端模式下启用斜杠命令
-settings-features-outline-codebase-symbols = 为 “@” 上下文菜单提取代码库符号大纲
+settings-features-outline-codebase-symbols = 为「@」上下文菜单提取代码库符号大纲
 settings-features-show-input-message-bar = 显示终端输入消息行
 settings-features-show-autosuggestion-hint = 显示自动建议快捷键提示
 settings-features-show-autosuggestion-ignore = 显示自动建议忽略按钮
@@ -965,12 +1087,12 @@ settings-features-use-audible-bell = 启用响铃
 settings-features-double-click-smart-selection = 双击智能选择
 settings-features-show-help-block-in-new-sessions = 新会话中显示帮助命令块
 settings-features-copy-on-select = 选中即复制
-settings-features-show-global-workflows-in-command-search = 在命令搜索 (ctrl-r) 中显示全局工作流
+settings-features-show-global-workflows-in-command-search = 在命令搜索（ctrl-r）中显示全局工作流
 settings-features-linux-selection-clipboard = 兼容 Linux 选区剪贴板
-settings-features-prefer-low-power-gpu = 新窗口优先使用集成 GPU 渲染(低功耗)
+settings-features-prefer-low-power-gpu = 新窗口优先使用集成 GPU 渲染（低功耗）
 settings-features-use-wayland = 使用 Wayland 进行窗口管理
 settings-features-use-wayland-tooltip = 启用 Wayland 支持
-settings-features-ctrl-tab-behavior-label = Ctrl+Tab 行为:
+settings-features-ctrl-tab-behavior-label = Ctrl+Tab 行为：
 settings-features-extra-meta-key-left-mac = 左 Option 键作为 Meta
 settings-features-extra-meta-key-right-mac = 右 Option 键作为 Meta
 settings-features-extra-meta-key-left-other = 左 Alt 键作为 Meta
@@ -985,14 +1107,14 @@ settings-features-block-rows-description = 将上限设置为超过 10 万行可
 settings-features-toast-duration-label = Toast 通知保持显示时长
 settings-features-tab-key-behavior = Tab 键行为
 settings-features-graphics-backend-label = 首选图形后端
-settings-features-graphics-backend-current = 当前后端:{ $backend }
+settings-features-graphics-backend-current = 当前后端：{ $backend }
 settings-features-working-dir-home = 用户主目录
 settings-features-working-dir-previous = 上一个会话的目录
 settings-features-working-dir-custom = 自定义目录
 settings-features-undo-close-enable = 启用重新打开已关闭的会话
-settings-features-undo-close-grace-period = 宽限期(秒)
+settings-features-undo-close-grace-period = 宽限期（秒）
 settings-features-configure-global-hotkey = 配置全局快捷键
-settings-features-make-default-terminal = 将 Warp 设为默认终端
+settings-features-make-default-terminal = 将 Zap 设为默认终端
 settings-features-pin-top = 固定到顶部
 settings-features-pin-bottom = 固定到底部
 settings-features-pin-left = 固定到左侧
@@ -1020,7 +1142,7 @@ settings-features-see-docs = 查看文档。
 settings-features-allowed-values-1-20 = 允许的取值范围：1-20
 settings-features-supports-floating-1-20 = 支持 1 到 20 之间的浮点数。
 settings-features-auto-open-code-review-description = 打开此设置后，对话中第一次接受 diff 时会自动打开代码评审面板
-settings-features-default-terminal-current = Warp 已是默认终端
+settings-features-default-terminal-current = Zap 已是默认终端
 settings-features-takes-effect-new-sessions = 此更改会在新会话中生效
 settings-features-seconds = 秒
 settings-features-vim-system-clipboard = 将未命名寄存器设为系统剪贴板
@@ -1036,93 +1158,7 @@ settings-features-new-tab-placement = 新标签页位置
 settings-features-linux-selection-clipboard-tooltip = 是否支持 Linux 主选区剪贴板。
 settings-features-changes-apply-new-windows = 更改会应用到新窗口。
 settings-features-wayland-description = 启用此设置会禁用全局快捷键支持。禁用时，如果 Wayland 合成器使用分数缩放（例如 125%），文本可能会发虚。
-settings-features-restart-warp-to-apply = 重启 Warp 以使更改生效。
-
-# --- ANCHOR-SUB-TEAMS (agent-settings-teams) ---
-settings-teams-page-title = 团队
-settings-teams-create-page-subtitle = 创建团队
-settings-teams-create-description = 创建团队后,您可以通过共享云端 agent 运行、环境、自动化与产物来协作进行 agent 驱动开发,也可以为队友与 agent 共享一个统一的知识库。
-settings-teams-create-button = 创建
-settings-teams-team-name-placeholder = 团队名称
-settings-teams-rename-placeholder = 新的团队名称
-settings-teams-leave-team-button = 退出团队
-settings-teams-delete-team-button = 删除团队
-settings-teams-emails-placeholder = 邮箱(逗号分隔)
-settings-teams-domains-placeholder = 域名(逗号分隔)
-settings-teams-set-button = 设置
-settings-teams-invite-button = 邀请
-settings-teams-join-button = 加入
-settings-teams-contact-admin-button = 联系管理员申请访问
-settings-teams-tab-link = 邀请链接
-settings-teams-tab-email = 邮箱邀请
-settings-teams-section-team-members = 团队成员
-settings-teams-section-team-members-pricing = 团队成员
-settings-teams-section-invite-by-link = 通过链接邀请
-settings-teams-section-invite-by-email = 通过邮箱邀请
-settings-teams-section-restrict-by-domain = 按域名限制
-settings-teams-section-make-discoverable = 设为可被发现
-settings-teams-section-plan-usage-free = 免费方案用量限制
-settings-teams-section-plan-usage = 方案用量限制
-settings-teams-shared-notebooks = 共享笔记本
-settings-teams-shared-workflows = 共享工作流
-settings-teams-reset-links = 重置链接
-settings-teams-compare-plans = 对比方案
-settings-teams-upgrade-build = 升级到 Build
-settings-teams-upgrade-turbo = 升级到 Turbo 方案
-settings-teams-upgrade-lightspeed = 升级到 Lightspeed 方案
-settings-teams-contact-support = 联系支持
-settings-teams-manage-billing = 管理账单
-settings-teams-manage-plan = 管理方案
-settings-teams-open-admin-panel = 打开管理员面板
-settings-teams-or-join-existing = 或加入您公司内已有的团队
-settings-teams-discovery-cta = 加入此团队,开始一起协作工作流、笔记本等内容。
-settings-teams-discovery-1-teammate = 1 名队友
-settings-teams-discovery-n-teammates = { $count } 名队友
-settings-teams-transfer-modal-title = 转移团队所有权?
-settings-teams-action-cancel-invite = 取消邀请
-settings-teams-action-transfer-ownership = 转移所有权
-settings-teams-action-demote-from-admin = 取消管理员
-settings-teams-action-promote-to-admin = 设为管理员
-settings-teams-action-remove-from-team = 从团队移除
-settings-teams-action-remove-domain = 移除域名
-settings-teams-state-expired = 已过期
-settings-teams-state-pending = 待处理
-settings-teams-state-owner = 拥有者
-settings-teams-state-admin = 管理员
-settings-teams-badge-past-due = 已逾期
-settings-teams-badge-unpaid = 未付款
-settings-teams-offline = 您当前处于离线状态。
-settings-teams-failed-load-invite-link = 加载邀请链接失败。
-settings-teams-toast-link-copied = 链接已复制到剪贴板!
-settings-teams-toast-invite-sent-one = 邀请已发出!
-settings-teams-toast-invites-sent = 已发出 { $count } 封邀请!
-settings-teams-toast-domain-added = 已添加域名限制:{ $count }
-settings-teams-toast-invalid-domains = 无效域名:{ $count }
-settings-teams-toast-invalid-emails = 无效邮箱:{ $count }
-settings-teams-toast-toggled-invite-links = 已切换邀请链接状态
-settings-teams-toast-reset-invite-links = 已重置邀请链接
-settings-teams-toast-deleted-invite = 已删除邀请
-settings-teams-toast-toggled-discoverability = 已切换团队可发现状态
-settings-teams-toast-joined-team = 已成功加入团队
-settings-teams-toast-joined-team-named = 已成功加入 { $name }
-settings-teams-toast-transferred-ownership = 已成功转移团队所有权
-settings-teams-toast-updated-role = 已成功更新团队成员角色
-settings-teams-toast-left-team = 已成功退出团队
-settings-teams-toast-renamed-team = 已成功重命名团队
-settings-teams-error-leave-team = 退出团队失败
-settings-teams-error-rename-team = 重命名团队失败
-settings-teams-error-send-invite = 发送邀请失败
-settings-teams-error-toggle-invite-links = 切换邀请链接失败
-settings-teams-error-reset-invite-links = 重置邀请链接失败
-settings-teams-error-delete-invite = 删除邀请失败
-settings-teams-error-add-domain = 添加域名限制失败
-settings-teams-error-delete-domain = 删除域名限制失败
-settings-teams-error-upgrade-link = 生成升级链接失败,请联系 feedback@warp.dev
-settings-teams-error-billing-link = 生成账单链接失败,请联系 feedback@warp.dev
-settings-teams-error-toggle-discoverability = 切换团队可发现状态失败
-settings-teams-error-join-team = 加入团队失败
-settings-teams-error-transfer-ownership = 转移团队所有权失败
-settings-teams-error-update-role = 更新团队成员角色失败
+settings-features-restart-warp-to-apply = 重启 Zap 以使更改生效。
 
 # --- ANCHOR-SUB-SETTINGS-PAGE-NAV (agent-settings-page-nav) ---
 
@@ -1134,8 +1170,8 @@ settings-page-reset-to-default = 重置为默认值
 # ---- delete_environment_confirmation_dialog.rs ----
 settings-confirm-cancel = 取消
 settings-confirm-delete-environment-button = 删除环境
-settings-confirm-delete-environment-title = 删除环境?
-settings-confirm-delete-environment-description = 确定要删除 { $name } 环境吗?
+settings-confirm-delete-environment-title = 删除环境？
+settings-confirm-delete-environment-description = 确定要删除 { $name } 环境吗？
 
 # ---- directory_color_add_picker.rs ----
 settings-color-picker-add-directory-footer = + 添加目录…
@@ -1147,50 +1183,8 @@ settings-footer-alert-open-file = 打开文件
 settings-footer-alert-fix-with-oz = 用 Oz 修复
 
 # --- ANCHOR-SUB-CODE (agent-settings-code) ---
-settings-code-feature-name = 代码
-settings-code-initialization-settings-header = 初始化设置
-settings-code-codebase-indexing-label = 代码库索引
-settings-code-codebase-index-description = Warp 可在你浏览代码仓库时自动索引,帮助 agent 快速理解上下文并给出解决方案。代码从不存储到服务器。即使代码库无法被索引,Warp 仍可通过 grep 与 find 工具调用浏览代码库并获取信息。
-settings-code-warp-indexing-ignore-description = 若要将特定文件或目录排除在索引外,请将其添加到仓库目录下的 .warpindexingignore 文件中。这些文件仍可被 AI 功能访问,但不会进入代码库嵌入。
-settings-code-auto-index-feature-name = 默认索引新文件夹
-settings-code-auto-index-description = 启用后,Warp 将在你浏览代码仓库时自动索引,帮助 agent 快速理解上下文并提供有针对性的解决方案。
-settings-code-indexing-disabled-admin = 团队管理员已禁用代码库索引。
-settings-code-indexing-workspace-enabled-admin = 团队管理员已启用代码库索引。
-settings-code-indexing-disabled-global-ai = 必须启用 AI 功能才能使用代码库索引。
-settings-code-codebase-index-limit-reached = 你已达到当前套餐允许的代码库索引上限。请移除现有索引以便自动索引新代码库。
-settings-code-subpage-indexing-title = LSP 管理
-settings-code-subpage-editor-review-title = 编辑器与代码评审
-settings-code-category-codebase-indexing = LSP 管理
-settings-code-category-editor-review = 代码编辑器与评审
-settings-code-index-new-folder = 索引新文件夹
-settings-code-initialized-folders-header = 全局 LSP 服务器
-settings-code-no-folders-initialized = 尚未初始化任何文件夹。
-settings-code-open-project-rules = 打开项目规则
-settings-code-indexing-section-label = 索引
-settings-code-no-index-created = 尚未创建索引
-settings-code-discovered-chunks = 已发现 { $total } 个分块
-settings-code-syncing-progress = 同步中 - { $completed } / { $total }
-settings-code-syncing = 同步中...
-settings-code-status-synced = 已同步
-settings-code-status-too-large = 代码库过大
-settings-code-status-stale = 已过期
-settings-code-status-failed = 失败
-settings-code-no-index-built = 尚未构建索引
-settings-code-lsp-section-label = LSP 服务器
-settings-code-lsp-installed = 已安装
-settings-code-lsp-installing = 安装中...
-settings-code-lsp-checking = 检查中...
-settings-code-lsp-available-for-download = 可供下载
-settings-code-lsp-restart-server = 重启服务器
-settings-code-lsp-view-logs = 查看日志
-settings-code-lsp-uninstall = 卸载
-settings-code-lsp-status-available = 可用
-settings-code-lsp-status-busy = 繁忙
-settings-code-lsp-status-failed = 失败
-settings-code-lsp-status-stopped = 已停止
-settings-code-lsp-status-not-running = 未运行
 settings-code-auto-open-review-panel = 自动打开代码评审面板
-settings-code-auto-open-review-panel-desc = 启用后,代码评审面板将在会话首次接受 diff 时自动打开。
+settings-code-auto-open-review-panel-desc = 启用后，代码评审面板将在会话首次接受 diff 时自动打开。
 settings-code-show-code-review-button = 显示代码评审按钮
 settings-code-show-code-review-button-desc = 在窗口右上角显示用于切换代码评审面板的按钮。
 settings-code-show-diff-stats = 在代码评审按钮上显示差异统计
@@ -1200,64 +1194,25 @@ settings-code-project-explorer-desc = 在左侧工具面板添加 IDE 风格的�
 settings-code-global-search = 全局文件搜索
 settings-code-global-search-desc = 在左侧工具面板添加全局文件搜索。
 
-# --- ANCHOR-SUB-PRIVACY (agent-settings-privacy) ---
-settings-privacy-page-title = 隐私
-settings-privacy-modal-add-regex-title = 添加正则表达式
-settings-privacy-safe-mode-title = 敏感信息混淆
-settings-privacy-safe-mode-description = 启用此设置后,Warp 会扫描 Block、Warp Drive 对象内容以及 Oz 提示词中可能包含的敏感信息,并阻止将这些数据保存或发送到任何服务器。你可以通过正则表达式自定义匹配规则。
-settings-privacy-user-secret-regex-title = 自定义敏感信息混淆
-settings-privacy-user-secret-regex-description = 使用正则表达式定义你希望额外混淆的敏感信息或数据。规则将在下一条命令执行时生效。可在正则表达式前加 (?i) 标志使其忽略大小写。
-settings-privacy-telemetry-title = 帮助改进 Warp
-settings-privacy-telemetry-description = 应用分析数据帮助我们为你改进产品。我们可能会采集部分控制台交互数据,用于改进 Warp 的 AI 能力。
-settings-privacy-telemetry-description-old = 应用分析数据帮助我们为你改进产品。我们仅采集应用使用元数据,绝不采集控制台输入或输出内容。
-settings-privacy-telemetry-free-tier-note = 免费版必须启用分析才能使用 AI 功能。
-settings-privacy-telemetry-docs-link = 详细了解 Warp 如何使用数据
-settings-privacy-data-management-title = 管理你的数据
-settings-privacy-data-management-description = 你可以随时选择永久删除 Warp 账户。删除后将无法继续使用 Warp。
-settings-privacy-data-management-link = 访问数据管理页面
-settings-privacy-policy-title = 隐私政策
-settings-privacy-policy-link = 阅读 Warp 的隐私政策
-settings-privacy-tab-personal = 个人
-settings-privacy-tab-enterprise = 企业
-settings-privacy-enterprise-readonly = 企业版敏感信息混淆规则不可修改。
-settings-privacy-enterprise-empty = 你所在组织尚未配置任何企业版正则规则。
-settings-privacy-recommended = 推荐
-settings-privacy-add-all = 全部添加
-settings-privacy-add-regex-button = 添加正则
-settings-privacy-enterprise-enabled-by-org = 已由你所在组织启用。
-settings-privacy-zdr-badge = ZDR
-settings-privacy-zdr-tooltip = 你的管理员已为团队启用零数据保留。用户生成的内容将永远不会被采集。
-settings-privacy-secret-display-mode-title = 敏感信息可视化混淆模式
-settings-privacy-secret-display-mode-description = 选择敏感信息在 Block 列表中的视觉呈现方式,同时保持可搜索。此设置仅影响 Block 列表中的显示。
-settings-privacy-crash-reports-title = 发送崩溃报告
-settings-privacy-crash-reports-description = 崩溃报告有助于排查问题并提升稳定性。
-settings-privacy-cloud-conv-title = 将 AI 对话存储到云端
-settings-privacy-cloud-conv-description-on = 智能体对话可与他人共享,并在你于其它设备登录时保留。此数据仅用于产品功能,Warp 不会将其用于分析。
-settings-privacy-cloud-conv-description-off = 智能体对话仅本地存储,登出后丢失,且无法共享。注意:Ambient Agent 的对话数据仍存储在云端。
-settings-privacy-org-managed-tooltip = 此设置由你所在组织管理。
-settings-privacy-network-log-title = 网络日志控制台
-settings-privacy-network-log-description = 我们构建了原生控制台,允许你查看 Warp 与外部服务器的全部通信,让你确信工作始终安全。
-settings-privacy-network-log-link = 查看网络日志
-
 # --- ANCHOR-SUB-EXEC-MODAL-BLOCKS (agent-settings-misc) ---
 # ---- execution_profile_view ----
 settings-exec-profile-edit-button = 编辑
 settings-exec-profile-auto = 自动
 settings-exec-profile-section-models = 模型
 settings-exec-profile-section-permissions = 权限
-settings-exec-profile-base-model = 基础模型:
-settings-exec-profile-full-terminal-use = 完整终端使用:
-settings-exec-profile-title-model = 标题生成:
+settings-exec-profile-base-model = 基础模型：
+settings-exec-profile-full-terminal-use = 完整终端使用：
+settings-exec-profile-title-model = 标题生成：
 settings-exec-profile-active-ai-model = 主动式 AI:
 settings-exec-profile-next-command-model = Next Command:
-settings-exec-profile-computer-use = 电脑使用:
+settings-exec-profile-computer-use = 电脑使用：
 settings-exec-profile-apply-code-diffs = 应用代码 diff:
-settings-exec-profile-read-files = 读取文件:
-settings-exec-profile-execute-commands = 执行命令:
-settings-exec-profile-interact-running-commands = 与运行中命令交互:
-settings-exec-profile-ask-questions = 提问:
-settings-exec-profile-call-mcp-servers = 调用 MCP 服务器:
-settings-exec-profile-call-web-tools = 调用 Web 工具:
+settings-exec-profile-read-files = 读取文件：
+settings-exec-profile-execute-commands = 执行命令：
+settings-exec-profile-interact-running-commands = 与运行中命令交互：
+settings-exec-profile-ask-questions = 提问：
+settings-exec-profile-call-mcp-servers = 调用 MCP 服务器：
+settings-exec-profile-call-web-tools = 调用 Web 工具：
 settings-exec-profile-chips-none = 无
 settings-exec-profile-perm-agent-decides = Agent 自行决定
 settings-exec-profile-perm-always-allow = 始终允许
@@ -1269,30 +1224,30 @@ settings-exec-profile-perm-never-ask = 从不询问
 settings-exec-profile-perm-ask-unless-auto-approve = 除非自动批准否则询问
 settings-exec-profile-perm-on = 开
 settings-exec-profile-perm-off = 关
-settings-exec-profile-directory-allowlist = 目录允许列表:
-settings-exec-profile-command-allowlist = 命令允许列表:
-settings-exec-profile-command-denylist = 命令拒绝列表:
-settings-exec-profile-mcp-allowlist = MCP 允许列表:
-settings-exec-profile-mcp-denylist = MCP 拒绝列表:
+settings-exec-profile-directory-allowlist = 目录允许列表：
+settings-exec-profile-command-allowlist = 命令允许列表：
+settings-exec-profile-command-denylist = 命令拒绝列表：
+settings-exec-profile-mcp-allowlist = MCP 允许列表：
+settings-exec-profile-mcp-denylist = MCP 拒绝列表：
 
 # ---- execution_profile_editor (Profile Editor pane) ----
 settings-exec-profile-editor-header = 配置文件编辑器
 settings-exec-profile-editor-title = 编辑配置文件
 settings-exec-profile-editor-name-label = 名称
 settings-exec-profile-editor-default-name-info = 默认配置文件的名称无法修改。
-settings-exec-profile-editor-workspace-override-tooltip = 该选项由你所在组织的设置强制指定,无法自定义。
+settings-exec-profile-editor-workspace-override-tooltip = 该选项由你所在组织的设置强制指定，无法自定义。
 settings-exec-profile-editor-section-models = 模型
 settings-exec-profile-editor-section-permissions = 权限
 settings-exec-profile-editor-base-model = 基础模型
-settings-exec-profile-editor-base-model-desc = 该模型作为智能体的主要引擎,驱动绝大多数交互,并在需要时调用其他模型完成规划或代码生成等任务。Warp 可能基于模型可用性或辅助任务(如对话摘要)自动切换到备选模型。
+settings-exec-profile-editor-base-model-desc = 该模型作为智能体的主要引擎，驱动绝大多数交互，并在需要时调用其他模型完成规划或代码生成等任务。Zap 可能基于模型可用性或辅助任务（如对话摘要）自动切换到备选模型。
 settings-exec-profile-editor-full-terminal-use-model = 完整终端使用模型
-settings-exec-profile-editor-full-terminal-use-model-desc = 智能体在交互式终端应用(如数据库 shell、调试器、REPL、开发服务器)内运行时使用的模型——读取实时输出并向 PTY 写入命令。
+settings-exec-profile-editor-full-terminal-use-model-desc = 智能体在交互式终端应用（如数据库 shell、调试器、REPL、开发服务器）内运行时使用的模型 —— 读取实时输出并向 PTY 写入命令。
 settings-exec-profile-editor-title-model = 标题生成模型
-settings-exec-profile-editor-title-model-desc = 用于生成简洁对话标题的模型。默认沿用基础模型——在此选择更便宜 / 更快的模型可在不影响智能体主推理的前提下节省标题摘要的 token。
+settings-exec-profile-editor-title-model-desc = 用于生成简洁对话标题的模型。默认沿用基础模型 —— 在此选择更便宜 / 更快的模型可在不影响智能体主推理的前提下节省标题摘要的 token。
 settings-exec-profile-editor-active-ai-model = 主动式 AI 模型
-settings-exec-profile-editor-active-ai-model-desc = 主动式 AI 功能使用的模型:命令完成后的提示建议、智能体输入框中的自然语言自动补全,以及代码库相关性排序。默认沿用基础模型——在此选择小型 / 快速模型可让这些功能保持流畅,而不影响智能体的主推理。
+settings-exec-profile-editor-active-ai-model-desc = 主动式 AI 功能使用的模型：命令完成后的提示建议、智能体输入框中的自然语言自动补全，以及代码库相关性排序。默认沿用基础模型 —— 在此选择小型 / 快速模型可让这些功能保持流畅，而不影响智能体的主推理。
 settings-exec-profile-editor-next-command-model = Next Command 模型
-settings-exec-profile-editor-next-command-model-desc = 用于预测你下一条 shell 命令的模型(灰色行内自动建议 + 块结束后的零状态建议)。对延迟敏感——请选择你拥有的最小 / 最快 BYOP 模型。默认沿用基础模型。
+settings-exec-profile-editor-next-command-model-desc = 用于预测你下一条 shell 命令的模型（灰色行内自动建议 + 块结束后的零状态建议）。对延迟敏感 —— 请选择你拥有的最小 / 最快 BYOP 模型。默认沿用基础模型。
 settings-exec-profile-editor-computer-use-model = 电脑使用模型
 settings-exec-profile-editor-computer-use-model-desc = 智能体接管你的电脑、通过鼠标移动、点击和键盘输入与图形化应用交互时使用的模型。
 settings-exec-profile-editor-apply-code-diffs = 应用代码 diff
@@ -1326,29 +1281,29 @@ settings-env-modal-loading = 正在加载本地已索引仓库…
 settings-env-modal-empty-no-indexed = 尚未发现本地已索引仓库。请先索引一个仓库后再试。
 settings-env-modal-unavailable-build = 当前构建不支持选择本地仓库。
 settings-env-modal-all-selected = 所有本地已索引仓库均已选中。
-settings-env-modal-unknown-repo-name = (未知)
-settings-env-modal-not-git-repo = 所选文件夹不是 Git 仓库:{ $path }
+settings-env-modal-unknown-repo-name = （未知）
+settings-env-modal-not-git-repo = 所选文件夹不是 Git 仓库：{ $path }
 settings-env-modal-no-directory-selected = 未选择目录
 settings-env-modal-dialog-title = 为你的环境选择仓库
-settings-env-modal-dialog-description-indexed = 选择本地已索引仓库,为环境创建 agent 提供上下文。
-settings-env-modal-dialog-description-default = 选择仓库,为环境创建 agent 提供上下文。
+settings-env-modal-dialog-description-indexed = 选择本地已索引仓库，为环境创建 agent 提供上下文。
+settings-env-modal-dialog-description-default = 选择仓库，为环境创建 agent 提供上下文。
 
 # ---- show_blocks_view ----
 settings-show-blocks-page-title = 共享命令块
 settings-show-blocks-unshare-menu-item = 取消共享
 settings-show-blocks-copy-link = 复制链接
 settings-show-blocks-deleting = 正在删除...
-settings-show-blocks-executed-on = 执行于:{ $time }
+settings-show-blocks-executed-on = 执行于：{ $time }
 settings-show-blocks-empty = 你还没有任何共享命令块。
 settings-show-blocks-loading = 正在获取命令块...
-settings-show-blocks-load-failed = 加载命令块失败,请重试。
+settings-show-blocks-load-failed = 加载命令块失败，请重试。
 settings-show-blocks-link-copied = 链接已复制。
 settings-show-blocks-unshare-success = 命令块已成功取消共享。
-settings-show-blocks-unshare-failed = 取消共享命令块失败,请重试。
+settings-show-blocks-unshare-failed = 取消共享命令块失败，请重试。
 settings-show-blocks-confirm-dialog-title = 取消共享命令块
-settings-show-blocks-confirm-dialog-text = 确定要取消共享此命令块吗?
+settings-show-blocks-confirm-dialog-text = 确定要取消共享此命令块吗？
 
-    取消后将无法通过链接访问,并将从 Warp 服务器永久删除。
+    取消后将无法通过链接访问，并将从 Zap 服务器永久删除。
 settings-show-blocks-confirm-cancel = 取消
 settings-show-blocks-confirm-unshare = 取消共享
 
@@ -1378,30 +1333,30 @@ settings-appearance-theme-sync-os-description = 当系统切换浅色/深色时�
 # Custom App Icon widget
 settings-appearance-custom-icon-label = 自定义应用图标
 settings-appearance-custom-icon-bundle-warning = 修改应用图标需要应用以 bundle 形式运行。
-settings-appearance-custom-icon-restart-warning = 你可能需要重启 Warp 才能让 macOS 应用所选图标样式。
+settings-appearance-custom-icon-restart-warning = 你可能需要重启 Zap 才能让 macOS 应用所选图标样式。
 
 # Window widgets
 settings-appearance-window-custom-size-label = 以自定义尺寸打开新窗口
 settings-appearance-window-columns-label = 列数
 settings-appearance-window-rows-label = 行数
-settings-appearance-window-opacity-label = 窗口不透明度:
-settings-appearance-window-opacity-value = 窗口不透明度:{ $value }
+settings-appearance-window-opacity-label = 窗口不透明度：
+settings-appearance-window-opacity-value = 窗口不透明度：{ $value }
 settings-appearance-window-opacity-not-supported = 当前显卡驱动不支持透明效果。
 settings-appearance-window-opacity-graphics-warning = 当前图形设置可能不支持透明窗口渲染。
 settings-appearance-window-opacity-graphics-warning-hint = 请尝试在 Features > System 中调整图形后端或集成 GPU 设置。
-settings-appearance-window-blur-radius = 窗口模糊半径:{ $value }
-settings-appearance-window-blur-texture-label = 启用窗口模糊(Acrylic 纹理)
+settings-appearance-window-blur-radius = 窗口模糊半径：{ $value }
+settings-appearance-window-blur-texture-label = 启用窗口模糊（Acrylic 纹理）
 settings-appearance-window-blur-texture-not-supported = 当前硬件可能不支持透明窗口渲染。
 settings-appearance-tools-panel-consistent-label = 工具面板在所有标签页保持一致显示
 
 # Input
 settings-appearance-input-type-label = 输入类型
-settings-appearance-input-type-warp = Warp
+settings-appearance-input-type-warp = Zap
 settings-appearance-input-type-shell = Shell (PS1)
 settings-appearance-input-position-label = 输入位置
-settings-appearance-input-mode-pinned-bottom = 固定在底部(Warp 模式)
-settings-appearance-input-mode-pinned-top = 固定在顶部(反转模式)
-settings-appearance-input-mode-waterfall = 从顶部开始(经典模式)
+settings-appearance-input-mode-pinned-bottom = 固定在底部（Zap 模式）
+settings-appearance-input-mode-pinned-top = 固定在顶部（反转模式）
+settings-appearance-input-mode-waterfall = 从顶部开始（经典模式）
 
 # Panes
 settings-appearance-pane-dim-inactive-label = 暗化非活动窗格
@@ -1415,13 +1370,24 @@ settings-appearance-block-show-dividers-label = 显示命令块分隔线
 # Text / Fonts
 settings-appearance-font-agent-label = Agent 字体
 settings-appearance-font-match-terminal = 匹配终端
+settings-appearance-font-ui-label = UI 字体
 settings-appearance-font-terminal-label = 终端字体
+settings-appearance-font-terminal-fallback-label = 回滚字体
+settings-appearance-font-fallback-system = 系统自动回滚
 settings-appearance-font-view-all-system = 查看所有可用系统字体
 settings-appearance-font-weight-label = 字重
-settings-appearance-font-size-label = 字号(像素)
+settings-appearance-font-size-label = 字号（像素）
 settings-appearance-font-line-height-label = 行高
 settings-appearance-font-reset-default = 恢复默认
 settings-appearance-font-notebook-size-label = 笔记本字号
+settings-appearance-markdown-heading-scale-label = Markdown 标题字号倍率
+settings-appearance-markdown-heading-scale-description = 此倍率以等宽（终端）字体字号为基准，实际字号 = 等宽字体字号 × 倍率
+settings-appearance-markdown-heading-h1-label = H1 倍率
+settings-appearance-markdown-heading-h2-label = H2 倍率
+settings-appearance-markdown-heading-h3-label = H3 倍率
+settings-appearance-markdown-heading-h4-label = H4 倍率
+settings-appearance-markdown-heading-h5-label = H5 倍率
+settings-appearance-markdown-heading-h6-label = H6 倍率
 settings-appearance-font-thin-strokes-label = 使用细笔画
 settings-appearance-font-thin-strokes-never = 从不
 settings-appearance-font-thin-strokes-low-dpi = 仅低 DPI 显示器
@@ -1448,15 +1414,16 @@ settings-appearance-tab-show-code-review-label = 显示代码审查按钮
 settings-appearance-tab-preserve-active-color-label = 新标签页保留当前标签页颜色
 settings-appearance-tab-vertical-layout-label = 使用垂直标签页布局
 settings-appearance-tab-show-vertical-panel-in-restored-windows-label = 恢复窗口时显示垂直标签页面板
-settings-appearance-tab-show-vertical-panel-in-restored-windows-description = 启用后,重新打开或恢复窗口时会展开垂直标签页面板,即使上次保存时该面板是关闭的。
+settings-appearance-tab-show-vertical-panel-in-restored-windows-description = 启用后，重新打开或恢复窗口时会展开垂直标签页面板，即使上次保存时该面板是关闭的。
 settings-appearance-tab-show-title-bar-search-bar-label = 在标题栏显示搜索框
-settings-appearance-tab-show-title-bar-search-bar-description = 在标签栏中央显示「Search sessions, agents, files…」搜索框,点击打开命令面板。关闭后该位置留空。仅在垂直标签页布局下生效。
+settings-appearance-tab-show-title-bar-search-bar-description = 在标签栏中央显示「搜索会话、智能体、文件...」搜索框，点击打开命令面板。关闭后该位置留空。仅在垂直标签页布局下生效。
+workspace-title-bar-search-placeholder = 搜索会话、智能体、文件...
 settings-appearance-tab-use-prompt-as-title-label = 在标签页名称中使用最近的用户提示作为对话标题
-settings-appearance-tab-use-prompt-as-title-description = 在垂直标签页中,对内置 AI 与第三方 agent 会话显示最近的用户提示,而不是生成的对话标题。
+settings-appearance-tab-use-prompt-as-title-description = 在垂直标签页中，对内置 AI 与第三方 agent 会话显示最近的用户提示，而不是生成的对话标题。
 settings-appearance-tab-toolbar-layout-label = 标题栏工具条布局
 settings-appearance-tab-directory-colors-label = 目录标签页颜色
 settings-appearance-tab-directory-colors-description = 根据当前目录或仓库自动为标签页着色。
-settings-appearance-tab-directory-color-default-tooltip = 默认(无颜色)
+settings-appearance-tab-directory-color-default-tooltip = 默认（无颜色）
 settings-appearance-zen-mode-label = 显示标签栏
 settings-appearance-zen-decoration-always = 始终
 settings-appearance-zen-decoration-windowed = 仅在窗口模式
@@ -1464,7 +1431,7 @@ settings-appearance-zen-decoration-on-hover = 仅悬停时
 
 # Full-screen apps
 settings-appearance-alt-screen-padding-label = 在 alt 屏幕中使用自定义内边距
-settings-appearance-alt-screen-uniform-padding-label = 统一内边距(像素)
+settings-appearance-alt-screen-uniform-padding-label = 统一内边距（像素）
 
 # Zoom
 settings-appearance-zoom-label = 缩放
@@ -1472,29 +1439,29 @@ settings-appearance-zoom-secondary = 调整所有窗口的默认缩放级别
 
 # --- ANCHOR-SUB-ENVIRONMENTS (agent-settings-environments) ---
 settings-environments-page-title = 环境
-settings-environments-page-description = 环境定义了你的 ambient agent 在哪里运行。可通过 GitHub(推荐)、Warp 辅助配置或手动配置在几分钟内创建一个。
+settings-environments-page-description = 环境定义了你的 ambient agent 在哪里运行。可通过 GitHub（推荐）、Zap 辅助配置或手动配置在几分钟内创建一个。
 settings-environments-search-placeholder = 搜索环境...
 settings-environments-no-matches = 没有符合搜索条件的环境。
 settings-environments-section-personal = 个人
-settings-environments-section-team-default = 由 Warp 和你的团队共享
-settings-environments-section-team-named = 由 Warp 和 { $team } 共享
+settings-environments-section-team-default = 由 Zap 和本地设备提供
+settings-environments-section-team-named = 由 Zap 和 { $team } 共享
 settings-environments-env-id-prefix = 环境 ID:{ $id }
-settings-environments-detail-image = 镜像:{ $image }
-settings-environments-detail-repos = 仓库:{ $repos }
-settings-environments-detail-setup-commands = 初始命令:{ $commands }
-settings-environments-last-edited = 最近编辑:{ $time }
-settings-environments-last-used = 最近使用:{ $time }
-settings-environments-last-used-never = 最近使用:从未
+settings-environments-detail-image = 镜像：{ $image }
+settings-environments-detail-repos = 仓库：{ $repos }
+settings-environments-detail-setup-commands = 初始命令：{ $commands }
+settings-environments-last-edited = 最近编辑：{ $time }
+settings-environments-last-used = 最近使用：{ $time }
+settings-environments-last-used-never = 最近使用：从未
 settings-environments-view-my-runs = 查看我的运行记录
 settings-environments-tooltip-share = 分享
 settings-environments-tooltip-edit = 编辑
 settings-environments-empty-header = 你还没有创建任何环境。
-settings-environments-empty-subheader = 选择你想要的环境创建方式:
+settings-environments-empty-subheader = 选择你想要的环境创建方式：
 settings-environments-empty-quick-setup-title = 快速创建
 settings-environments-empty-suggested-badge = 推荐
-settings-environments-empty-quick-setup-subtitle = 选择你想要使用的 GitHub 仓库,我们会为你建议基础镜像与配置
+settings-environments-empty-quick-setup-subtitle = 选择你想要使用的 GitHub 仓库，我们会为你建议基础镜像与配置
 settings-environments-empty-use-agent-title = 使用 agent
-settings-environments-empty-use-agent-subtitle = 选择一个本地已配置好的项目,我们会基于它帮你创建环境
+settings-environments-empty-use-agent-subtitle = 选择一个本地已配置好的项目，我们会基于它帮你创建环境
 settings-environments-button-loading = 加载中...
 settings-environments-button-retry = 重试
 settings-environments-button-authorize = 授权
@@ -1505,48 +1472,49 @@ settings-environments-toast-create-success = 环境创建成功
 settings-environments-toast-delete-success = 环境删除成功
 settings-environments-toast-share-success = 环境分享成功
 settings-environments-toast-share-failure = 环境分享给团队失败
-settings-environments-toast-create-not-logged-in = 无法创建环境:未登录。
-settings-environments-toast-save-not-found = 无法保存:环境已不存在。
-settings-environments-toast-share-no-team = 无法分享环境:你当前未加入任何团队。
-settings-environments-toast-share-not-synced = 无法分享环境:环境尚未同步。
+settings-environments-toast-create-not-logged-in = 无法创建环境：未登录。
+settings-environments-toast-save-not-found = 无法保存：环境已不存在。
+settings-environments-toast-share-no-team = 无法分享环境：你当前未加入任何团队。
+settings-environments-toast-share-not-synced = 无法分享环境：环境尚未同步。
 settings-update-environment-name-placeholder = 环境名称
 settings-update-environment-docker-image-placeholder = 例如 python:3.11、node:20-alpine
-settings-update-environment-repos-placeholder-authed = 输入仓库(owner/repo 格式)
+settings-update-environment-repos-placeholder-authed = 输入仓库（owner/repo 格式）
 settings-update-environment-repos-placeholder-unauthenticated = 粘贴仓库 URL
 settings-update-environment-setup-command-placeholder = 例如 cd my-repo && pip install -r requirements.txt
-settings-update-environment-description-placeholder = 例如,这个环境适用于所有偏前端的智能体
+settings-update-environment-description-placeholder = 例如，这个环境适用于所有偏前端的智能体
 
 # --- ANCHOR-SUB-AGENT-PROVIDERS (agent-settings-agent-providers) ---
 settings-agent-providers-title = Agent 提供商
-settings-agent-providers-description = 配置自定义 Agent 提供商,支持多协议——OpenAI 兼容(DeepSeek、智谱 GLM、Moonshot、通义千问 DashScope、SiliconFlow、OpenRouter 等)、Anthropic、Gemini、本地 Ollama。可以手动添加模型(显示名 + 模型 ID 映射),也可以从 API 自动抓取。提供商元数据存储在本地 settings.toml,API 密钥安全存储在系统密钥库。
+settings-agent-providers-description = 配置自定义 Agent 提供商，支持多协议 —— OpenAI 兼容（DeepSeek、智谱 GLM、Moonshot、通义千问 DashScope、SiliconFlow、OpenRouter 等）、Anthropic、Gemini、本地 Ollama。可以手动添加模型（显示名 + 模型 ID 映射），也可以从 API 自动抓取。提供商元数据存储在本地 settings.toml，API 密钥安全存储在系统密钥库。
 settings-agent-providers-empty = 尚未配置任何提供商。点击右上角 [+ 添加提供商] 按钮添加。
 settings-agent-providers-add-button = + 添加提供商
 settings-agent-providers-search-placeholder = 搜索提供商…
 settings-agent-providers-quick-add-title = 快速添加
 settings-agent-providers-refresh-catalog = 刷新目录
-settings-agent-providers-loading-catalog = 正在拉取 models.dev 目录…(第一次可能需要几秒)
-settings-agent-providers-catalog-empty = models.dev 目录为空,点 [刷新目录] 重试。
-settings-agent-providers-no-match = 无匹配 "{ $query }"
+settings-agent-providers-loading-catalog = 正在拉取 models.dev 目录…（第一次可能需要几秒）
+settings-agent-providers-catalog-empty = models.dev 目录为空，点 [刷新目录] 重试。
+settings-agent-providers-catalog-load-failed = models.dev 目录拉取失败，点 [刷新目录] 重试。
+settings-agent-providers-no-match = 无匹配「{ $query }」
 settings-agent-providers-collapse = 收起 ▲
 settings-agent-providers-expand-remaining = 展开剩余 { $count } 个 ▼
-settings-agent-providers-row-missing = (此提供商还未关联编辑器: { $id })
+settings-agent-providers-row-missing = （此提供商还未关联编辑器：{ $id }）
 settings-agent-providers-field-name = 名称
 settings-agent-providers-field-base-url = 接口地址
 settings-agent-providers-field-api-key = API 密钥
 settings-agent-providers-field-api-type = API 协议
-settings-agent-providers-api-type-hint = (genai 据此显式绑定 adapter,避免按模型名误识别。接口地址留空将使用默认: { $url })
-settings-agent-providers-name-placeholder = 自定义提供商名称(例如: DeepSeek、本地 Ollama)
-settings-agent-providers-api-key-placeholder = sk-... (可选,本地无认证服务如 ollama 留空即可)
-settings-agent-providers-models-label = 模型列表 ({ $count } 个)
-settings-agent-providers-models-empty-hint = 还未配置模型。点 [+ 添加模型] 手动添加,或点 [Fetch from API] 自动抓取。
+settings-agent-providers-api-type-hint = （genai 据此显式绑定 adapter，避免按模型名误识别。接口地址留空将使用默认：{ $url }）
+settings-agent-providers-name-placeholder = 自定义提供商名称（例如：DeepSeek、本地 Ollama）
+settings-agent-providers-api-key-placeholder = sk-...（可选，本地无认证服务如 ollama 留空即可）
+settings-agent-providers-models-label = 模型列表（{ $count } 个）
+settings-agent-providers-models-empty-hint = 还未配置模型。点 [+ 添加模型] 手动添加，或点 [Fetch from API] 自动抓取。
 settings-agent-providers-models-header-name = 显示名
 settings-agent-providers-models-header-id = 模型 ID
-settings-agent-providers-models-header-context = 上下文 (tok)
-settings-agent-providers-models-header-output = 输出 (tok)
-settings-agent-providers-model-name-placeholder = 显示名(例如: DS-V3 通用)
-settings-agent-providers-model-id-placeholder = 模型 ID(发给 API 的 model 字段, 如: deepseek-chat)
-settings-agent-providers-model-context-placeholder = 上下文 (tokens)
-settings-agent-providers-model-output-placeholder = 输出 (tokens)
+settings-agent-providers-models-header-context = 上下文（tok）
+settings-agent-providers-models-header-output = 输出（tok）
+settings-agent-providers-model-name-placeholder = 显示名（例如：DS-V3 通用）
+settings-agent-providers-model-id-placeholder = 模型 ID（发给 API 的 model 字段，如：deepseek-chat）
+settings-agent-providers-model-context-placeholder = 上下文（tokens）
+settings-agent-providers-model-output-placeholder = 输出（tokens）
 settings-agent-providers-add-model = + 添加模型
 settings-agent-providers-fetch-from-api = 从 API 抓取
 settings-agent-providers-sync-models-dev = 从 models.dev 同步
@@ -1559,15 +1527,14 @@ settings-ai-title = AI
 settings-ai-active-ai = 主动 AI
 settings-ai-input-autodetection = 智能体输入框中的终端命令自动识别
 settings-ai-input-autodetection-legacy = 自然语言识别
-settings-ai-next-command-description = 根据你的历史命令、输出与常见工作流,让 AI 推荐下一条要执行的命令。
-settings-ai-prompt-suggestions-description = 让 AI 根据最近命令与输出,在输入框中以行内横幅形式建议自然语言提示。
-settings-ai-suggested-code-banners-description = 让 AI 根据最近命令与输出,在命令块列表中以行内横幅形式建议代码差异与查询。
-settings-ai-natural-language-autosuggestions = 让 AI 根据最近命令与输出,提供自然语言自动建议。
-settings-ai-shared-block-title-generation-description = 让 AI 根据命令与输出为共享命令块生成标题。
+settings-ai-next-command-description = 根据你的历史命令、输出与常见工作流，让 AI 推荐下一条要执行的命令。
+settings-ai-prompt-suggestions-description = 让 AI 根据最近命令与输出，在输入框中以行内横幅形式建议自然语言提示。
+settings-ai-suggested-code-banners-description = 让 AI 根据最近命令与输出，在命令块列表中以行内横幅形式建议代码差异与查询。
+settings-ai-natural-language-autosuggestions = 让 AI 根据最近命令与输出，提供自然语言自动建议。
 settings-ai-git-operations-autogen-description = 让 AI 自动生成提交信息以及 Pull Request 的标题与描述。
 
 # =============================================================================
-# 其余 surface 章节缺失 key 会自动 fallback 到英文,见 en/warp.ftl
+# 其余 surface 章节缺失 key 会自动 fallback 到英文，见 en/warp.ftl
 # =============================================================================
 
 # =============================================================================
@@ -1584,12 +1551,12 @@ banner-dont-show-again = 不再显示
 # =============================================================================
 
 # ---- 对话框标题 ----
-quit-warning-title-pane = 关闭窗格?
-quit-warning-title-tab-singular = 关闭标签页?
-quit-warning-title-tab-plural = 关闭标签页?
-quit-warning-title-window = 关闭窗口?
-quit-warning-title-app = 退出 Warp?
-quit-warning-title-editor-tab = 保存更改?
+quit-warning-title-pane = 关闭窗格？
+quit-warning-title-tab-singular = 关闭标签页？
+quit-warning-title-tab-plural = 关闭标签页？
+quit-warning-title-window = 关闭窗口？
+quit-warning-title-app = 退出 Zap？
+quit-warning-title-editor-tab = 保存更改？
 
 # ---- 按钮 ----
 quit-warning-button-confirm-close = 确定关闭
@@ -1600,29 +1567,29 @@ quit-warning-button-show-processes = 查看运行中的进程
 quit-warning-button-cancel = 取消
 
 # ---- 提示正文 ----
-quit-warning-suffix-tab = { " " }(此标签页)。
-quit-warning-suffix-window = { " " }(此窗口)。
-quit-warning-suffix-pane = { " " }(此窗格)。
+quit-warning-suffix-tab = { " " }（此标签页）。
+quit-warning-suffix-window = { " " }（此窗口）。
+quit-warning-suffix-pane = { " " }（此窗格）。
 quit-warning-suffix-default = 。
 
 quit-warning-processes-running = 你有 { $count } 个进程正在运行
-quit-warning-processes-in-windows = ,分布在 { $count } 个窗口
-quit-warning-processes-in-tabs = ,分布在 { $count } 个标签页
+quit-warning-processes-in-windows = ，分布在 { $count } 个窗口
+quit-warning-processes-in-tabs = ，分布在 { $count } 个标签页
 
 quit-warning-shared-sessions = 你正在共享 { $count } 个会话
 
 quit-warning-unsaved-changes = 你有未保存的文件更改
 
-quit-warning-unsaved-editor-tab = 是否保存对 { $file } 所做的更改?如果不保存,这些更改将被丢弃。
+quit-warning-unsaved-editor-tab = 是否保存对 { $file } 所做的更改？如果不保存，这些更改将被丢弃。
 quit-warning-unsaved-editor-tab-fallback-name = 此文件
 
 # --- ANCHOR-SUB-RULES-PAGE (agent-rules-page) ---
-# Manage Rules 页面(Warp Drive 中的 AI Fact Collection)。
+# Manage Rules 页面（Zap Drive 中的 AI Fact Collection）。
 rules-collection-name = 规则
 
 # --- ANCHOR-SUB-KEYBINDING-DESC (agent-keybinding-descriptions) ---
 # 键盘快捷键设置页 / 命令面板里每个 binding 的 description 文案。
-# binding name(如 `workspace:open_settings_file`)是协议字段(用户自定义快捷键持久化用),
+# binding name（如 `workspace:open_settings_file`）是协议字段（用户自定义快捷键持久化用），
 # **不翻译**。
 
 # 标签页 / 会话
@@ -1666,16 +1633,10 @@ keybinding-desc-pane-group-navigate-next = 激活下一个窗格
 
 # 鼠标 / 笔记本 / 工作流 / 文件夹
 keybinding-desc-workspace-toggle-mouse-reporting = 切换鼠标报告
-keybinding-desc-workspace-create-team-notebook = 新建团队笔记本
-keybinding-desc-workspace-create-team-notebook-menu = 新建团队笔记本
 keybinding-desc-workspace-create-personal-notebook = 新建个人笔记本
 keybinding-desc-workspace-create-personal-notebook-menu = 新建个人笔记本
-keybinding-desc-workspace-create-team-workflow = 新建团队工作流
-keybinding-desc-workspace-create-team-workflow-menu = 新建团队工作流
 keybinding-desc-workspace-create-personal-workflow = 新建个人工作流
 keybinding-desc-workspace-create-personal-workflow-menu = 新建个人工作流
-keybinding-desc-workspace-create-team-folder = 新建团队文件夹
-keybinding-desc-workspace-create-team-folder-menu = 新建团队文件夹
 keybinding-desc-workspace-create-personal-folder = 新建个人文件夹
 keybinding-desc-workspace-create-personal-folder-menu = 新建个人文件夹
 
@@ -1683,7 +1644,20 @@ keybinding-desc-workspace-create-personal-folder-menu = 新建个人文件夹
 keybinding-desc-workspace-new-tab = 创建新标签页
 keybinding-desc-workspace-new-terminal-tab = 新建终端标签页
 keybinding-desc-workspace-new-agent-tab = 新建 Agent 标签页
-keybinding-desc-workspace-new-cloud-agent-tab = 新建云 Agent 标签页
+keybinding-desc-workspace-new-cloud-agent-tab = 新建 Agent 标签页
+new-session-create-new-tab = 新建标签页
+new-session-create-new-window = 新建窗口
+new-session-split-pane-down = 向下拆分窗格
+new-session-split-pane-right = 向右拆分窗格
+new-session-split-pane-up = 向上拆分窗格
+new-session-split-pane-left = 向左拆分窗格
+new-session-create-new-tab-with-shell = 新建标签页: { $shell }
+new-session-create-new-window-with-shell = 新建窗口: { $shell }
+new-session-split-pane-with-shell = 向{ $direction }拆分窗格: { $shell }
+new-session-direction-down = 下
+new-session-direction-right = 右
+new-session-direction-up = 上
+new-session-direction-left = 左
 
 # 左 / 右面板切换
 keybinding-desc-workspace-toggle-left-panel = 打开左侧面板
@@ -1691,15 +1665,16 @@ keybinding-desc-workspace-toggle-right-panel = 切换代码评审
 keybinding-desc-workspace-toggle-right-panel-menu = 切换代码评审
 keybinding-desc-workspace-toggle-vertical-tabs = 切换垂直标签页面板
 keybinding-desc-workspace-toggle-vertical-tabs-menu = 切换垂直标签页面板
-keybinding-desc-workspace-left-panel-agent-conversations = 左侧面板:Agent 对话
-keybinding-desc-workspace-left-panel-project-explorer = 左侧面板:项目浏览器
-keybinding-desc-workspace-left-panel-global-search = 左侧面板:全局搜索
-keybinding-desc-workspace-left-panel-warp-drive = 左侧面板:Warp Drive
-keybinding-desc-workspace-left-panel-ssh-manager = 左侧面板:SSH 管理器
+keybinding-desc-workspace-left-panel-agent-conversations = 左侧面板：Agent 对话
+keybinding-desc-workspace-left-panel-project-explorer = 左侧面板：项目浏览器
+keybinding-desc-workspace-left-panel-global-search = 左侧面板：全局搜索
+keybinding-desc-workspace-left-panel-warp-drive = 左侧面板：Zap Drive
+keybinding-desc-workspace-left-panel-ssh-manager = 左侧面板：SSH 管理器
+keybinding-desc-workspace-left-panel-skill-manager = 左侧面板：Skill 管理器
 keybinding-desc-workspace-open-global-search = 打开全局搜索
 keybinding-desc-workspace-open-global-search-menu = 全局搜索
-keybinding-desc-workspace-toggle-warp-drive = 切换 Warp Drive
-keybinding-desc-workspace-toggle-warp-drive-menu = Warp Drive
+keybinding-desc-workspace-toggle-warp-drive = 切换 Zap Drive
+keybinding-desc-workspace-toggle-warp-drive-menu = Zap Drive
 keybinding-desc-workspace-toggle-conversation-list-view = 切换 Agent 对话列表视图
 keybinding-desc-workspace-toggle-conversation-list-view-menu = Agent 对话列表视图
 keybinding-desc-workspace-close-panel = 关闭聚焦面板
@@ -1711,7 +1686,7 @@ keybinding-desc-workspace-toggle-navigation-palette = 切换导航面板
 keybinding-desc-workspace-toggle-navigation-palette-menu = 导航面板
 keybinding-desc-workspace-toggle-launch-config-palette = 启动配置面板
 keybinding-desc-workspace-toggle-files-palette = 切换文件面板
-keybinding-desc-workspace-search-drive = 搜索 Warp Drive
+keybinding-desc-workspace-search-drive = 搜索 Zap Drive
 keybinding-desc-workspace-move-tab-left = 标签页左移
 keybinding-desc-workspace-move-tab-up = 标签页上移
 keybinding-desc-workspace-move-tab-right = 标签页右移
@@ -1724,7 +1699,7 @@ keybinding-desc-workspace-toggle-block-snackbar = 切换粘性命令头
 
 # 窗口 / 标签页关闭
 keybinding-desc-workspace-rename-active-tab = 重命名当前标签页
-keybinding-desc-workspace-terminate-app = 退出 Warp
+keybinding-desc-workspace-terminate-app = 退出 Zap
 keybinding-desc-workspace-close-window = 关闭窗口
 keybinding-desc-workspace-close-active-tab = 关闭当前标签页
 keybinding-desc-workspace-close-other-tabs = 关闭其他标签页
@@ -1742,28 +1717,23 @@ keybinding-desc-workspace-view-changelog = 查看最新更新日志
 
 # 资源中心 / Drive 导出 / CLI
 keybinding-desc-workspace-toggle-resource-center = 切换资源中心
-keybinding-desc-workspace-export-all-warp-drive-objects = 导出所有 Warp Drive 对象
+keybinding-desc-workspace-export-all-warp-drive-objects = 导出所有 Zap Drive 对象
 keybinding-desc-workspace-install-cli = 安装 Oz CLI 命令
 keybinding-desc-workspace-uninstall-cli = 卸载 Oz CLI 命令
 
 # AI 助手 / agent
-keybinding-desc-workspace-toggle-ai-assistant = 切换 Warp AI
+keybinding-desc-workspace-toggle-ai-assistant = 切换 Zap AI
 
 # 环境变量 / Prompt
-keybinding-desc-workspace-create-team-env-vars = 新建团队环境变量
-keybinding-desc-workspace-create-team-env-vars-menu = 新建团队环境变量
 keybinding-desc-workspace-create-personal-env-vars = 新建个人环境变量
 keybinding-desc-workspace-create-personal-env-vars-menu = 新建个人环境变量
 keybinding-desc-workspace-create-personal-ai-prompt = 新建个人 Prompt
 keybinding-desc-workspace-create-personal-ai-prompt-menu = 新建个人 Prompt
-keybinding-desc-workspace-create-team-ai-prompt = 新建团队 Prompt
-keybinding-desc-workspace-create-team-ai-prompt-menu = 新建团队 Prompt
 
 # 焦点 / 导入
 keybinding-desc-workspace-shift-focus-left = 切换焦点到左侧面板
 keybinding-desc-workspace-shift-focus-right = 切换焦点到右侧面板
 keybinding-desc-workspace-import-to-personal-drive = 导入到个人 Drive
-keybinding-desc-workspace-import-to-team-drive = 导入到团队 Drive
 
 # Drive / 仓库 / AI Rules / MCP
 keybinding-desc-workspace-open-repository = 打开仓库
@@ -1772,74 +1742,68 @@ keybinding-desc-workspace-open-ai-fact-collection = 打开 AI Rules
 keybinding-desc-workspace-open-mcp-servers = 打开 MCP 服务器
 keybinding-desc-workspace-jump-to-latest-toast = 跳转到最新 agent 任务
 keybinding-desc-workspace-toggle-notification-mailbox = 切换通知邮箱
-keybinding-desc-workspace-toggle-agent-management-view = 切换 agent 管理视图
 
 # 设置页面
 keybinding-desc-workspace-show-settings = 打开设置
 keybinding-desc-workspace-show-settings-menu = 设置
-keybinding-desc-workspace-show-settings-account = 打开设置:账户
-keybinding-desc-workspace-show-settings-appearance = 打开设置:外观
+# Zap：keybinding-desc-workspace-show-settings-account 随 Account 设置页一同删除。
+keybinding-desc-workspace-show-settings-appearance = 打开设置：外观
 keybinding-desc-workspace-show-settings-appearance-menu = 外观...
-keybinding-desc-workspace-show-settings-features = 打开设置:功能
-keybinding-desc-workspace-show-settings-shared-blocks = 打开设置:共享命令块
+keybinding-desc-workspace-show-settings-features = 打开设置：功能
+keybinding-desc-workspace-show-settings-shared-blocks = 打开设置：共享命令块
 keybinding-desc-workspace-show-settings-shared-blocks-menu = 查看共享命令块...
-keybinding-desc-workspace-show-settings-keyboard-shortcuts = 打开设置:键盘快捷键
+keybinding-desc-workspace-show-settings-keyboard-shortcuts = 打开设置：键盘快捷键
 keybinding-desc-workspace-show-settings-keyboard-shortcuts-menu = 配置键盘快捷键...
-keybinding-desc-workspace-show-settings-about = 打开设置:关于
-keybinding-desc-workspace-show-settings-about-menu = 关于 Warp
-keybinding-desc-workspace-show-settings-teams = 打开设置:团队
-keybinding-desc-workspace-show-settings-teams-menu = 打开团队设置
-keybinding-desc-workspace-show-settings-privacy = 打开设置:隐私
-keybinding-desc-workspace-show-settings-warpify = 打开设置:Warpify
+keybinding-desc-workspace-show-settings-about = 打开设置：关于
+keybinding-desc-workspace-show-settings-about-menu = 关于 Zap
+keybinding-desc-workspace-show-settings-warpify = 打开设置：Warpify
 keybinding-desc-workspace-show-settings-warpify-menu = 配置 Warpify...
-keybinding-desc-workspace-show-settings-ai = 打开设置:AI
-keybinding-desc-workspace-show-settings-code = 打开设置:代码
-keybinding-desc-workspace-show-settings-referrals = 打开设置:推荐
-keybinding-desc-workspace-show-settings-environments = 打开设置:环境
-keybinding-desc-workspace-show-settings-mcp-servers = 打开设置:MCP 服务器
+keybinding-desc-workspace-show-settings-ai = 打开设置：AI
+keybinding-desc-workspace-show-settings-code = 打开设置：代码
+keybinding-desc-workspace-show-settings-referrals = 打开设置：推荐
+keybinding-desc-workspace-show-settings-environments = 打开设置：环境
+keybinding-desc-workspace-show-settings-mcp-servers = 打开设置：MCP 服务器
 keybinding-desc-workspace-open-settings-file = 打开设置文件
 
 # 溢出菜单 / 外部链接
-keybinding-desc-workspace-link-to-slack = 加入我们的 Slack 社区(打开外部链接)
-keybinding-desc-workspace-link-to-user-docs = 查看用户文档(打开外部链接)
-keybinding-desc-workspace-send-feedback = 发送反馈(打开外部链接)
+keybinding-desc-workspace-link-to-slack = 加入我们的 Slack 社区（打开外部链接）
+keybinding-desc-workspace-link-to-user-docs = 查看用户文档（打开外部链接）
+keybinding-desc-workspace-send-feedback = 发送反馈（打开外部链接）
 keybinding-desc-workspace-send-feedback-oz = 用 Oz 发送反馈
-keybinding-desc-workspace-view-logs = 查看 Warp 日志
-keybinding-desc-workspace-link-to-privacy-policy = 查看隐私政策(打开外部链接)
+keybinding-desc-workspace-view-logs = 查看 Zap 日志
+keybinding-desc-workspace-link-to-privacy-policy = 查看隐私政策（打开外部链接）
 
-# 输入 / 终端 / 项目相关 binding(注册在 workspace/mod.rs 之外)
+# 输入 / 终端 / 项目相关 binding（注册在 workspace/mod.rs 之外）
 keybinding-desc-input-edit-prompt = 编辑 Prompt
 keybinding-desc-terminal-attach-block-as-context = 将所选块作为 Agent 上下文附加
 keybinding-desc-terminal-attach-text-as-context = 将所选文本作为 Agent 上下文附加
 keybinding-desc-terminal-attach-as-context-menu = 将所选内容作为 Agent 上下文附加
-keybinding-desc-workspace-init-project = 为 Warp 初始化项目
+keybinding-desc-workspace-init-project = 为 Zap 初始化项目
 keybinding-desc-workspace-add-current-folder = 将当前文件夹添加为项目
 
-# Workspace 调试 / crash / sentry / 堆分析相关 binding
-keybinding-desc-workspace-crash-macos = 触发崩溃(用于测试 sentry-cocoa)
-keybinding-desc-workspace-crash-other = 触发崩溃(用于测试 sentry-native)
+# Workspace 调试 / crash / 堆分析相关 binding
+keybinding-desc-workspace-crash-macos = 触发崩溃（用于测试本地 crash reporting）
+keybinding-desc-workspace-crash-other = 触发崩溃（用于测试本地 crash reporting）
 keybinding-desc-workspace-log-review-comment-send-status = [调试] 记录当前标签页的评审评论发送状态
-keybinding-desc-workspace-panic = 触发 panic(用于测试 sentry-rust)
+keybinding-desc-workspace-panic = 触发 panic（用于测试本地 panic 日志）
 keybinding-desc-workspace-open-view-tree-debugger = 打开视图树调试器
 keybinding-desc-workspace-view-first-time-user-experience = [调试] 查看首次启动引导体验
-keybinding-desc-workspace-open-build-plan-migration-modal = [调试] 打开构建计划迁移弹窗
-keybinding-desc-workspace-reset-build-plan-migration-modal-state = [调试] 重置构建计划迁移弹窗状态
 keybinding-desc-workspace-undismiss-aws-login-banner = [调试] 取消关闭 AWS 登录提示条
 keybinding-desc-workspace-open-oz-launch-modal = [调试] 打开 Oz 启动弹窗
 keybinding-desc-workspace-reset-oz-launch-modal-state = [调试] 重置 Oz 启动弹窗状态
-keybinding-desc-workspace-open-openwarp-launch-modal = [调试] 打开 OpenWarp 启动弹窗
-keybinding-desc-workspace-reset-openwarp-launch-modal-state = [调试] 重置 OpenWarp 启动弹窗状态
+keybinding-desc-workspace-open-zap-launch-modal = [调试] 打开 Zap 启动弹窗
+keybinding-desc-workspace-reset-zap-launch-modal-state = [调试] 重置 Zap 启动弹窗状态
 keybinding-desc-workspace-install-opencode-warp-plugin = [调试] 安装 OpenCode Warp 插件
-keybinding-desc-workspace-use-local-opencode-warp-plugin = [调试] 使用本地 OpenCode Warp 插件(仅测试用)
+keybinding-desc-workspace-use-local-opencode-warp-plugin = [调试] 使用本地 OpenCode Warp 插件（仅测试用）
 keybinding-desc-workspace-open-session-config-modal = [调试] 打开会话配置弹窗
 keybinding-desc-workspace-start-hoa-onboarding-flow = [调试] 启动 HOA 引导流程
 keybinding-desc-workspace-sample-process = 采样进程
-keybinding-desc-workspace-dump-heap-profile = 导出堆分析(只能执行一次)
+keybinding-desc-workspace-dump-heap-profile = 导出堆分析（只能执行一次）
 
 # 终端输入相关 binding
-keybinding-desc-input-show-network-log = 显示 Warp 网络日志
+keybinding-desc-input-show-network-log = 显示 Zap 网络日志
 keybinding-desc-input-clear-screen = 清屏
-keybinding-desc-input-toggle-classic-completions = (实验性)切换经典补全模式
+keybinding-desc-input-toggle-classic-completions = （实验性）切换经典补全模式
 keybinding-desc-input-command-search = 命令搜索
 keybinding-desc-input-history-search = 历史记录搜索
 keybinding-desc-input-open-completions-menu = 打开补全菜单
@@ -1866,7 +1830,7 @@ keybinding-desc-terminal-find = 在终端中查找
 keybinding-desc-terminal-select-bookmark-up = 选择上方最近的书签
 keybinding-desc-terminal-select-bookmark-down = 选择下方最近的书签
 keybinding-desc-terminal-open-block-context-menu = 打开命令块上下文菜单
-keybinding-desc-terminal-toggle-team-workflows-modal = 切换团队工作流弹窗
+keybinding-desc-terminal-toggle-workflows-modal = 切换工作流弹窗
 keybinding-desc-terminal-copy-git-branch = 复制 git 分支
 keybinding-desc-terminal-clear-blocks = 清空命令块
 keybinding-desc-terminal-cursor-word-left = 在执行中的命令内向左移动一个单词
@@ -1887,6 +1851,8 @@ keybinding-desc-terminal-copy-command-output = 复制命令输出
 keybinding-desc-terminal-copy-command = 复制命令
 keybinding-desc-terminal-scroll-up-one-line = 终端输出向上滚动一行
 keybinding-desc-terminal-scroll-down-one-line = 终端输出向下滚动一行
+keybinding-desc-terminal-scroll-up-one-page = 终端输出向上滚动一页
+keybinding-desc-terminal-scroll-down-one-page = 终端输出向下滚动一页
 keybinding-desc-terminal-scroll-to-top-of-block = 滚动到所选命令块顶部
 keybinding-desc-terminal-scroll-to-bottom-of-block = 滚动到所选命令块底部
 keybinding-desc-terminal-select-all-blocks = 选择全部命令块
@@ -1894,12 +1860,12 @@ keybinding-desc-terminal-expand-blocks-above = 向上扩展所选命令块
 keybinding-desc-terminal-expand-blocks-below = 向下扩展所选命令块
 keybinding-desc-terminal-insert-command-correction = 插入命令纠错
 keybinding-desc-terminal-setup-guide = 设置向导
-keybinding-desc-terminal-onboarding-warp-input-terminal = [调试] 引导提示:WarpInput - 终端
-keybinding-desc-terminal-onboarding-warp-input-project = [调试] 引导提示:WarpInput - 项目
-keybinding-desc-terminal-onboarding-warp-input-no-project = [调试] 引导提示:WarpInput - 无项目
-keybinding-desc-terminal-onboarding-modality-project = [调试] 引导提示:Modality - 项目
-keybinding-desc-terminal-onboarding-modality-no-project = [调试] 引导提示:Modality - 无项目
-keybinding-desc-terminal-onboarding-modality-terminal = [调试] 引导提示:Modality - 终端
+keybinding-desc-terminal-onboarding-warp-input-terminal = [调试] 引导提示：WarpInput - 终端
+keybinding-desc-terminal-onboarding-warp-input-project = [调试] 引导提示：WarpInput - 项目
+keybinding-desc-terminal-onboarding-warp-input-no-project = [调试] 引导提示：WarpInput - 无项目
+keybinding-desc-terminal-onboarding-modality-project = [调试] 引导提示：Modality - 项目
+keybinding-desc-terminal-onboarding-modality-no-project = [调试] 引导提示：Modality - 无项目
+keybinding-desc-terminal-onboarding-modality-terminal = [调试] 引导提示：Modality - 终端
 keybinding-desc-terminal-import-external-settings = 导入外部设置
 keybinding-desc-terminal-share-current-session = 分享当前会话
 keybinding-desc-terminal-stop-sharing-current-session = 停止分享当前会话
@@ -1932,7 +1898,7 @@ keybinding-desc-root-view-enter-onboarding-state = [调试] 进入引导状态
 keybinding-desc-workflow-view-save = 保存工作流
 keybinding-desc-workflow-view-close = 关闭
 
-# 编辑器视图 binding desc(由 editor/view/mod.rs、code/editor/view/actions.rs、notebooks/editor/view.rs 共用)
+# 编辑器视图 binding desc（由 editor/view/mod.rs、code/editor/view/actions.rs、notebooks/editor/view.rs 共用）
 keybinding-desc-editor-copy = 复制
 keybinding-desc-editor-cut = 剪切
 keybinding-desc-editor-paste = 粘贴
@@ -2008,7 +1974,7 @@ keybinding-desc-editor-toggle-comment = 切换注释
 keybinding-desc-editor-go-to-line = 跳转到行
 keybinding-desc-editor-find-in-code-editor = 在代码编辑器中查找
 
-# 代码编辑器(Code)binding desc
+# 代码编辑器（Code） binding desc
 keybinding-desc-code-save-as = 文件另存为
 keybinding-desc-code-close-all-tabs = 关闭所有标签页
 keybinding-desc-code-close-saved-tabs = 关闭已保存的标签页
@@ -2018,9 +1984,9 @@ keybinding-desc-welcome-terminal-session = 终端会话
 keybinding-desc-welcome-add-repository = 添加仓库
 
 # AI 助手面板 binding desc
-keybinding-desc-ai-assistant-close = 关闭 Warp AI
-keybinding-desc-ai-assistant-focus-terminal-input = 从 Warp AI 切回终端输入
-keybinding-desc-ai-assistant-restart = 重启 Warp AI
+keybinding-desc-ai-assistant-close = 关闭 Zap AI
+keybinding-desc-ai-assistant-focus-terminal-input = 从 Zap AI 切回终端输入
+keybinding-desc-ai-assistant-restart = 重启 Zap AI
 
 # 代码审阅 binding desc
 keybinding-desc-code-review-save-all = 保存代码审阅中所有未保存的文件
@@ -2044,7 +2010,7 @@ keybinding-desc-notebook-focus-terminal-input = 从笔记本切回终端输入
 keybinding-desc-notebook-fb-increase-font-size = 增大字号
 keybinding-desc-notebook-fb-decrease-font-size = 减小字号
 
-# Notebook 编辑器 binding desc(在共享编辑器 key 之外的)
+# Notebook 编辑器 binding desc（在共享编辑器 key 之外的）
 keybinding-desc-nbeditor-deselect-command = 取消选中 shell 命令
 keybinding-desc-nbeditor-select-command = 选中光标处的 shell 命令
 keybinding-desc-nbeditor-select-previous-command = 选中上一条命令
@@ -2089,17 +2055,17 @@ keybinding-desc-conversation-details-copy = 复制
 
 # 终端补充 binding desc
 keybinding-desc-terminal-show-history = 显示历史
-keybinding-desc-terminal-ask-ai-selection = 就所选内容询问 Warp AI
-keybinding-desc-terminal-ask-ai-last-block = 就最近的命令块询问 Warp AI
-keybinding-desc-terminal-ask-ai = 询问 Warp AI
-keybinding-desc-terminal-load-agent-conversation = 加载智能体模式会话(从剪贴板调试链接)
+keybinding-desc-terminal-ask-ai-selection = 就所选内容询问 Zap AI
+keybinding-desc-terminal-ask-ai-last-block = 就最近的命令块询问 Zap AI
+keybinding-desc-terminal-ask-ai = 询问 Zap AI
+keybinding-desc-terminal-load-agent-conversation = 加载智能体模式会话（从剪贴板调试链接）
 keybinding-desc-terminal-toggle-session-recording = 切换会话 PTY 录制
 
 # Notebook 编辑器补充
 keybinding-desc-nbeditor-select-to-paragraph-start = 选中到段落开头
 keybinding-desc-nbeditor-select-to-paragraph-end = 选中到段落末尾
 
-# 杂项 binding desc(收尾批次:常量/LazyLock/动态描述去硬编码)
+# 杂项 binding desc（收尾批次：常量/LazyLock/动态描述去硬编码）
 keybinding-desc-save-file = 保存文件
 keybinding-desc-new-agent-pane = 新建 Agent 窗格
 keybinding-desc-edit-code-diff = 编辑代码差异
@@ -2107,10 +2073,10 @@ keybinding-desc-edit-requested-command = 编辑请求的命令
 keybinding-desc-set-input-mode-agent = 切换输入模式为 Agent 模式
 keybinding-desc-set-input-mode-terminal = 切换输入模式为终端模式
 keybinding-desc-toggle-hide-cli-responses = 切换隐藏 CLI 回应
-keybinding-desc-slash-command = 斜杠命令:{ $name }
+keybinding-desc-slash-command = 斜杠命令：{ $name }
 keybinding-desc-take-control-of-running-command = 接管正在运行的命令
 
-# --- 终端零状态块(欢迎提示) ---
+# --- 终端零状态块（欢迎提示） ---
 terminal-zero-state-title = 新建终端会话
 terminal-zero-state-start-agent = 开始新的 Agent 对话
 terminal-zero-state-cycle-history = 翻阅历史命令与对话
@@ -2118,14 +2084,14 @@ terminal-zero-state-open-code-review = 打开代码评审
 terminal-zero-state-autodetect-prompts = 在终端会话中自动检测 Agent 提示
 terminal-zero-state-dismiss = 不再显示
 
-# --- Rules 页面(ai/facts/view/rule.rs) ---
-rules-description = Rules 通过提供结构化指引来增强 Agent,帮助保持一致性、贯彻最佳实践,并适应特定工作流,包括代码库或更宏观的任务。
+# --- Rules 页面（ai/facts/view/rule.rs） ---
+rules-description = Rules 通过提供结构化指引来增强 Agent，帮助保持一致性、贯彻最佳实践，并适应特定工作流，包括代码库或更宏观的任务。
 rules-search-placeholder = 搜索规则
 rules-name-placeholder = 例如 Rust 规则
 rules-description-placeholder = 例如 不要在 Rust 中使用 unwrap
-rules-zero-state-global = 添加规则后,它将显示在这里。
-rules-zero-state-project = 为项目生成 WARP.md 规则文件后,它将显示在这里。
-rules-disabled-banner-prefix = 你的规则已禁用,不会在会话中作为上下文使用。你可以随时
+rules-zero-state-global = 添加规则后，它将显示在这里。
+rules-zero-state-project = 为项目生成 WARP.md 规则文件后，它将显示在这里。
+rules-disabled-banner-prefix = 你的规则已禁用，不会在会话中作为上下文使用。你可以随时
 rules-disabled-banner-link = 重新开启
 rules-disabled-banner-suffix = 。
 rules-tab-global = 全局
@@ -2135,10 +2101,26 @@ rules-init-project-button = 初始化项目
 
 # --- Agent 视图零状态 + 消息栏 ---
 agent-zero-state-title = 新建 Agent 对话
-# OpenWarp 已移除云端 Agent 入口,此 key 实际不会被渲染;保留以匹配 en 兜底链。
+# Zap 已移除远端 Agent 入口，此 key 实际不会被渲染;保留以匹配 en 兜底链。
 agent-zero-state-title-cloud = 新建 Agent 对话
 agent-zero-state-description = 在下方输入提示开始新的对话
-agent-zero-state-description-with-location = 在下方输入提示,于 `{ $location }` 开始新的对话
+agent-zero-state-description-with-location = 在下方输入提示，于 `{ $location }` 开始新的对话
+agent-zero-state-recent-activity = 最近活动
+agent-zero-state-hide-hints-tooltip = 隐藏快捷键提示（可在设置中重新开启）
+inline-agent-header-prompt-to-interact-command = 提示智能体与 `{ $command }` 交互
+inline-agent-header-prompt-to-interact-running-command = 提示智能体与正在运行的命令交互
+inline-agent-header-waiting-on-instructions = 智能体正在等待指令
+inline-agent-header-waiting-for-command = 智能体正在等待命令退出
+inline-agent-header-agent-blocked = 智能体需要你的权限才能继续
+inline-agent-header-agent-in-control = 智能体正在控制
+inline-agent-header-user-in-control = 用户正在控制
+agent-toolbar-edit-agent-toolbelt = 编辑智能体工具带
+agent-toolbar-edit-cli-agent-toolbelt = 编辑 CLI 智能体工具带
+agent-toolbar-available-chips = 可用控件
+agent-message-bar-get-figma-mcp = 获取 Figma MCP
+agent-message-bar-enable-figma-mcp = 启用 Figma MCP
+agent-message-bar-enabling = 正在启用...
+child-agent-default-name = 智能体
 agent-zero-state-switch-model = 切换模型
 agent-zero-state-go-back-to-terminal = 返回终端
 agent-message-bar-for-help = 查看帮助
@@ -2154,7 +2136,7 @@ agent-message-bar-new-pane = {" "}新窗格
 agent-message-bar-new-tab = {" "}新标签页
 agent-message-bar-current-pane = {" "}当前窗格
 agent-message-bar-hide-help = 隐藏帮助
-agent-message-bar-autodetected-shell-command-prefix = 已自动识别为 shell 命令,{" "}
+agent-message-bar-autodetected-shell-command-prefix = 已自动识别为 shell 命令，{" "}
 agent-message-bar-autodetected-shell-command = 已自动识别为 shell 命令
 agent-message-bar-override = {" "}覆盖
 agent-message-bar-exit-shell-mode = 退出 shell 模式
@@ -2177,7 +2159,6 @@ agent-error-attempting-resume-conversation = 正在尝试继续对话...
 toggle-setting-enable = 启用{ $suffix }
 toggle-setting-disable = 禁用{ $suffix }
 
-toggle-suffix-ai = AI
 toggle-suffix-active-ai = 主动式 AI
 toggle-suffix-ai-input-autodetect-agent = Agent 输入中的终端命令检测
 toggle-suffix-ai-input-autodetect-nld = 自然语言检测
@@ -2186,12 +2167,11 @@ toggle-suffix-next-command = Next Command 补全
 toggle-suffix-prompt-suggestions = 提示词建议
 toggle-suffix-code-suggestions = 代码建议
 toggle-suffix-nl-autosuggestions = 自然语言自动建议
-toggle-suffix-shared-block-title-gen = 共享块标题生成
 toggle-suffix-voice-input = 语音输入
 toggle-suffix-codebase-index = 代码库索引
 toggle-suffix-auto-indexing = 自动索引
 toggle-suffix-compact-mode = 紧凑模式
-toggle-suffix-themes-sync-os = 主题:跟随系统
+toggle-suffix-themes-sync-os = 主题：跟随系统
 toggle-suffix-cursor-blink = 光标闪烁
 toggle-suffix-jump-bottom-block = 跳到块底部按钮
 toggle-suffix-block-dividers = 块分隔线
@@ -2217,7 +2197,8 @@ toggle-suffix-syntax-highlighting = 语法高亮
 toggle-suffix-audible-bell = 终端响铃
 toggle-suffix-autosuggestions = 自动建议
 toggle-suffix-autosuggestion-keybinding-hint = 自动建议快捷键提示
-toggle-suffix-ssh-wrapper = Warp SSH 包装器
+toggle-suffix-ssh-wrapper = Zap SSH 包装器
+toggle-suffix-ssh-auto-discovery = 自动发现 SSH 主机
 toggle-suffix-link-tooltip = 点击链接显示提示
 toggle-suffix-quit-warning = 退出警告弹窗
 toggle-suffix-alias-expansion = 别名展开
@@ -2231,10 +2212,10 @@ toggle-suffix-focus-reporting = 焦点上报
 toggle-suffix-smart-select = 智能选择
 toggle-suffix-input-message-line = 终端输入提示行
 toggle-suffix-slash-commands-terminal = 终端模式斜杠命令
-toggle-suffix-integrated-gpu = 集成 GPU 渲染(低功耗)
+toggle-suffix-integrated-gpu = 集成 GPU 渲染（低功耗）
 toggle-suffix-wayland = Wayland 窗口管理
 toggle-suffix-settings-sync = 设置同步
-toggle-suffix-app-analytics = 应用分析
+toggle-suffix-app-analytics = 本地诊断
 toggle-suffix-crash-reporting = 崩溃上报
 toggle-suffix-secret-redaction = 敏感信息脱敏
 toggle-suffix-recording-mode = 录制模式
@@ -2243,17 +2224,17 @@ toggle-suffix-debug-network = 网络状态调试
 toggle-suffix-memory-stats = 内存统计
 
 # Set agent thinking display
-agent-thinking-display-show-collapse = 设置 Agent 思考展示:展示并折叠
-agent-thinking-display-always-show = 设置 Agent 思考展示:始终展示
-agent-thinking-display-never-show = 设置 Agent 思考展示:从不展示
+agent-thinking-display-show-collapse = 设置 Agent 思考展示：展示并折叠
+agent-thinking-display-always-show = 设置 Agent 思考展示：始终展示
+agent-thinking-display-never-show = 设置 Agent 思考展示：从不展示
 
 # --- ANCHOR-SUB-EXTERNAL-EDITOR (settings-external-editor) ---
 settings-external-editor-choose-default = 选择打开文件链接的编辑器
 settings-external-editor-choose-code-panels = 选择从代码评审面板、项目浏览器和全局搜索打开文件的编辑器
-settings-external-editor-choose-layout = 选择在 Warp 中打开文件的布局
+settings-external-editor-choose-layout = 选择在 Zap 中打开文件的布局
 settings-external-editor-tabbed-header = 多个文件合并到同一编辑器面板
-settings-external-editor-tabbed-desc = 开启后,同一标签页中打开的文件会自动归并到单一编辑器面板。
-settings-external-editor-prefer-markdown = 默认用 Warp Markdown 查看器打开 Markdown 文件
+settings-external-editor-tabbed-desc = 开启后，同一标签页中打开的文件会自动归并到单一编辑器面板。
+settings-external-editor-prefer-markdown = 默认用 Zap Markdown 查看器打开 Markdown 文件
 settings-external-editor-layout-split-pane = 分屏面板
 settings-external-editor-layout-new-tab = 新建标签页
 settings-external-editor-default-app = 系统默认
@@ -2263,13 +2244,13 @@ settings-external-editor-default-app = 系统默认
 # 鼠标右键弹出菜单
 # =============================================================================
 
-# --- block 右键菜单(terminal/view.rs) ---
+# --- block 右键菜单（terminal/view.rs） ---
 menu-block-copy = 复制
 menu-block-copy-url = 复制 URL
 menu-block-copy-path = 复制路径
 menu-block-show-in-finder = 在 Finder 中显示
 menu-block-show-containing-folder = 显示所在文件夹
-menu-block-open-in-warp = 在 Warp 中打开
+menu-block-open-in-warp = 在 Zap 中打开
 menu-block-open-in-editor = 在编辑器中打开
 menu-block-insert-into-input = 插入到输入框
 menu-block-copy-command = 复制命令
@@ -2281,7 +2262,7 @@ menu-block-scroll-to-top-of-blocks = 滚动到块顶部
 menu-block-scroll-to-bottom-of-block = 滚动到块底部
 menu-block-scroll-to-bottom-of-blocks = 滚动到块底部
 menu-block-save-as-workflow = 另存为工作流
-menu-block-ask-warp-ai = 询问 Warp AI
+menu-block-ask-warp-ai = 询问 Zap AI
 menu-block-copy-output = 复制输出
 menu-block-copy-filtered-output = 复制过滤后的输出
 menu-block-toggle-block-filter = 切换块过滤器
@@ -2299,19 +2280,19 @@ menu-block-split-pane-down = 向下分割面板
 menu-block-split-pane-up = 向上分割面板
 menu-block-close-pane = 关闭面板
 
-# --- input 右键菜单(terminal/view.rs) ---
+# --- input 右键菜单（terminal/view.rs） ---
 menu-input-cut = 剪切
 menu-input-copy = 复制
 menu-input-paste = 粘贴
 menu-input-select-all = 全选
 menu-input-command-search = 命令搜索
 menu-input-ai-command-search = AI 命令搜索
-menu-input-ask-warp-ai = 询问 Warp AI
+menu-input-ask-warp-ai = 询问 Zap AI
 menu-input-save-as-workflow = 另存为工作流
 menu-input-hide-hint-text = 隐藏输入框提示文本
 menu-input-show-hint-text = 显示输入框提示文本
 
-# --- AI block overflow 菜单(terminal/view.rs) ---
+# --- AI block overflow 菜单（terminal/view.rs） ---
 menu-ai-block-copy = 复制
 menu-ai-block-copy-prompt = 复制提示词
 menu-ai-block-copy-output-as-markdown = 复制输出为 Markdown
@@ -2324,11 +2305,10 @@ menu-ai-block-copy-conversation-text = 复制对话文本
 menu-ai-block-fork-from-here = 从此处分叉
 menu-ai-block-rewind-to-before-here = 回退到此处之前
 menu-ai-block-fork-from-last-query = 从上一次提问分叉
-menu-ai-block-fork-from-query = 从"{ $query }"分叉
+menu-ai-block-fork-from-query = 从「{ $query }」分叉
 
-# --- tab 右键菜单(tab.rs) ---
+# --- tab 右键菜单（tab.rs） ---
 menu-tab-stop-sharing = 停止共享
-menu-tab-share-session = 共享会话
 menu-tab-stop-sharing-all = 停止共享全部
 menu-tab-copy-link = 复制链接
 menu-tab-rename = 重命名标签页
@@ -2342,14 +2322,14 @@ menu-tab-close-other = 关闭其他标签页
 menu-tab-close-below = 关闭下方标签页
 menu-tab-close-right = 关闭右侧标签页
 menu-tab-save-as-new-config = 另存为新配置
-menu-tab-default-no-color = 默认(无颜色)
+menu-tab-default-no-color = 默认（无颜色）
 
-# --- pane header 溢出菜单(terminal/view/pane_impl.rs) ---
+# --- pane header 溢出菜单（terminal/view/pane_impl.rs） ---
 menu-pane-copy-link = 复制链接
-menu-pane-stop-sharing-session = 停止共享会话
+menu-pane-stop-sharing-session = 停止会话广播
 menu-pane-open-on-desktop = 在桌面端打开
 
-# --- 文件树右键菜单(code/file_tree/view.rs) ---
+# --- 文件树右键菜单（code/file_tree/view.rs） ---
 menu-filetree-open-in-new-pane = 在新面板中打开
 menu-filetree-open-in-new-tab = 在新标签页中打开
 menu-filetree-open-file = 打开文件
@@ -2364,11 +2344,11 @@ menu-filetree-attach-as-context = 附加为上下文
 menu-filetree-copy-path = 复制路径
 menu-filetree-copy-relative-path = 复制相对路径
 
-# --- 代码编辑器右键菜单(code/local_code_editor.rs) ---
+# --- 代码编辑器右键菜单（code/local_code_editor.rs） ---
 menu-codeeditor-go-to-definition = 跳转到定义
 menu-codeeditor-find-references = 查找引用
 
-# --- 共享标签:附加为 agent 上下文(blocklist/view_util.rs) ---
+# --- 共享标签：附加为 agent 上下文（blocklist/view_util.rs） ---
 menu-attach-as-agent-context = 附加为 agent 上下文
 
 # --- ANCHOR-SUB-SLASH-COMMANDS (agent-slash-commands) ---
@@ -2377,44 +2357,42 @@ menu-attach-as-agent-context = 附加为 agent 上下文
 slash-cmd-agent-desc = 开始新对话
 slash-cmd-add-mcp-desc = 添加新的 MCP 服务器
 slash-cmd-pr-comments-desc = 拉取 GitHub PR 评审评论
-slash-cmd-create-environment-desc = 通过引导式流程创建 Oz 环境(Docker 镜像 + 仓库)
-slash-cmd-create-environment-hint = <可选:仓库路径或 GitHub URL>
+slash-cmd-create-environment-desc = 通过引导式流程创建 Oz 环境（Docker 镜像 + 仓库）
+slash-cmd-create-environment-hint = <可选：仓库路径或 GitHub URL>
 slash-cmd-docker-sandbox-desc = 创建新的 Docker 沙盒终端会话
 slash-cmd-create-new-project-desc = 由 Oz 引导你创建新的代码项目
 slash-cmd-create-new-project-hint = <描述你想构建什么>
-slash-cmd-open-skill-desc = 在 Warp 内置编辑器中打开技能的 markdown 文件
+slash-cmd-open-skill-desc = 在 Zap 内置编辑器中打开技能的 markdown 文件
 slash-cmd-skills-desc = 调用技能
 slash-cmd-add-prompt-desc = 添加新的智能体提示词
 slash-cmd-add-rule-desc = 为智能体添加新的全局规则
-slash-cmd-open-file-desc = 在 Warp 代码编辑器中打开文件
-slash-cmd-open-file-hint = <path/to/file[:line[:col]]> 或输入 "@" 搜索
+slash-cmd-open-file-desc = 在 Zap 代码编辑器中打开文件
+slash-cmd-open-file-hint = <path/to/file[:line[:col]]> 或输入「@」搜索
 slash-cmd-rename-tab-desc = 重命名当前标签页
 slash-cmd-rename-tab-hint = <标签页名称>
 slash-cmd-fork-desc = 在新窗格或新标签页中分叉当前对话
-slash-cmd-fork-hint = <可选:在分叉后的对话中发送的提示词>
+slash-cmd-fork-hint = <可选：在分叉后的对话中发送的提示词>
 slash-cmd-open-code-review-desc = 打开代码评审
 slash-cmd-init-desc = 生成或更新 AGENTS.md 文件
-slash-cmd-open-project-rules-desc = 打开项目规则文件(AGENTS.md)
+slash-cmd-open-project-rules-desc = 打开项目规则文件（AGENTS.md）
 slash-cmd-open-mcp-servers-desc = 打开 MCP 服务器
-slash-cmd-open-settings-file-desc = 打开设置文件(TOML)
+slash-cmd-open-settings-file-desc = 打开设置文件（TOML）
 slash-cmd-changelog-desc = 打开最新更新日志
 slash-cmd-open-repo-desc = 切换到另一个已索引的仓库
 slash-cmd-open-rules-desc = 查看你的全部全局规则与项目规则
-slash-cmd-new-desc = 开始新对话(/agent 的别名)
+slash-cmd-new-desc = 开始新对话（/agent 的别名）
 slash-cmd-model-desc = 切换基础智能体模型
 slash-cmd-profile-desc = 切换当前激活的执行配置
 slash-cmd-plan-desc = 让智能体调研并为任务创建计划
 slash-cmd-plan-hint = <描述你的任务>
-slash-cmd-orchestrate-desc = 将任务拆分为子任务并由多个智能体并行执行
-slash-cmd-orchestrate-hint = <描述你的任务>
 slash-cmd-compact-desc = 通过摘要对话历史来释放上下文
-slash-cmd-compact-hint = <可选:自定义摘要指令>
+slash-cmd-compact-hint = <可选：自定义摘要指令>
 slash-cmd-compact-and-desc = 压缩对话并随后发送一条后续提示词
 slash-cmd-compact-and-hint = <压缩后要发送的提示词>
-slash-cmd-queue-desc = 排队一条提示词,在智能体完成响应后再发送
+slash-cmd-queue-desc = 排队一条提示词，在智能体完成响应后再发送
 slash-cmd-queue-hint = <智能体完成后要发送的提示词>
 slash-cmd-fork-and-compact-desc = 分叉当前对话并在分叉副本中压缩
-slash-cmd-fork-and-compact-hint = <可选:压缩后要发送的提示词>
+slash-cmd-fork-and-compact-hint = <可选：压缩后要发送的提示词>
 slash-cmd-fork-from-desc = 从特定查询处分叉对话
 slash-cmd-remote-control-desc = 为此会话启动远程控制
 slash-cmd-conversations-desc = 打开对话历史
@@ -2422,55 +2400,50 @@ slash-cmd-prompts-desc = 搜索已保存的提示词
 slash-cmd-rewind-desc = 倒回到对话中的上一个节点
 slash-cmd-export-to-clipboard-desc = 以 markdown 格式将当前对话导出到剪贴板
 slash-cmd-export-to-file-desc = 将当前对话导出为 markdown 文件
-slash-cmd-export-to-file-hint = <可选:文件名>
+slash-cmd-export-to-file-hint = <可选：文件名>
 
 # --- ANCHOR-SUB-PROMPT-TIPS ---
-# 提示词编辑弹窗(app/src/prompt/editor_modal.rs)
+# 提示词编辑弹窗（app/src/prompt/editor_modal.rs）
 prompt-editor-title = 编辑提示词
-prompt-editor-warp-prompt-section = Warp 终端提示词
-prompt-editor-shell-prompt-section = Shell 提示符(PS1)
+prompt-editor-warp-prompt-section = Zap 终端提示词
+prompt-editor-shell-prompt-section = Shell 提示符（PS1）
 prompt-editor-restore-default = 恢复默认
 prompt-editor-same-line-prompt = 同行提示词
 prompt-editor-separator = 分隔符
 prompt-editor-cancel = 取消
 prompt-editor-save-changes = 保存更改
 
-# 欢迎提示(app/src/tips/tip_view.rs)
+# 欢迎提示（app/src/tips/tip_view.rs）
 welcome-tips-command-palette-title = 命令面板
-welcome-tips-command-palette-description = 无需双手离开键盘,即可轻松发现 Warp 的全部功能。
+welcome-tips-command-palette-description = 无需双手离开键盘，即可轻松发现 Zap 的全部功能。
 welcome-tips-split-pane-title = 拆分窗格
-welcome-tips-split-pane-description = 将标签页拆分为多个窗格,创建理想布局。
+welcome-tips-split-pane-description = 将标签页拆分为多个窗格，创建理想布局。
 welcome-tips-history-search-title = 历史搜索
 welcome-tips-history-search-description = 查找、编辑并重新运行之前执行过的命令。
 welcome-tips-ai-command-search-title = AI 命令搜索
 welcome-tips-ai-command-search-description = 用自然语言生成 shell 命令。
 welcome-tips-theme-picker-title = 主题选择器
-welcome-tips-theme-picker-description = 选择内置主题,让 Warp 更符合你的风格。也可以创建自己的主题。
+welcome-tips-theme-picker-description = 选择内置主题，让 Zap 更符合你的风格。也可以创建自己的主题。
 welcome-tips-shortcut-label = 快捷键
 welcome-tips-skip = 跳过欢迎提示
-welcome-tips-complete-title = 完成!
-welcome-tips-complete-description = 欢迎提示已完成,做得不错!
+welcome-tips-complete-title = 完成！
+welcome-tips-complete-description = 欢迎提示已完成，做得不错！
 welcome-tips-close = 关闭欢迎提示
 
 # --- ANCHOR-SUB-SMALL-DIALOGS ---
-# 倒回确认弹窗(app/src/workspace/rewind_confirmation_dialog.rs)
+# 倒回确认弹窗（app/src/workspace/rewind_confirmation_dialog.rs）
 rewind-dialog-title = 倒回
-rewind-dialog-body = 确定要倒回吗? 这会将你的代码和对话恢复到此节点之前,并取消智能体当前正在运行的任何命令。原始对话的副本将保存到你的对话历史中。
+rewind-dialog-body = 确定要倒回吗？这会将你的代码和对话恢复到此节点之前，并取消智能体当前正在运行的任何命令。原始对话的副本将保存到你的对话历史中。
 rewind-dialog-info = 倒回不会影响手动编辑或通过 shell 命令编辑的文件。
 rewind-dialog-cancel = 取消
 rewind-dialog-confirm = 倒回
 
-# 转让所有权确认弹窗(app/src/settings_view/transfer_ownership_confirmation_modal.rs)
-transfer-ownership-dialog-body = 确定要将团队所有权转让给 { $name } 吗? 你将不再是所有者,也无法对此团队执行任何管理操作。
-transfer-ownership-dialog-cancel = 取消
-transfer-ownership-dialog-confirm = 转让
-
 # --- ANCHOR-SUB-SEARCH-PALETTES ---
-# 搜索面板(app/src/search/command_palette/view.rs, app/src/search/welcome_palette/view.rs)
+# 搜索面板（app/src/search/command_palette/view.rs, app/src/search/welcome_palette/view.rs）
 command-palette-search-placeholder = 搜索命令
 command-palette-no-results = 未找到结果
-command-palette-toast-cannot-switch-conversations = 智能体正在监控命令时,无法切换对话。
-command-palette-toast-cannot-start-new-conversation = 智能体正在监控命令时,无法开始新对话。
+command-palette-toast-cannot-switch-conversations = 智能体正在监控命令时，无法切换对话。
+command-palette-toast-cannot-start-new-conversation = 智能体正在监控命令时，无法开始新对话。
 command-palette-zero-state-recent = 最近使用
 command-palette-zero-state-suggested = 推荐
 welcome-palette-search-placeholder = 编码、构建，或搜索任意内容...
@@ -2480,7 +2453,7 @@ search-filter-placeholder-workflows = 搜索工作流
 search-filter-placeholder-agent-mode-workflows = 搜索提示词
 search-filter-placeholder-notebooks = 搜索笔记本
 search-filter-placeholder-plans = 搜索计划
-search-filter-placeholder-natural-language = 例如: 替换文件中的字符串
+search-filter-placeholder-natural-language = 例如：替换文件中的字符串
 search-filter-placeholder-actions = 搜索操作
 search-filter-placeholder-sessions = 搜索会话
 search-filter-placeholder-conversations = 搜索对话
@@ -2511,7 +2484,7 @@ search-filter-display-actions = 操作
 search-filter-display-sessions = 会话
 search-filter-display-conversations = 对话
 search-filter-display-launch-configurations = 启动配置
-search-filter-display-drive = Warp Drive
+search-filter-display-drive = Zap Drive
 search-filter-display-environment-variables = 环境变量
 search-filter-display-prompt-history = 提示词历史
 search-filter-display-files = 文件
@@ -2536,17 +2509,17 @@ ai-context-diffset-uncommitted-changes-description = 工作目录中所有未提
 ai-context-diffset-changes-vs-main-branch-description = 与 main 分支相比的所有更改
 ai-context-diffset-changes-vs-branch-description = 与 { $branch } 相比的所有更改
 ai-context-code-search-failed = 代码搜索失败
-ai-context-files-directory-accessibility-label = 目录: { $path }
-ai-context-files-file-accessibility-label = 文件: { $path }
+ai-context-files-directory-accessibility-label = 目录：{ $path }
+ai-context-files-file-accessibility-label = 文件：{ $path }
 ai-context-blocks-just-now = 刚刚
 ai-context-blocks-minutes-ago = { $count } 分钟前
 ai-context-blocks-hours-ago = { $count } 小时前
 ai-context-blocks-days-ago = { $count } 天前
 ai-context-blocks-no-output = 无输出
-ai-context-blocks-accessibility-label = 命令块: { $command }
+ai-context-blocks-accessibility-label = 命令块：{ $command }
 
 # --- ANCHOR-SUB-DRIVE-NAMING-IMPORT ---
-# Drive 命名弹窗(app/src/drive/cloud_object_naming_dialog.rs)
+# Drive 命名弹窗（app/src/drive/cloud_object_naming_dialog.rs）
 drive-naming-notebook-name = 笔记本名称
 drive-naming-folder-name = 文件夹名称
 drive-naming-collection-name = 集合名称
@@ -2554,7 +2527,7 @@ drive-naming-create = 创建
 drive-naming-cancel = 取消
 drive-naming-rename = 重命名
 
-# Drive 导入弹窗(app/src/drive/import/modal.rs, app/src/drive/import/modal_body.rs)
+# Drive 导入弹窗（app/src/drive/import/modal.rs, app/src/drive/import/modal_body.rs）
 drive-import-title = 导入
 drive-import-close = 关闭
 drive-import-cancel = 取消
@@ -2564,10 +2537,8 @@ drive-import-learn-file-support = 了解文件支持和格式设置
 drive-import-file-upload-error = 文件上传到服务器失败
 drive-import-folder-upload-error = 文件夹上传到服务器失败
 
-# Drive 主面板和 workflow 编辑器(app/src/drive/index.rs, app/src/drive/workflows/*)
+# Drive 主面板和 workflow 编辑器（app/src/drive/index.rs, app/src/drive/workflows/*）
 drive-title = Drive
-drive-create-team-text = 与团队成员共享命令和知识。
-drive-join-team-header = 与已经在 Warp 上的 { $count } 位团队成员协作。
 drive-environment-variables = 环境变量
 drive-folder = 文件夹
 drive-notebook = 笔记本
@@ -2587,12 +2558,10 @@ drive-empty-trash = 清空废纸篓
 drive-trash-section-title = 废纸篓
 drive-trash-title = 废纸篓
 drive-trash-deletion-warning = 废纸篓中的项目将在 30 天后永久删除。
-drive-team-space-zero-state = 将个人 workflow 或笔记本拖放或移动到此处，即可与团队共享。
-drive-create-team-button = 创建团队
-drive-view-teams-to-join = 查看可加入的团队
-drive-or = 或
-drive-sign-up-storage-limit = 免费注册可提升存储上限并解锁更多功能。
-drive-sign-up = 注册
+drive-team-space-zero-state = 本地版不提供团队空间。请在个人空间管理 workflow 和笔记本。
+drive-sign-up-storage-limit = 本地存储上限会在此设备上生效。
+drive-local-storage-limit-description = 本地存储上限会在此设备上生效。请移除不再需要的项目，为新的 Zap Drive 对象腾出空间。
+drive-sign-up = 本地管理
 drive-copy-link = 复制链接
 drive-collapse-all = 全部折叠
 drive-revert-to-server = 恢复为服务器版本
@@ -2629,8 +2598,8 @@ drive-object-type-ai-fact = AI 事实
 drive-object-type-rules = 规则
 drive-object-type-mcp-server = MCP 服务器
 drive-object-type-mcp-servers = MCP 服务器
-drive-shared-object-limit-hit-banner-prefix = 你当前套餐中的 { $object_type } 数量已用完。
-drive-shared-object-limit-hit-banner = 你当前套餐中的 { $object_type } 数量已用完。升级后可使用更多笔记本、workflow、共享会话和 AI 额度。
+drive-shared-object-limit-hit-banner-prefix = 你已达到本地 { $object_type } 数量上限。
+drive-shared-object-limit-hit-banner = 你已达到本地 { $object_type } 数量上限。
 drive-payment-issue-banner-prefix = 由于订阅付款问题，共享对象已受限。
 drive-payment-issue-banner-admin = 由于订阅付款问题，共享对象已受限。请更新付款信息以恢复访问。
 drive-payment-issue-banner-admin-enterprise = 由于订阅付款问题，共享对象已受限。请联系 support@warp.dev 恢复访问。
@@ -2648,16 +2617,16 @@ workflow-arguments-label = 参数
 workflow-argument-description-placeholder = 描述
 workflow-argument-value-placeholder = 值（可选）
 workflow-default-value-placeholder = 默认值（可选）
-workflow-agent-mode-query-placeholder = 在此输入你的提示...（例如，“创建一个按日期排序对象数组的函数”或“帮我调试这个 React 组件”）。
+workflow-agent-mode-query-placeholder = 在此输入你的提示...（例如，「创建一个按日期排序对象数组的函数」或「帮我调试这个 React 组件」）。
 workflow-save = 保存 workflow
 workflow-unsaved-changes = 你有未保存的更改。
 workflow-keep-editing = 继续编辑
 workflow-discard-changes = 放弃更改
 workflow-ai-assist-autofill = 自动填充
 workflow-ai-assist-loading = 加载中
-workflow-ai-assist-tooltip = 使用 Warp AI 生成标题、描述或参数
+workflow-ai-assist-tooltip = 使用 Zap AI 生成标题、描述或参数
 workflow-tooltip-restore-from-trash = 从废纸篓恢复 workflow
-workflow-ai-assist-error-byop-required = 自动填充需要 BYOP 模型。请在“设置 → AI”中配置 provider 与模型。
+workflow-ai-assist-error-byop-required = 自动填充需要 BYOP 模型。请在「设置 → AI」中配置 provider 与模型。
 workflow-ai-assist-error-bad-command = 无法生成元数据。请换一个命令后重试。
 workflow-ai-assist-error-generic = 出错了。请重试。
 workflow-ai-assist-error-rate-limited = 看起来你的 AI 额度已用完。请稍后重试。
@@ -2665,15 +2634,7 @@ workflow-enum-new = 新建
 workflow-alias-name-placeholder = 别名
 workflow-add-argument-tooltip = 添加工作流参数
 
-# --- ANCHOR-SUB-SETTINGS-PRIVACY-ADD-REGEX ---
-# 隐私设置添加正则表达式弹窗(app/src/settings_view/privacy/add_regex_modal.rs)
-settings-privacy-add-regex-name-placeholder = 例如 "Google API Key"
-settings-privacy-add-regex-name-label = 名称(可选)
-settings-privacy-add-regex-pattern-label = 正则表达式模式
-settings-privacy-add-regex-invalid = 无效的正则表达式
-settings-privacy-add-regex-cancel = 取消
-
-# 工作区面板(app/src/workspace/view/*)
+# 工作区面板（app/src/workspace/view/*）
 workspace-conversation-list-search = 搜索
 workspace-conversation-list-active = 当前
 workspace-conversation-list-past = 历史
@@ -2682,6 +2643,8 @@ workspace-conversation-list-show-less = 收起
 workspace-conversation-list-empty-title = 暂无对话
 workspace-conversation-list-empty-description = 你与本地和环境智能体的当前及历史对话会显示在这里。
 workspace-conversation-list-new-conversation = 新建对话
+conversation-untitled = 未命名对话
+conversation-deleted = 已删除的对话
 workspace-conversation-list-no-matching = 没有匹配的对话
 workspace-conversation-list-delete = 删除
 workspace-conversation-list-delete-in-progress-error = 对话进行中时无法删除。
@@ -2689,11 +2652,32 @@ workspace-conversation-list-delete-ambient-tooltip = 无法删除环境智能体
 workspace-conversation-list-fork-new-pane = 在新窗格中派生
 workspace-conversation-list-fork-new-tab = 在新标签页中派生
 workspace-conversation-list-fallback-title = 对话
+command-palette-conversations-active-pane = 当前窗格中的对话
+command-palette-conversations-other-active = 其他活动对话
+command-palette-conversations-past = 历史对话
+command-palette-conversations-fork-current = 派生当前对话
+command-palette-conversations-fork-current-with-title = 派生当前对话（{ $title }）
+command-palette-conversations-a11y-navigate = 按 Enter 导航到对话
+command-palette-conversations-a11y-fork = 按 Enter 将当前对话派生为新对话。
+command-palette-conversations-a11y-new = 按 Enter 创建新对话。
 workspace-left-panel-project-explorer = 项目浏览器
+project-explorer-unavailable-title = 项目浏览器不可用
+project-explorer-unavailable-disabled-description = 项目浏览器需要访问本地工作区。请打开新会话或切换到活动会话后查看。
+project-explorer-unavailable-remote-description = 项目浏览器需要访问本地工作区,远程会话暂不支持。
+project-explorer-unavailable-wsl-description = 项目浏览器当前不支持 WSL。
 workspace-left-panel-global-search = 全局搜索
-workspace-left-panel-warp-drive = Warp Drive
+workspace-left-panel-warp-drive = Zap Drive
 workspace-left-panel-agent-conversations = 智能体对话
 workspace-left-panel-ssh-manager = SSH 管理器
+workspace-left-panel-server-file-browser = 服务器文件
+workspace-left-panel-skill-manager = Skill 管理器
+skill-manager-search-placeholder = 搜索 skill
+skill-manager-filter-all = 全部
+skill-manager-filter-provider = 来源
+skill-manager-meta-default = 默认
+skill-manager-meta-duplicate = 重复
+skill-manager-empty = 当前过滤条件下没有 skill。
+skill-manager-preview-empty = 选择一个 skill 预览 SKILL.md。
 workspace-left-panel-ssh-manager-placeholder = SSH 管理器 — 功能开发中
 workspace-left-panel-ssh-manager-detail-empty = 选择左侧的服务器以查看详情。
 workspace-left-panel-ssh-manager-detail-host = 主机
@@ -2703,15 +2687,41 @@ workspace-left-panel-ssh-manager-detail-auth = 认证方式
 workspace-left-panel-ssh-manager-detail-key-path = 私钥路径
 workspace-left-panel-ssh-manager-auth-password = 密码
 workspace-left-panel-ssh-manager-auth-key = 私钥
+workspace-left-panel-ssh-manager-auth-onekey = OneKey
+workspace-left-panel-ssh-manager-onekey-credential = 账密
+workspace-left-panel-ssh-manager-onekey-new = 新建账密
+workspace-left-panel-ssh-manager-onekey-label = 账密名称
+workspace-left-panel-ssh-manager-onekey-user = 账密用户
+workspace-left-panel-ssh-manager-onekey-password = 账密密码
+workspace-left-panel-ssh-manager-onekey-password-required = 新建 OneKey 账密必须填写密码。
+workspace-left-panel-ssh-manager-onekey-save-before-connect = 连接前请先保存 OneKey 账密。
+workspace-left-panel-ssh-manager-onekey-select = 选择账密
+workspace-left-panel-ssh-manager-onekey-select-required = 请选择 OneKey 账密。
+workspace-left-panel-ssh-manager-onekey-manage = 管理 OneKey
+workspace-left-panel-ssh-manager-onekey-manager-title = OneKey 管理器
+workspace-left-panel-ssh-manager-onekey-add = 新增
+workspace-left-panel-ssh-manager-onekey-delete = 删除
+workspace-left-panel-ssh-manager-onekey-type = 类型
+workspace-left-panel-ssh-manager-onekey-type-password = 密码
+workspace-left-panel-ssh-manager-onekey-type-key = 私钥
+workspace-left-panel-ssh-manager-onekey-key-path = 私钥路径
+workspace-left-panel-ssh-manager-onekey-key-path-required = 私钥账密必须填写私钥路径。
+workspace-left-panel-ssh-manager-onekey-secret = 密码
+workspace-left-panel-ssh-manager-onekey-save = 保存
+workspace-left-panel-ssh-manager-onekey-label-required = 账密名称不能为空。
 workspace-left-panel-ssh-manager-menu-new-folder = 新建文件夹
 workspace-left-panel-ssh-manager-menu-new-server = 新建 SSH 服务器
 workspace-left-panel-ssh-manager-menu-edit = 编辑
 workspace-left-panel-ssh-manager-menu-connect = 连接
+workspace-left-panel-ssh-manager-menu-sftp = 文件管理
+workspace-left-panel-ssh-manager-menu-clone = 克隆
 workspace-left-panel-ssh-manager-menu-delete = 删除
-workspace-left-panel-ssh-manager-pane-hint = 字段编辑与"连接"按钮将在下一迭代加入。目前此面板仅展示已保存的配置。
+workspace-left-panel-ssh-manager-pane-hint = 字段编辑与「连接」按钮将在下一迭代加入。目前此面板仅展示已保存的配置。
 workspace-left-panel-ssh-manager-pane-folder-body = 文件夹。在此文件夹内选择某个服务器查看详情;右键此节点可以新建/删除。
 workspace-left-panel-ssh-manager-server-missing = 找不到该服务器。可能已经从其他窗口被删除。
 workspace-left-panel-ssh-manager-field-name = 名称
+workspace-left-panel-ssh-manager-field-group = 分组
+workspace-left-panel-ssh-manager-group-root = 根目录
 workspace-left-panel-ssh-manager-passphrase = 私钥口令
 workspace-left-panel-ssh-manager-save = 保存
 workspace-left-panel-ssh-manager-status-saved = 已保存。
@@ -2719,10 +2729,110 @@ workspace-left-panel-ssh-manager-error-name-required = 名称不能为空。
 workspace-left-panel-ssh-manager-error-port-invalid = 端口必须是 1 到 65535 之间的数字。
 workspace-left-panel-ssh-manager-error-host-required = 主机不能为空。
 workspace-left-panel-ssh-manager-connect = 连接
+workspace-left-panel-ssh-manager-test = 测试
+workspace-left-panel-ssh-manager-testing = 测试中...
+workspace-left-panel-ssh-manager-status-online = 在线
+workspace-left-panel-ssh-manager-status-offline = 离线
+workspace-left-panel-ssh-manager-status-unknown = 未知
 search-filter-placeholder-ssh-servers = 搜索 SSH 服务器…
 search-filter-display-ssh-servers = SSH 服务器
 workspace-left-panel-ssh-manager-menu-rename = 重命名
-workspace-left-panel-ssh-manager-tree-empty = 还没有 SSH 服务器。点击 📁 新建文件夹,+ 新建服务器。
+workspace-left-panel-ssh-manager-tree-empty = 还没有 SSH 服务器。点击 📁 新建文件夹，+ 新建服务器。
+workspace-left-panel-ssh-manager-root-password = Root 密码
+workspace-left-panel-ssh-manager-root-password-placeholder = 切换 root 时的密码
+workspace-left-panel-ssh-manager-startup-command = 启动命令
+workspace-left-panel-ssh-manager-startup-command-placeholder = 连接成功后自动执行的命令
+workspace-left-panel-ssh-manager-notes = 备注
+workspace-left-panel-ssh-manager-notes-placeholder = 备注信息
+workspace-left-panel-ssh-manager-candidates-header = 来自 { $path }
+workspace-left-panel-ssh-manager-candidates-empty = { $path } 中没有可导入的主机
+workspace-left-panel-ssh-manager-candidates-not-found = 未找到 SSH 配置文件:{ $path }
+workspace-left-panel-ssh-manager-candidates-error = 读取 SSH 配置失败 { $path }:{ $error }
+workspace-left-panel-ssh-manager-candidates-add = 添加到 SSH 管理器
+workspace-left-panel-ssh-manager-candidates-added = 已添加
+workspace-left-panel-ssh-manager-candidates-refresh = 从 ~/.ssh/config 重新加载
+terminal-su-root-password-confirm = 自动输入 Root 密码
+terminal-su-root-password-confirm-subtitle = 点击确认后自动填入保存的 Root 密码
+terminal-su-root-password-cancel = 取消
+server-file-browser-path-placeholder = 远端路径
+server-file-browser-empty = 连接 SSH 会话后即可浏览服务器文件。
+server-file-browser-no-session = 当前没有已连接的远端服务器会话。
+server-file-browser-connection-lost = 与远程服务器的连接已断开。请重新连接 SSH 会话后，刷新或重新打开此面板。
+server-file-browser-loading = 加载中…
+server-file-browser-empty-directory = 此目录为空。
+server-file-browser-empty-response = 远端服务器返回了空响应。
+server-file-browser-unsupported-path = 暂不支持此远端路径类型。
+server-file-browser-copied-path = 路径已复制。
+server-file-browser-transfer-complete = 传输完成。
+server-file-browser-modified = 已修改
+server-file-browser-menu-refresh = 刷新
+server-file-browser-menu-upload = 上传
+server-file-browser-menu-new = 新建
+server-file-browser-menu-download = 下载
+server-file-browser-menu-upload-file = 上传文件
+server-file-browser-menu-upload-folder = 上传文件夹
+server-file-browser-menu-new-file = 新建文件
+server-file-browser-menu-new-folder = 新建文件夹
+server-file-browser-menu-copy-path = 复制路径
+server-file-browser-menu-terminal = 终端
+server-file-browser-menu-cd-to-terminal = 执行 CD 到终端
+server-file-browser-menu-other = 其他
+server-file-browser-menu-copy-filename = 复制文件名
+server-file-browser-menu-rename = 重命名
+server-file-browser-menu-delete = 删除
+server-file-browser-copied-name = 已复制文件名
+server-file-browser-delete-title = 删除“{ $name }”?
+server-file-browser-delete-info-file = 该文件将从远程主机上删除。
+server-file-browser-delete-info-directory = 该文件夹及其内容将从远程主机上删除。
+server-file-browser-renamed = 重命名成功。
+server-file-browser-deleted = 删除成功。
+server-file-browser-created-file = 文件已创建。
+server-file-browser-created-folder = 文件夹已创建。
+server-file-browser-default-file-name = untitled
+server-file-browser-default-folder-name = untitled folder
+server-file-browser-rename-empty = 名称不能为空。
+server-file-browser-rename-invalid-name = 名称不能包含 /。
+server-file-browser-rename-unchanged = 名称未改变。
+server-file-browser-operation-failed = 操作失败：{ $error }
+server-file-browser-rename-requires-session = 重命名需要已连接的远端服务。
+server-file-browser-create-requires-session = 新建文件需要已连接的远端服务。
+server-file-browser-delete-requires-session = 删除文件夹需要已连接的 SSH 会话。
+server-file-browser-upload-progress-title = 上传进度
+server-file-browser-transfer-progress-title = 传输进度
+server-file-browser-transfer-progress-empty = 暂无传输任务
+server-file-browser-transfer-overall = { $done } / { $total } 个文件
+server-file-browser-upload-progress-empty = 暂无上传任务
+server-file-browser-upload-status-pending = 等待中
+server-file-browser-upload-status-uploading = 上传中 { $percent }%
+server-file-browser-upload-status-completed = 已完成
+server-file-browser-upload-status-failed = 失败：{ $error }
+server-file-browser-download-status-pending = 等待中
+server-file-browser-download-status-downloading = 下载中 { $percent }%
+server-file-browser-download-status-completed = 已完成
+server-file-browser-download-status-failed = 失败：{ $error }
+server-file-browser-upload-clear-completed = 清除已完成
+server-file-browser-upload-overall = { $done } / { $total } 个文件
+server-file-browser-upload-phase-uploading = 上传中
+server-file-browser-upload-phase-verifying = 校验中
+server-file-browser-upload-phase-promoting = 应用中
+server-file-browser-upload-status-verifying = 校验中
+server-file-browser-upload-status-promoting = 应用中
+server-file-browser-upload-status-skipped = 已跳过
+server-file-browser-upload-all-skipped = 所有文件均已存在，未上传。
+server-file-browser-upload-queued = 已加入上传队列，将在当前任务完成后开始。
+server-file-browser-upload-promote-not-replacing = 目标路径已存在且未选择覆盖，无法完成上传：{ $path }
+server-file-browser-upload-promote-not-replacing-generic = 目标路径已存在且未选择覆盖，无法完成上传。
+server-file-browser-upload-conflict-title = 发现同名文件或文件夹
+server-file-browser-upload-conflict-info = 目标目录中已存在以下路径。请选择如何处理：
+server-file-browser-upload-conflict-overwrite = 全部覆盖
+server-file-browser-upload-conflict-skip = 跳过已有
+server-file-browser-upload-conflict-kind-file = 文件
+server-file-browser-upload-conflict-kind-directory = 文件夹
+server-file-browser-upload-conflict-kind-symlink = 符号链接
+server-file-browser-upload-conflict-kind-other = 其他
+server-file-browser-upload-conflict-more = …另有 { $count } 项
+server-file-browser-upload-verify-missing = 校验失败：远端缺少 { $path }
+server-file-browser-upload-verify-size = 校验失败：{ $path } 大小不一致
 workspace-left-panel-close-panel = 关闭面板
 workspace-tabs-panel-tooltip = 标签页面板
 workspace-tools-panel-tooltip = 工具面板
@@ -2739,7 +2849,7 @@ workspace-right-panel-code-review = 代码评审
 workspace-right-panel-minimize = 最小化
 workspace-right-panel-maximize = 最大化
 workspace-right-panel-unknown = 未知
-terminal-pane-new-cloud-agent-title = 新建云端智能体
+terminal-pane-new-cloud-agent-title = 新建智能体
 terminal-pane-new-agent-conversation-title = 新建智能体对话
 vertical-tabs-no-tabs-open = 没有打开的标签页
 vertical-tabs-untitled-tab = 未命名标签页
@@ -2780,56 +2890,46 @@ global-search-toggle-case-sensitivity = 切换大小写敏感
 global-search-toggle-regex = 切换正则表达式
 global-search-label = 搜索
 global-search-no-results-gitignore = 未找到结果。请检查你的 gitignore 文件。
-global-search-result-count-one = 1 个结果,位于 { $files } 个文件中
-global-search-result-count-many = { $n } 个结果,位于 { $files } 个文件中
+global-search-result-count-one = 1 个结果，位于 { $files } 个文件中
+global-search-result-count-many = { $n } 个结果，位于 { $files } 个文件中
 global-search-subset-warning = 结果集仅包含所有匹配项的一部分。请使用更具体的搜索词来缩小结果范围。
 global-search-title = 全局搜索
 global-search-description = 在当前目录的文件中搜索。
 global-search-unavailable-title = 全局搜索不可用
 global-search-unavailable-description = 全局搜索需要访问本地工作区。请打开新会话或切换到活动会话后查看。
-global-search-remote-description = 全局搜索需要访问本地工作区,远程会话不支持此功能
+global-search-remote-description = 全局搜索需要访问本地工作区，远程会话不支持此功能
 global-search-unsupported-session-description = 全局搜索目前不支持 Git Bash 或 WSL。
 global-search-failed = 全局搜索失败。
 
 # Wasm NUX dialog (app/src/wasm_nux_dialog.rs)
-wasm-nux-open-desktop-title = 在 Warp 桌面版中打开？
+wasm-nux-open-desktop-title = 在 Zap 桌面版中打开？
 wasm-nux-open-desktop-detail = 之后的链接会自动在桌面版中打开。
-wasm-nux-open-desktop-confirm = 在 Warp 中打开
-wasm-nux-download-title = 下载 Warp 桌面版？
-wasm-nux-download-description = Warp 是一款内置 AI 和团队知识的智能终端。
+wasm-nux-open-desktop-confirm = 在 Zap 中打开
+wasm-nux-download-title = 下载 Zap 桌面版？
+wasm-nux-download-description = Zap 是一款内置 AI 和团队知识的智能终端。
 wasm-nux-learn-more = 了解更多
 wasm-nux-download-confirm = 下载
-wasm-nux-object-kind-drive-objects = Warp Drive 对象
-wasm-nux-object-kind-shared-sessions = 共享会话
-wasm-nux-object-kind-warp-links = Warp 链接
+wasm-nux-object-kind-drive-objects = Zap Drive 对象
+wasm-nux-object-kind-warp-links = Zap 链接
 wasm-nux-always-open-on-web-title = 始终在网页中打开 { $object_kind } 吗？
 wasm-nux-always-open-on-web-detail = 你可以随时在设置中更改此项。
 wasm-nux-yes = 是
 
-# Drive cloud action confirmation dialog (app/src/drive/cloud_action_confirmation_dialog.rs)
-drive-cloud-action-cancel = 取消
-drive-cloud-action-delete-team-title = 你确定要删除这个团队吗？
-drive-cloud-action-leave-team-title = 你确定要离开这个团队吗？
-drive-cloud-action-delete-team-body = 删除这个团队会永久移除该团队及其所有相关内容，包括账单信息或额度。删除后无法恢复。
-drive-cloud-action-leave-team-body = 如需重新加入，你需要再次被邀请。
-drive-cloud-action-delete-team-confirm = 是，删除
-drive-cloud-action-leave-team-confirm = 是，离开
-
 # Auth override warning (app/src/auth/auth_override_warning_body.rs)
 auth-override-warning-title = 检测到新的登录
-auth-override-warning-confirm-title = 要删除个人 Warp Drive 对象和偏好吗？
-auth-override-warning-description = 看起来你刚刚通过网页浏览器登录了一个 Warp 账号。如果继续，当前匿名会话中的所有个人 Warp Drive 对象和偏好都将被永久删除。
+auth-override-warning-confirm-title = 要删除个人 Zap Drive 对象和偏好吗？
+auth-override-warning-description = 看起来你刚刚通过网页浏览器登录了一个 Zap 账号。如果继续，当前匿名会话中的所有个人 Zap Drive 对象和偏好都将被永久删除。
 auth-override-warning-cannot-undo = 此操作无法撤销。
 auth-override-warning-export = 导出你的数据
 auth-override-warning-export-description = ，稍后可再导入。
 auth-override-warning-cancel = 取消
 auth-override-warning-continue = 继续
-auth-override-warning-accessibility-help = Warp 检测到你通过网页浏览器进行了新的登录。按 Esc 键取消，并继续在未登录状态下使用 Warp。
+auth-override-warning-accessibility-help = Zap 检测到你通过网页浏览器进行了新的登录。按 Esc 键取消，并继续在未登录状态下使用 Zap。
 
 # Auth SSO link/login failures/paste token/logout/offline/privacy
 auth-needs-sso-link-button = 关联 SSO
 auth-needs-sso-link-title = 你的组织已为该账号启用 SSO
-auth-needs-sso-link-detail = 点击下方按钮，将你的 Warp 账号关联到你的 SSO 提供商。
+auth-needs-sso-link-detail = 点击下方按钮，将你的 Zap 账号关联到你的 SSO 提供商。
 auth-login-failure-troubleshooting-prefix =  这已经不是第一次了？请查看我们的
 auth-login-failure-troubleshooting-link = 故障排查文档
 auth-login-failure-troubleshooting-suffix = 。
@@ -2843,37 +2943,37 @@ auth-paste-token-title = 在下方粘贴你的认证令牌
 auth-paste-token-detail = 从浏览器粘贴你的认证令牌，以完成登录。
 auth-paste-token-cancel = 取消
 auth-paste-token-continue = 继续
-auth-offline-first-use-description = 你当前处于离线状态。首次使用 Warp 时需要联网。
+auth-offline-first-use-description = 你当前处于离线状态。首次使用 Zap 时需要联网。
 auth-offline-first-use-learn-more = 了解更多
-auth-offline-overlay-title = 离线使用 Warp
-auth-offline-overlay-paragraph-1 = Warp 的所有非云端功能都可以离线使用。
-auth-offline-overlay-paragraph-2 = 但在首次使用 Warp 时，我们要求你保持联网，以启用 Warp 的 AI 和云功能。
-auth-offline-overlay-paragraph-3 = 我们向所有用户提供云功能，因此需要互联网连接来计量 AI 使用量、防止滥用，并将云对象与用户关联起来。如果你选择在退出登录状态下使用 Warp，系统会把一个唯一 ID 绑定到匿名用户账号上，以支持这些功能。
+auth-offline-overlay-title = 离线使用 Zap
+auth-offline-overlay-paragraph-1 = Zap 的本地功能可以离线使用。
+auth-offline-overlay-paragraph-2 = 首次使用时可能需要联网完成依赖初始化，之后本地智能体和终端功能不依赖 Zap 云服务。
+auth-offline-overlay-paragraph-3 = Zap 会把必要状态保存在本机，用于本地会话、设置和智能体功能。
 auth-offline-overlay-dismiss = 关闭
 auth-privacy-settings-title = 隐私设置
 auth-privacy-settings-done = 完成
-auth-privacy-settings-help-improve = 帮助改进 Warp
-auth-privacy-settings-help-improve-description = 高层级的功能使用数据可以帮助 Warp 产品团队确定路线图优先级。
+auth-privacy-settings-help-improve = 帮助改进 Zap
+auth-privacy-settings-help-improve-description = 高层级的功能使用数据可以帮助 Zap 产品团队确定路线图优先级。
 auth-privacy-settings-learn-more = 了解更多
 auth-privacy-settings-send-crash-reports = 发送崩溃报告
-auth-privacy-settings-crash-reports-description = 崩溃报告能帮助 Warp 工程团队了解稳定性情况并改进性能。
+auth-privacy-settings-crash-reports-description = 崩溃报告能帮助 Zap 工程团队了解稳定性情况并改进性能。
 auth-logout-confirm = 是，退出登录
 auth-logout-show-running-processes = 显示正在运行的进程
 auth-logout-cancel = 取消
 auth-logout-title = 要退出登录吗？
 auth-logout-running-processes-warning = 你有 { $count } 个正在运行的进程。
-auth-logout-shared-sessions-warning = 你有 { $count } 个共享会话。
-auth-logout-unsynced-drive-objects-warning = 你有 { $count } 个未同步的 Warp Drive 对象。退出登录后将失去这些对象。
+auth-logout-shared-sessions-warning = 你有 { $count } 个远端会话。
+auth-logout-unsynced-drive-objects-warning = 你有 { $count } 个未同步的 Zap Drive 对象。退出登录后将失去这些对象。
 auth-logout-unsaved-files-warning = 你有 { $count } 个未保存的文件。退出登录后将失去这些文件。
 
 # CLI agent plugin instructions
 cli-agent-plugin-run-on-remote = 请确认在远程机器上运行这些命令。
-cli-agent-plugin-codex-install-title = 为 Codex 启用 Warp 通知
-cli-agent-plugin-codex-install-subtitle = 将 Codex 更新到最新版本，然后启用聚焦时通知，这样你工作时 Warp 就能显示通知。
+cli-agent-plugin-codex-install-title = 为 Codex 启用 Zap 通知
+cli-agent-plugin-codex-install-subtitle = 将 Codex 更新到最新版本，然后启用聚焦时通知，这样你工作时 Zap 就能显示通知。
 cli-agent-plugin-codex-update-step = 将 Codex 更新到最新版本。
 cli-agent-plugin-codex-notification-step = 在 Codex 配置中将通知条件设为 "always"。打开或创建 ~/.codex/config.toml 并添加：
 cli-agent-plugin-codex-restart-note = 重启 Codex 以应用更改。
-cli-agent-plugin-deepseek-install-title = 为 DeepSeek 启用 Warp 通知
+cli-agent-plugin-deepseek-install-title = 为 DeepSeek 启用 Zap 通知
 cli-agent-plugin-deepseek-install-subtitle = 在 DeepSeek 配置文件（~/.deepseek/config.toml）中添加以下内容，以启用对话完成通知。
 cli-agent-plugin-deepseek-notification-step = 在 ~/.deepseek/config.toml 中将通知条件设为 "always"：
 cli-agent-plugin-deepseek-restart-note = 重启 DeepSeek 以应用更改。
@@ -2910,91 +3010,91 @@ cli-agent-plugin-opencode-restart-update-note = 重启 OpenCode 以加载更新�
 ai-ask-user-questions-unavailable = 问题不可用
 ai-ask-user-questions-skipped-auto-approve = 已因自动批准跳过问题
 terminal-bootstrapping-checking = 正在检查...
-terminal-bootstrapping-installing-progress = 正在安装... ({ $p }%)
+terminal-bootstrapping-installing-progress = 正在安装...（{ $p }%）
 terminal-bootstrapping-installing = 正在安装...
 terminal-bootstrapping-updating = 正在更新...
 terminal-bootstrapping-initializing = 正在初始化...
-terminal-bootstrapping-installing-warp-ssh-extension-progress = 正在安装 Warp SSH 扩展... ({ $p }%)
-terminal-bootstrapping-installing-warp-ssh-extension = 正在安装 Warp SSH 扩展...
-terminal-bootstrapping-updating-warp-ssh-extension = 正在更新 Warp SSH 扩展...
+terminal-bootstrapping-installing-warp-ssh-extension-progress = 正在安装 Zap SSH 扩展...（{ $p }%）
+terminal-bootstrapping-installing-warp-ssh-extension = 正在安装 Zap SSH 扩展...
+terminal-bootstrapping-updating-warp-ssh-extension = 正在更新 Zap SSH 扩展...
 terminal-bootstrapping-starting-shell-name = 正在启动 { $shell }...
-agent-tip-prefix = 提示:
+agent-tip-prefix = 提示：
 agent-tip-slash-menu = 输入 `/` 打开斜杠菜单并访问快捷智能体操作。
-agent-tip-toggle-input-mode = 按 <keybinding> 切换自然语言检测,在智能体输入和终端输入之间切换。
-agent-tip-plan = 输入 `/plan` <prompt>,先为智能体创建计划再执行。
-agent-tip-command-palette = 按 <keybinding> 打开命令面板,访问 Warp 操作和快捷方式。
+agent-tip-toggle-input-mode = 按 <keybinding> 切换自然语言检测，在智能体输入和终端输入之间切换。
+agent-tip-plan = 输入 `/plan` <prompt>，先为智能体创建计划再执行。
+agent-tip-command-palette = 按 <keybinding> 打开命令面板，访问 Zap 操作和快捷方式。
 agent-tip-warp-drive = 将可复用的工作流、Notebook 和提示词存入你的
 agent-tip-redirect-running-agent = 输入新的提示词即可在智能体运行时重定向它。
-agent-tip-add-context = 输入 `@` 将文件、块或 Warp Drive 对象作为上下文添加到提示词。
+agent-tip-add-context = 输入 `@` 将文件、块或 Zap Drive 对象作为上下文添加到提示词。
 agent-tip-attach-prior-output = 按 <keybinding> 将上一条命令输出作为智能体上下文附加。
-agent-tip-init-index = 输入 `/init` 索引仓库,让智能体理解你的代码库。
-agent-tip-agent-profiles = 添加智能体配置,按会话自定义权限和模型。
-agent-tip-fork-block = 右键点击块,可从该位置 fork 对话。
-agent-tip-copy-output = 右键点击块,可复制对话输出。
-agent-tip-drag-image = 将图片拖入面板,可作为智能体上下文附加。
+agent-tip-init-index = 输入 `/init` 索引仓库，让智能体理解你的代码库。
+agent-tip-agent-profiles = 添加智能体配置，按会话自定义权限和模型。
+agent-tip-fork-block = 右键点击块，可从该位置 fork 对话。
+agent-tip-copy-output = 右键点击块，可复制对话输出。
+agent-tip-drag-image = 将图片拖入面板，可作为智能体上下文附加。
 agent-tip-interactive-tools = 可以让智能体控制 node、python、postgres、gdb 或 vim 等交互式工具。
 agent-tip-code-review-panel = 按 <keybinding> 打开代码审查面板并审查智能体的改动。
 agent-tip-add-mcp = 输入 `/add-mcp` 将 MCP 服务器添加到工作区。
-agent-tip-open-mcp-servers = 输入 `/open-mcp-servers` 查看并与团队共享 MCP 服务器。
+agent-tip-open-mcp-servers = 输入 `/open-mcp-servers` 查看并管理本地 MCP 服务器。
 agent-tip-create-environment = 输入 `/create-environment` 将仓库转换为智能体可运行的远程 docker 环境。
-agent-tip-add-prompt = 输入 `/add-prompt` 创建可复用提示词,用于重复工作流。
+agent-tip-add-prompt = 输入 `/add-prompt` 创建可复用提示词，用于重复工作流。
 agent-tip-add-rule = 输入 `/add-rule` 创建全局智能体规则。
-agent-tip-fork = 输入 `/fork` 创建当前对话的新副本,也可以附带新提示词。
+agent-tip-fork = 输入 `/fork` 创建当前对话的新副本，也可以附带新提示词。
 agent-tip-open-code-review = 输入 `/open-code-review` 打开代码审查面板并检查智能体生成的 diff。
 agent-tip-new-conversation = 输入 `/new` 用干净上下文开始新的智能体对话。
-agent-tip-compact = 输入 `/compact` 总结当前对话,释放上下文窗口空间。
+agent-tip-compact = 输入 `/compact` 总结当前对话，释放上下文窗口空间。
 agent-tip-usage = 输入 `/usage` 查看当前 AI credits 用量。
-agent-tip-oz-headless = 使用 `oz` 命令以 headless 模式运行 Oz 智能体,适合远程机器。
-agent-tip-selected-text-context = 右键点击选中文本,可作为智能体上下文附加。
+agent-tip-oz-headless = 使用 `oz` 命令以 headless 模式运行 Oz 智能体，适合远程机器。
+agent-tip-selected-text-context = 右键点击选中文本，可作为智能体上下文附加。
 agent-tip-project-rules = 使用 `AGENTS.md` 或 `CLAUDE.md` 应用项目级规则。
 agent-tip-url-context = 粘贴 URL 即可将网页作为智能体上下文附加。
-agent-tip-warpify-ssh = 对远程 SSH 会话执行 Warpify,即可在该环境中启用 Oz。
-agent-tip-switch-profiles = 切换智能体配置,快速更改模型和智能体权限。
+agent-tip-warpify-ssh = 对远程 SSH 会话执行 Warpify，即可在该环境中启用 Oz。
+agent-tip-switch-profiles = 切换智能体配置，快速更改模型和智能体权限。
 agent-tip-init-rules = 输入 `/init` 生成 `WARP.md` 文件并为智能体定义项目规则。
 agent-tip-auto-approve = 按 <keybinding> 可在本会话剩余时间内自动批准智能体命令和 diff。
-agent-tip-desktop-notifications = 启用桌面通知,当智能体需要你处理时收到提醒。
+agent-tip-desktop-notifications = 启用桌面通知，当智能体需要你处理时收到提醒。
 agent-tip-cancel-task = 按 <keybinding> 取消当前智能体任务。
 agent-tip-action-open-palette = 打开命令面板
-agent-tip-action-warp-drive = Warp Drive。
+agent-tip-action-warp-drive = Zap Drive。
 agent-tip-action-show-diff-view = 显示 diff 视图
-agent-tip-voice-input = 按住 <keybinding>,直接用语音向智能体输入提示词。
-hoa-welcome-banner-title = 引入通用智能体支持:用 Warp 增强任何编码智能体
+agent-tip-voice-input = 按住 <keybinding>，直接用语音向智能体输入提示词。
+hoa-welcome-banner-title = 引入通用智能体支持：用 Zap 增强任何编码智能体
 hoa-feature-vertical-tabs-title = 垂直标签页
-hoa-feature-vertical-tabs-description = 丰富的标签标题和元数据,如 git 分支、worktree 和 PR。完全可自定义。
+hoa-feature-vertical-tabs-description = 丰富的标签标题和元数据，如 git 分支、worktree 和 PR。完全可自定义。
 hoa-feature-tab-configs-title = 标签页配置
-hoa-feature-tab-configs-description = 标签页级 schema,一键设置目录、启动命令、主题和 worktree
+hoa-feature-tab-configs-description = 标签页级 schema，一键设置目录、启动命令、主题和 worktree
 hoa-feature-agent-inbox-title = 智能体收件箱
-hoa-feature-agent-inbox-description = 任一智能体需要你处理时收到通知,也可在集中收件箱中访问
+hoa-feature-agent-inbox-description = 任一智能体需要你处理时收到通知，也可在集中收件箱中访问
 hoa-feature-native-code-review-title = 原生代码审查
-hoa-feature-native-code-review-description = 将 Warp 代码审查中的行内评论直接发送到 Claude Code、Codex 或 OpenCode
+hoa-feature-native-code-review-description = 将 Zap 代码审查中的行内评论直接发送到 Claude Code、Codex 或 OpenCode
 resource-center-whats-new-section = 新变化
 resource-center-getting-started-section = 入门
-resource-center-maximize-warp-section = 充分使用 Warp
+resource-center-maximize-warp-section = 充分使用 Zap
 resource-center-advanced-setup-section = 高级设置
 resource-center-create-first-block-title = 创建第一个块
-resource-center-create-first-block-description = 运行命令,查看命令和输出如何分组。
+resource-center-create-first-block-description = 运行命令，查看命令和输出如何分组。
 resource-center-navigate-blocks-title = 导航块
-resource-center-navigate-blocks-description = 点击选择块,并使用方向键导航。
+resource-center-navigate-blocks-description = 点击选择块，并使用方向键导航。
 resource-center-block-action-title = 对块执行操作
 resource-center-block-action-description = 右键点击块即可复制/粘贴、共享或查看更多操作。
 resource-center-command-palette-title = 打开命令面板
-resource-center-command-palette-description = 通过键盘访问 Warp 的全部功能。
+resource-center-command-palette-description = 通过键盘访问 Zap 的全部功能。
 resource-center-set-theme-title = 设置主题
-resource-center-set-theme-description = 选择主题,让 Warp 符合你的偏好。
+resource-center-set-theme-description = 选择主题，让 Zap 符合你的偏好。
 resource-center-custom-prompt-title = 使用自定义提示符
-resource-center-custom-prompt-description = 设置 Warp 以遵循你的 PS1 设置
+resource-center-custom-prompt-description = 设置 Zap 以遵循你的 PS1 设置
 resource-center-view-documentation = 查看文档
-resource-center-integrate-ide-title = 将 Warp 与 IDE 集成
-resource-center-integrate-ide-description = 配置 Warp,从你最常用的开发工具中启动
-resource-center-how-warp-uses-warp-title = Warp 如何使用 Warp
-resource-center-how-warp-uses-warp-description = 了解 Warp 工程团队如何使用他们最喜欢的功能
+resource-center-integrate-ide-title = 将 Zap 与 IDE 集成
+resource-center-integrate-ide-description = 配置 Zap，从你最常用的开发工具中启动
+resource-center-how-warp-uses-warp-title = Zap 如何使用 Zap
+resource-center-how-warp-uses-warp-description = 了解 Zap 工程团队如何使用他们最喜欢的功能
 resource-center-read-article = 阅读文章
 resource-center-command-search-title = 命令搜索
 resource-center-command-search-description = 查找并运行之前执行过的命令、工作流等。
 resource-center-ai-command-search-title = AI 命令搜索
 resource-center-ai-command-search-description = 用自然语言生成 shell 命令。
 resource-center-split-panes-title = 拆分面板
-resource-center-split-panes-description = 将标签页拆分为多个面板,组成理想布局。
+resource-center-split-panes-description = 将标签页拆分为多个面板，组成理想布局。
 resource-center-launch-configuration-title = 启动配置
 resource-center-launch-configuration-description = 保存当前窗口、标签页和面板配置。
 notebook-link-new-session = 新会话
@@ -3027,33 +3127,32 @@ agent-message-bar-again-send-to-agent = 再次发送给智能体
 # SECTION: remaining-ui-surfaces (Owner: codex-i18n-remaining-ui-surfaces)
 # =============================================================================
 
-onboarding-intention-title = 欢迎使用 Warp
+onboarding-intention-title = 欢迎使用 Zap
 onboarding-intention-subtitle = 你想如何工作？
 onboarding-intention-agent-title = 使用 AI 智能体更快构建
 onboarding-intention-agent-description = 以智能体优先的体验，同时保留一流终端能力。可使用这些终端与智能体驱动开发能力：
 onboarding-intention-terminal-title = 只使用终端
 onboarding-intention-terminal-badge = 不启用 AI 功能
 onboarding-intention-terminal-description = 现代化终端，专注速度、上下文和控制，不启用 AI。
-onboarding-ai-feature-warp-agents = Warp 智能体
-onboarding-ai-feature-oz-cloud-agents-platform = Oz 云端智能体平台
+onboarding-ai-feature-warp-agents = Zap 智能体
+onboarding-ai-feature-oz-cloud-agents-platform = Oz 本地智能体平台
 onboarding-ai-feature-next-command-predictions = 下一条命令预测
 onboarding-ai-feature-prompt-suggestions = 提示词建议
-onboarding-ai-feature-codebase-context = 代码库上下文
 onboarding-ai-feature-remote-control-agents = 通过 Claude Code、Codex 等智能体进行远程控制
 onboarding-ai-feature-agents-over-ssh = SSH 上的智能体
-onboarding-agent-title = 自定义你的 Warp 智能体
+onboarding-agent-title = 自定义你的 Zap 智能体
 onboarding-agent-subtitle = 选择应用内智能体的默认设置。
 onboarding-agent-default-model = 默认模型
 onboarding-agent-autonomy = 自主程度
-onboarding-agent-set-by-team-workspace = 由团队工作区设置
-onboarding-agent-team-workspace-autonomy-description = 自主程度设置由你的团队工作区统一配置。
+onboarding-agent-set-by-team-workspace = 由本地工作区策略管理
+onboarding-agent-team-workspace-autonomy-description = 自主程度设置由本地工作区策略配置。
 onboarding-agent-autonomy-full-title = 完全
 onboarding-agent-autonomy-full-subtitle = 无需询问即可运行命令、编写代码和读取文件。
 onboarding-agent-autonomy-partial-title = 部分
 onboarding-agent-autonomy-partial-subtitle = 可以规划、读取文件并执行低风险命令；在改动文件或执行敏感命令前会询问。
 onboarding-agent-autonomy-none-title = 无
 onboarding-agent-autonomy-none-subtitle = 未经你批准不会执行任何操作。
-onboarding-agent-disable-warp-agent = 禁用 Warp 智能体
+onboarding-agent-disable-warp-agent = 禁用 Zap 智能体
 onboarding-agent-upgrade-title = 升级以使用高级模型。
 onboarding-agent-upgrade-subtitle = 前沿模型需要付费套餐。
 onboarding-agent-paste-token-link = 点击这里
@@ -3061,7 +3160,7 @@ onboarding-agent-open-page-manually = {" "}并手动打开页面。{" "}
 onboarding-agent-paste-token-suffix = {" "}以粘贴浏览器中的 token。
 onboarding-agent-plan-activated = 套餐已成功激活。所有高级模型均可使用。
 onboarding-project-title = 打开项目
-onboarding-project-subtitle = 设置项目，让 Warp 更适合编码。
+onboarding-project-subtitle = 设置项目，让 Zap 更适合编码。
 onboarding-project-open-local-folder = 打开本地文件夹
 onboarding-project-initialize-automatically = 自动初始化项目
 onboarding-project-initialize-description = 准备项目环境、构建代码索引并生成项目规则，让智能体理解更深入、表现更好。
@@ -3075,7 +3174,7 @@ onboarding-third-party-title = 自定义第三方智能体
 onboarding-third-party-subtitle = 为 Claude Code、Codex、Gemini 等智能体设置默认行为。
 onboarding-third-party-cli-toolbar = CLI 智能体工具栏
 onboarding-third-party-notifications = 通知
-onboarding-customize-title = 自定义你的 Warp
+onboarding-customize-title = 自定义你的 Zap
 onboarding-customize-subtitle = 根据你的工作方式定制功能和界面。
 onboarding-customize-tab-styling = 标签页样式
 onboarding-customize-vertical = 垂直
@@ -3083,50 +3182,51 @@ onboarding-customize-horizontal = 水平
 onboarding-customize-conversation-history = 对话历史
 onboarding-customize-file-explorer = 文件浏览器
 onboarding-customize-global-file-search = 全局文件搜索
-onboarding-customize-warp-drive = Warp Drive
+onboarding-customize-warp-drive = Zap Drive
 onboarding-customize-tools-panel = 工具面板
 onboarding-customize-code-review = 代码评审
 onboarding-free-user-title = 开始使用吧。
-onboarding-free-user-agent-title = 使用 Warp 内置智能体进行开发
-onboarding-free-user-agent-description = 使用 Oz（Warp 内置智能体）迭代、规划和构建。可在本地或云端运行。
+onboarding-free-user-agent-title = 使用 Zap 内置智能体进行开发
+onboarding-free-user-agent-description = 使用 Oz（Zap 内置智能体）迭代、规划和构建。本地运行，不依赖 Zap 云服务。
 onboarding-free-user-terminal-title = 搭配第三方智能体的经典终端
 onboarding-free-user-terminal-description = 现代终端，支持第三方智能体（Claude Code、Codex、Gemini CLI）和经典终端工作流。
-onboarding-free-user-subscribe-title = 订阅后即可使用 Warp 的智能体开发能力。
+onboarding-free-user-subscribe-title = 订阅后即可使用 Zap 的智能体开发能力。
 onboarding-free-user-subscribe-item-credits = 每月 1,500 点额度
 onboarding-free-user-subscribe-item-models = 使用 OpenAI、Anthropic 和 Google 的前沿模型
 onboarding-free-user-subscribe-item-reload = 使用 Reload 额度和按量折扣
-onboarding-free-user-subscribe-item-cloud-agents = 更长的云端智能体访问权限
+onboarding-free-user-subscribe-item-cloud-agents = 更长的智能体访问权限
 onboarding-free-user-subscribe-item-indexing = 最高代码库索引额度
-onboarding-free-user-subscribe-item-drive = 不限量 Warp Drive 对象和协作
+onboarding-free-user-subscribe-item-drive = 不限量 Zap Drive 对象和协作
 onboarding-free-user-subscribe-item-support = 私人邮件支持
-onboarding-free-user-subscribe-item-cloud-storage = 不限量云端对话存储
+onboarding-free-user-subscribe-item-cloud-storage = 本地对话存储
 
-auth-opt-out-line-1 = 如果你想停用分析和 AI 功能，
-auth-opt-out-line-2-prefix = 可以调整你的
-auth-privacy-settings-prefix = 如果你想停用分析，可以调整你的{" "}
-auth-privacy-settings-ai-prefix = 如果你想停用分析和 AI 功能，可以调整你的{" "}
+auth-opt-out-line-1 = Zap 会把引导选择保存在本机。
+auth-opt-out-line-2-prefix = 你可以调整你的
+auth-privacy-settings-prefix = 你可以调整你的{" "}
+auth-privacy-settings-ai-prefix = 你可以在这里调整本地 AI 偏好：{" "}
 auth-privacy-settings = 隐私设置
-auth-terms-prefix = 继续即表示你同意 Warp 的{" "}
-auth-terms-of-service = 服务条款
+auth-local-privacy-note = Zap 会把引导选择保存在本设备。
+auth-terms-prefix = 继续后，此设置仍保留在本机。{" "}
+auth-terms-of-service = 本地设置
 auth-log-in = 登录
 auth-paste-token-from-browser = 点击这里粘贴浏览器中的 token
-auth-login-slide-title-warp-drive = 开始使用 Warp Drive
+auth-login-slide-title-warp-drive = 开始使用 Zap Drive
 auth-login-slide-title-ai = 开始使用 AI
 auth-login-slide-subtitle-warp-drive = 连接你的账号，以便跨设备保存和分享笔记、工作流等内容。
 auth-login-slide-subtitle-ai = 连接你的账号，以启用 AI 驱动的规划、编码和自动化。
-auth-disable-warp-drive = 停用 Warp Drive
+auth-disable-warp-drive = 停用 Zap Drive
 auth-disable-ai-features = 停用 AI 功能
-auth-enable-warp-drive = 启用 Warp Drive
+auth-enable-warp-drive = 启用 Zap Drive
 auth-enable-ai-features = 启用 AI 功能
 auth-browser-sign-in-one-line-title = 在浏览器中登录以继续
 auth-open-page-manually-line-prefix = {" "}并打开
 auth-open-page-manually-line-suffix = 手动打开页面。
-auth-disable-warp-drive-confirm-title = 确定要停用 Warp Drive 吗？
+auth-disable-warp-drive-confirm-title = 确定要停用 Zap Drive 吗？
 auth-disable-ai-features-confirm-title = 确定要停用 AI 功能吗？
-auth-disable-warp-drive-confirm-body = Warp Drive 可让你跨设备保存工作流和知识，并与团队分享。继续后，你将无法使用以下功能：
-auth-disable-ai-features-confirm-body = 开启 AI 后 Warp 会更强大。继续后，你将无法使用以下功能：
+auth-disable-warp-drive-confirm-body = Zap Drive 可让你跨设备保存工作流和知识，并与团队分享。继续后，你将无法使用以下功能：
+auth-disable-ai-features-confirm-body = 开启 AI 后 Zap 会更强大。继续后，你将无法使用以下功能：
 auth-feature-session-sharing = 会话分享
-auth-sign-up = 注册
+auth-sign-up = 继续本地使用
 auth-sign-in = 登录
 auth-already-have-account = 已有账号？{" "}
 auth-dont-want-sign-in-now = 现在不想登录？{" "}
@@ -3135,11 +3235,11 @@ auth-skip-login-confirm-title = 确定要跳过登录吗？
 auth-skip-login-confirm-line-1 = 你可以稍后注册，但部分功能（例如 AI）
 auth-skip-login-confirm-line-2-prefix = 仅登录用户可用。{" "}
 auth-yes-skip-login = 是，跳过登录
-auth-require-login-ai-collaboration = 要使用 Warp 的 AI 功能或与他人协作，请创建账号。
-auth-require-login-drive-limit = 要在 Warp Drive 中创建更多对象，请创建账号。
-auth-require-login-share = 要分享内容，请创建账号。
-auth-welcome-title = 欢迎使用 Warp！
-auth-sign-up-for-warp = 注册 Warp
+auth-require-login-ai-collaboration = 本地 AI 功能不需要 Zap 账户。
+auth-require-login-drive-limit = Zap 会将 Zap Drive 对象保存在本机。
+auth-require-login-share = 本地 Zap 构建不提供分享功能。
+auth-welcome-title = 欢迎使用 Zap！
+auth-sign-up-for-warp = 继续使用 Zap
 auth-browser-sign-in-title = 在浏览器中登录\n以继续
 auth-browser-not-launched-prefix = 如果浏览器没有打开，{" "}
 auth-copy-url = 复制 URL
@@ -3152,7 +3252,7 @@ voice-transcription-disabled-microphone = 由于未授予麦克风访问权限�
 voice-transcription = 语音转写
 voice-transcription-hold-key = 语音转写（按住 `{ $key }` 键）
 
-get-started-welcome-title = 欢迎使用 Warp
+get-started-welcome-title = 欢迎使用 Zap
 get-started-subtitle = 智能体开发环境
 theme-creator-theme-name = 主题名称
 theme-creator-background-color = 背景色
@@ -3190,11 +3290,11 @@ notebook-file-loading = 正在加载 { $name }...
 notebook-file-missing-source = 缺少源文件
 
 terminal-shared-session-reconnecting = 已离线，正在尝试重新连接...
-terminal-banner-p10k-supported = Powerlevel10k 现在支持 Warp！{"  "}
+terminal-banner-p10k-supported = Powerlevel10k 现在支持 Zap！{"  "}
 terminal-banner-p10k-older-version-prefix = 你似乎正在运行较旧（不受支持）的版本，请按照
 terminal-banner-these-instructions = 这些说明
 terminal-banner-update-latest-suffix = {" "}更新到最新版本。
-terminal-banner-pure-unsupported = Warp 尚不支持 Pure。你可以考虑改用受支持的提示符。{"  "}
+terminal-banner-pure-unsupported = Zap 尚不支持 Pure。你可以考虑改用受支持的提示符。{"  "}
 terminal-loading-session = 正在加载会话...
 
 ai-footer-hide-rich-input = 隐藏富输入
@@ -3261,7 +3361,7 @@ sharing-invite = 邀请
 sharing-who-has-access = 有权访问的用户
 terminal-shared-session-cancel-request = 取消请求
 terminal-shared-session-continue-sharing = 继续分享
-settings-import-reset-to-warp-defaults = 重置为 Warp 默认设置
+settings-import-reset-to-warp-defaults = 重置为 Zap 默认设置
 settings-import-type-theme = 主题
 settings-import-type-theme-with-comma = 主题，
 settings-import-type-option-as-meta = Option 作为 Meta
@@ -3358,19 +3458,19 @@ common-resource-not-found-or-access-denied = 资源不存在或无访问权限
 workspace-close-session = 关闭会话
 workspace-auto-reload = 自动重载
 workspace-add-new-repo = {" "}+ 添加新仓库
-workspace-notification-permission-denied-toast = Warp 没有发送桌面通知的权限。
+workspace-notification-permission-denied-toast = Zap 没有发送桌面通知的权限。
 workspace-troubleshoot-notifications-link = 排查通知问题
-workspace-plan-synced-to-warp-drive-toast = 计划已同步到你的 Warp Drive
+workspace-plan-synced-to-warp-drive-toast = 计划已同步到你的 Zap Drive
 workspace-remote-control-link-copied-toast = 远程控制链接已复制。
 workspace-update-now = 立即更新
-workspace-update-warp = 更新 Warp
+workspace-update-warp = 更新 Zap
 workspace-app-out-of-date-needs-update = 你的应用已过期，需要更新。
 workspace-restart-app-and-update-now = 重启应用并立即更新
 workspace-sampling-process-toast = 正在采样进程，持续 3 秒...
 workspace-version-deprecation-banner = 你的应用已过期，部分功能可能无法正常工作。请立即更新。
-workspace-version-deprecation-without-permissions-banner = 若不立即更新，部分 Warp 功能可能无法正常工作，但 Warp 无法执行更新。
-workspace-new-version-unable-to-update-banner = 有新版本可用，但 Warp 无法执行更新。
-workspace-unable-to-launch-new-installed-version = Warp 无法启动新安装的版本。
+workspace-version-deprecation-without-permissions-banner = 若不立即更新，部分 Zap 功能可能无法正常工作，但 Zap 无法执行更新。
+workspace-new-version-unable-to-update-banner = 有新版本可用，但 Zap 无法执行更新。
+workspace-unable-to-launch-new-installed-version = Zap 无法启动新安装的版本。
 tab-config-session-type = 会话类型
 terminal-copy-error = 复制错误
 terminal-authenticate-with-github = 使用 GitHub 认证
@@ -3383,7 +3483,7 @@ terminal-warpify-without-tmux = 不使用 TMUX 进行 Warpify
 terminal-continue-without-warpification = 不进行 Warpification 继续
 terminal-always-install = 始终安装
 terminal-never-install = 从不安装
-terminal-ssh-report-issue-prefix = 我们正在积极改进 Warp 中 SSH 的稳定性。请考虑
+terminal-ssh-report-issue-prefix = 我们正在积极改进 Zap 中 SSH 的稳定性。请考虑
 terminal-ssh-report-issue-link = 提交 issue
 terminal-ssh-report-issue-suffix = ，方便我们更好地定位问题。
 terminal-ssh-why-need-tmux = 为什么需要 tmux？
@@ -3395,7 +3495,7 @@ terminal-hide-secret = 隐藏密钥
 terminal-copy-secret = 复制密钥
 terminal-tag-agent-for-assistance = 标记智能体协助
 terminal-save-as-workflow-secrets-tooltip = 包含密钥的 Block 无法保存。
-terminal-agent-mode-setup-title = 为此代码库优化 Warp？
+terminal-agent-mode-setup-title = 为此代码库优化 Zap？
 terminal-agent-mode-setup-description = 让智能体理解你的代码库并为其生成规则，以获得更智能、更一致的响应。你也可以随时运行 /init 来完成。
 terminal-agent-mode-setup-optimize = 优化
 terminal-no-active-conversation-to-export = 没有可导出的活动对话
@@ -3412,15 +3512,14 @@ notifications-banner-dismissed-title = 我们不会再显示此横幅，但你�
 notifications-banner-disabled-title = 通知已关闭，但你仍可随时前往设置启用通知。
 notifications-banner-enable = 启用
 notifications-banner-permissions-accepted-title = 成功！你现在可以接收桌面通知了。
-notifications-banner-permissions-denied-title = Warp 被拒绝发送通知的权限。
+notifications-banner-permissions-denied-title = Zap 被拒绝发送通知的权限。
 notifications-banner-permissions-error-title = 请求权限时出错。
-notifications-banner-allow-permissions-title = 别忘了在权限请求中点击“允许”以完成通知设置。
+notifications-banner-allow-permissions-title = 别忘了在权限请求中点击「允许」以完成通知设置。
 notifications-banner-configure-notifications = 配置通知
 notifications-banner-set-permissions = 设置权限
 ai-edit-api-keys = 编辑 API Key
-ai-manage-privacy-settings = 管理隐私设置
 ai-block-manage-agent-permissions = 管理智能体权限
-agent-zero-state-cloud-agents-description = 使用云端智能体并行运行多个智能体，构建可自主运行的智能体，并可随时随地查看智能体状态。
+agent-zero-state-cloud-agents-description = 使用本地智能体并行运行多个智能体，构建可自主运行的智能体，并在本机查看智能体状态。
 agent-zero-state-visit-docs = 查看文档
 ai-execution-profile-agent-decides = 由智能体决定
 ai-execution-profile-always-ask = 始终询问
@@ -3457,8 +3556,8 @@ notebook-apply-link = 应用链接
 notebook-sync-conflict-resolution-message = 此 Notebook 无法保存，因为你编辑时内容已被其他更改更新。请复制你的内容并刷新。
 notebook-sync-feature-not-available-message = 此 Notebook 无法保存到服务器，因为该功能暂时不可用。更改已保存在本地，请稍后重试。
 notebook-link-copied-toast = 链接已复制
-settings-share-with-team = 与团队共享
-tooltip-secrets-not-sent-to-warp-server = *密钥不会发送到 Warp 服务器。
+settings-share-with-team = 本地保存
+tooltip-secrets-not-sent-to-warp-server = *密钥不会发送到 Zap 服务器。
 editor-voice-limit-hit-toast = 你已达到语音请求额度上限。额度将在下个周期刷新。
 editor-voice-error-toast = 处理语音输入时出错。
 ai-copied-branch-name-toast = 分支名称已复制

@@ -26,11 +26,11 @@ use warpui::{
         new_scrollable::{ScrollableAppearance, SingleAxisConfig},
         Align, Axis, Border, ChildAnchor, ChildView, Clipped, ClippedScrollStateHandle,
         ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, DispatchEventResult, Empty,
-        EventHandler, Expanded, Fill, Flex, FormattedTextElement, HeadingFontSizeMultipliers,
-        Hoverable, Image as WarpImage, MainAxisAlignment, MainAxisSize, MouseStateHandle,
-        NewScrollable, OffsetPositioning, ParentAnchor, ParentElement, ParentOffsetBounds, Radius,
-        SavePosition, ScrollTarget, ScrollToPositionMode, ScrollbarWidth, Shrinkable, Stack, Table,
-        TableColumnWidth, TableConfig, TableHeader, TableVerticalSizing, Text, Wrap,
+        EventHandler, Expanded, Fill, Flex, FormattedTextElement, Hoverable, Image as WarpImage,
+        MainAxisAlignment, MainAxisSize, MouseStateHandle, NewScrollable, OffsetPositioning,
+        ParentAnchor, ParentElement, ParentOffsetBounds, Radius, SavePosition, ScrollTarget,
+        ScrollToPositionMode, ScrollbarWidth, Shrinkable, Stack, Table, TableColumnWidth,
+        TableConfig, TableHeader, TableVerticalSizing, Text, Wrap,
     },
     fonts::{Properties, Weight},
     image_cache::{CacheOption, ImageType},
@@ -64,10 +64,11 @@ use crate::{
 use crate::{
     ai::{
         agent::{
-            icons::red_stop_icon, AIAgentAction, AIAgentActionType, AIAgentInput,
-            AIAgentOutputMessageType, AIAgentTextSection, AgentOutputImage, AgentOutputImageLayout,
-            AgentOutputMermaidDiagram, AgentOutputTable, AgentOutputTableRendering,
-            ProgrammingLanguage, RenderableAIError, SummarizationType, WebSearchStatus,
+            icons::red_stop_icon, AIAgentAction, AIAgentActionType, AIAgentAttachment,
+            AIAgentInput, AIAgentOutputMessageType, AIAgentTextSection, AgentOutputImage,
+            AgentOutputImageLayout, AgentOutputMermaidDiagram, AgentOutputTable,
+            AgentOutputTableRendering, DriveObjectPayload, ProgrammingLanguage, RenderableAIError,
+            SummarizationType, WebSearchStatus,
         },
         blocklist::{
             block::{
@@ -92,10 +93,9 @@ use crate::{
             view_util::error_color,
             TextLocation,
         },
-        AIRequestUsageModel,
     },
     code::{editor::view::CodeEditorView, editor_management::CodeSource},
-    notebooks::editor::{markdown_table_appearance, rich_text_styles},
+    notebooks::editor::{rich_text_styles, MarkdownTableAppearance},
     settings_view::SettingsSection,
     terminal::{
         find::TerminalFindModel, safe_mode_settings::get_secret_obfuscation_mode,
@@ -127,7 +127,7 @@ pub const WAITING_FOR_USER_INPUT_MESSAGE: &str = "Agent waiting for instructions
 const IMAGE_SOURCE_LINK_LINE_INDEX: usize = 1;
 
 const ERROR_APOLOGY_TEXT: &str = "I'm sorry, I couldn't complete that request.";
-const INTERNAL_WARP_ERROR: &str = "Internal Warp error.";
+const INTERNAL_WARP_ERROR: &str = "Internal Zap error.";
 
 pub const LOAD_OUTPUT_MESSAGE: &str = "Warping...";
 pub const LOAD_OUTPUT_MESSAGE_FOR_ADJUSTING: &str = "Adjusting tasks...";
@@ -139,7 +139,6 @@ pub const LOAD_OUTPUT_MESSAGE_FOR_UPDATING_PLAN: &str = "Updating plan...";
 pub const LOAD_OUTPUT_MESSAGE_FOR_SUMMARIZING_CONVERSATION: &str = "Summarizing conversation...";
 pub const LOAD_OUTPUT_MESSAGE_FOR_SUMMARIZING_TOOL_CALL_RESULT: &str =
     "Summarizing command output...";
-pub const LOAD_OUTPUT_MESSAGE_FOR_SEARCH_CODEBASE: &str = "Searching codebase...";
 pub const LOAD_OUTPUT_MESSAGE_FOR_READING_FILES: &str = "Reading files...";
 pub const LOAD_OUTPUT_MESSAGE_FOR_GREP: &str = "Grepping...";
 pub const LOAD_OUTPUT_MESSAGE_FOR_FILE_GLOB: &str = "Finding files...";
@@ -156,8 +155,6 @@ pub(crate) type ResolvedBlocklistImageSources = HashMap<String, Option<AssetSour
 pub const BLOCKED_ACTION_MESSAGE_FOR_WRITE_TO_LONG_RUNNING_SHELL_COMMAND: &str =
     "Can I write the following to this running command?";
 pub const BLOCKED_ACTION_MESSAGE_FOR_READING_FILES: &str = "Grant access to the following files?";
-pub const BLOCKED_ACTION_MESSAGE_FOR_SEARCHING_CODEBASE: &str =
-    "Grant access to the following repository?";
 pub const BLOCKED_ACTION_MESSAGE_FOR_GREP_OR_FILE_GLOB: &str =
     "OK if I search the files in this directory?";
 
@@ -349,9 +346,6 @@ pub fn render_warping_indicator<V: View>(
             .get_async_running_action(app)
             .map(|action| &action.action)
         {
-            Some(AIAgentActionType::SearchCodebase(..)) => {
-                LOAD_OUTPUT_MESSAGE_FOR_SEARCH_CODEBASE.to_owned()
-            }
             Some(AIAgentActionType::Grep { .. }) => LOAD_OUTPUT_MESSAGE_FOR_GREP.to_owned(),
             Some(AIAgentActionType::CallMCPTool { name, .. }) => {
                 format!("Calling \"{name}\" MCP tool...")
@@ -551,7 +545,7 @@ pub fn render_warping_indicator_base(
         is_passive_code_diff,
         secondary_element,
     } = props;
-    // Unicode code point for the Warp glyph that is embedded in the version of Roboto we bundle
+    // Unicode code point for the Zap glyph that is embedded in the version of Roboto we bundle
     // into the app. This code point MUST be rendered using Roboto (the default ui font) or else the
     // glyph may not be rendered.
     const WARP_GLYPH: &str = "\u{E500}";
@@ -586,7 +580,7 @@ pub fn render_warping_indicator_base(
 
     let mut text_col = Flex::column();
     if let Some(sub_element) = secondary_element {
-        // Our warping indicator text prepends the Warp glyph (and a space) to the label.
+        // Our warping indicator text prepends the Zap glyph (and a space) to the label.
         // If we render the tip directly underneath, it will align to the glyph instead of
         // the start of the actual warping text.
         let sub_element = if should_indent_tip_for_warp_glyph {
@@ -920,11 +914,11 @@ fn render_auto_approve_button(props: ButtonProps, appearance: &Appearance) -> Bo
 }
 
 fn get_keybinding_font_size(appearance: &Appearance) -> f32 {
-    appearance.ui_font_size() - 1.
+    appearance.ui_font_footnote()
 }
 
 fn get_icon_size(appearance: &Appearance) -> f32 {
-    appearance.ui_font_size() + 1.
+    appearance.ui_font_body_large()
 }
 
 /// Renders the inline `Check now` affordance displayed alongside
@@ -1543,14 +1537,8 @@ pub(super) fn render_rich_text_output_text_section(
     } else {
         theme.text_selection_color().into_solid()
     })
-    // Lower line height ratio than default (1.4) and smaller header font size multipliers for AI blocks.
     .with_line_height_ratio(1.2)
-    .with_heading_to_font_size_multipliers(HeadingFontSizeMultipliers {
-        h1: 1.55,
-        h2: 1.4,
-        h3: 1.2,
-        ..Default::default()
-    })
+    .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
     .with_inline_code_properties(Some(inline_code_text_color), Some(inline_code_bg_color))
     .set_selectable(props.selectable);
 
@@ -1736,7 +1724,7 @@ struct VisualMarkdownBlockOptions<A: 'static> {
     alignment: VisualMarkdownAlignment,
     lightbox_trigger: Option<VisualMarkdownLightboxTrigger>,
     /// When `Some(non_empty)`, the rendered image is wrapped in the standard
-    /// Warp tooltip primitive so hovering surfaces the CommonMark image title.
+    /// Zap tooltip primitive so hovering surfaces the CommonMark image title.
     /// Mermaid diagrams pass `None` here because CommonMark titles do not
     /// apply to them.
     tooltip: Option<String>,
@@ -2169,7 +2157,7 @@ fn render_visual_markdown_block<A: Action>(
         VisualMarkdownAlignment::Center => Align::new(content).finish(),
     };
 
-    // Wrap the rendered image in the standard Warp tooltip when the source
+    // Wrap the rendered image in the standard Zap tooltip when the source
     // carried a CommonMark `title`. Branching on `Some(non_empty)` here means
     // untitled images remain un-wrapped, matching `specs/GH849/product.md`
     // invariant 6 (no tooltip for empty or absent titles). The tooltip's
@@ -2327,6 +2315,25 @@ fn visual_section_height(app: &AppContext) -> f32 {
 }
 
 const TABLE_BLOCK_CORNER_RADIUS: f32 = 8.0;
+
+fn ai_table_appearance(appearance: &Appearance) -> MarkdownTableAppearance {
+    let theme = appearance.theme();
+    MarkdownTableAppearance {
+        border_color: internal_colors::neutral_4(theme),
+        header_background: theme.surface_2().into_solid(),
+        cell_background: ColorU::transparent_black(),
+        alternate_row_background: Some(theme.surface_1().with_opacity(50).into_solid()),
+        text_color: internal_colors::text_sub(theme, theme.background()),
+        header_text_color: internal_colors::text_main(theme, theme.background()),
+        scrollbar_nonactive_thumb_color: theme.nonactive_ui_detail().into_solid(),
+        scrollbar_active_thumb_color: theme.active_ui_detail().into_solid(),
+        cell_padding: 8.,
+        outer_border: true,
+        column_dividers: true,
+        row_dividers: true,
+    }
+}
+
 fn render_table_section(
     table: &AgentOutputTable,
     table_handles: TableSectionHandles,
@@ -2346,7 +2353,7 @@ fn render_table_section(
     }
     let appearance = Appearance::as_ref(app);
     let theme = appearance.theme();
-    let table_appearance = markdown_table_appearance(appearance);
+    let table_appearance = ai_table_appearance(appearance);
     let notebook_styles = rich_text_styles(appearance, FontSettings::as_ref(app));
     let table_font_family = appearance.ai_font_family();
     let table_font_size = appearance.monospace_font_size();
@@ -2528,6 +2535,7 @@ fn render_table_cell(props: TableCellProps, app: &AppContext) -> Box<dyn Element
         props.text_color,
         Default::default(),
     )
+    .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
     .with_alignment(match props.alignment {
         TableAlignment::Left => TextAlignment::Left,
         TableAlignment::Center => TextAlignment::Center,
@@ -2915,7 +2923,7 @@ pub(crate) fn resolve_absolute_file_path(
 ) -> Option<PathBuf> {
     use warp_util::path::CleanPathResult;
 
-    use crate::util::file::{absolute_path_if_valid, ShellPathType};
+    use crate::util::file::{absolute_path_if_valid, LinkValidationContext, ShellPathType};
 
     let clean_path = CleanPathResult::with_line_and_column_number(&path.to_string_lossy());
 
@@ -2924,6 +2932,7 @@ pub(crate) fn resolve_absolute_file_path(
         &clean_path,
         ShellPathType::PlatformNative(home_dir.clone()),
         shell_launch_data,
+        &LinkValidationContext::Local,
     ) {
         return Some(resolved);
     }
@@ -2936,6 +2945,7 @@ pub(crate) fn resolve_absolute_file_path(
             &clean_joined_path,
             ShellPathType::PlatformNative(home_dir),
             shell_launch_data,
+            &LinkValidationContext::Local,
         )
     })
 }
@@ -2953,18 +2963,12 @@ pub fn render_failed_output(props: FailedOutputProps, app: &AppContext) -> Box<d
 
     let error_text = match props.error {
         RenderableAIError::QuotaLimit => {
-            let ai_request_usage_model = AIRequestUsageModel::as_ref(app);
-            let formatted_next_refresh_time = ai_request_usage_model
-                .next_refresh_time()
-                .format("%B %d")
-                .to_string();
-
-            format!(
-                "{ERROR_APOLOGY_TEXT}\n\nYou've reached your credit limit. Your credit limit resets on {formatted_next_refresh_time}.",
-            )
+            // Zap(Phase 3c A1):删除 QuotaLimit 中依赖 `AIRequestUsageModel`
+            // 渲染刷新时间的逻辑。本地化后云端额度不适用，仅保留通用错误文案。
+            format!("{ERROR_APOLOGY_TEXT}\n\n{INTERNAL_WARP_ERROR}")
         }
         RenderableAIError::ServerOverloaded => {
-            "Warp is currently overloaded. Please try again later.".to_string()
+            "Zap is currently overloaded. Please try again later.".to_string()
         }
         RenderableAIError::InternalWarpError => {
             format!("{ERROR_APOLOGY_TEXT}\n\n{INTERNAL_WARP_ERROR}")
@@ -3352,7 +3356,7 @@ pub(crate) fn render_debug_footer<V: View>(
     );
     debug_row.add_child(copy_button_with_tooltip);
 
-    // OpenWarp: 不再用 `Expanded` —— alt-screen / 长命令 take-over 场景下,父容器
+    // Zap: 不再用 `Expanded` —— alt-screen / 长命令 take-over 场景下,父容器
     // 沿主轴是 infinite constraint(BYOP error block 渲染路径),`Flex + Expanded`
     // 直接 panic `flex contains flexible children but has an infinite constraint`。
     // debug_row 本身宽度由内部 Shrinkable 控制,不需要主动撑满父级。
@@ -3414,14 +3418,19 @@ pub struct UserQueryProps<'a> {
     pub find_context: Option<FindContext<'a>>,
     pub font_properties: &'a Properties,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct QueryContextReference {
+    pub(crate) label: String,
+    pub(crate) icon: Icon,
+}
+
 pub(super) fn query_prefix_highlight_len(
     input: &AIAgentInput,
     displayed_query: &str,
 ) -> Option<usize> {
     if displayed_query.starts_with(commands::PLAN.name) {
         Some(commands::PLAN.name.len())
-    } else if displayed_query.starts_with(commands::CREATE_ENVIRONMENT.name) {
-        Some(commands::CREATE_ENVIRONMENT.name.len())
     } else if displayed_query.starts_with(commands::AGENT.name) {
         Some(commands::AGENT.name.len())
     } else if displayed_query.starts_with(commands::NEW.name) {
@@ -3433,7 +3442,6 @@ pub(super) fn query_prefix_highlight_len(
             | AIAgentInput::AutoCodeDiffQuery { .. }
             | AIAgentInput::ResumeConversation { .. }
             | AIAgentInput::InitProjectRules { .. }
-            | AIAgentInput::CreateEnvironment { .. }
             | AIAgentInput::TriggerPassiveSuggestion { .. }
             | AIAgentInput::CreateNewProject { .. }
             | AIAgentInput::CloneRepository { .. }
@@ -3447,6 +3455,116 @@ pub(super) fn query_prefix_highlight_len(
             | AIAgentInput::PassiveSuggestionResult { .. } => None,
         }
     }
+}
+
+/// 决定当前 block 的用户提问气泡是否应该渲染出来。
+///
+/// 当 "Hide responses" 开启时，这里也要一起隐藏提问本身，避免界面只藏输出
+/// 不藏输入，造成用户看到残留的发送内容。
+pub(super) fn should_render_query_and_header(
+    query_and_index_is_some: bool,
+    should_hide_first_block_query_and_header: bool,
+    should_hide_responses: bool,
+) -> bool {
+    query_and_index_is_some && !should_hide_first_block_query_and_header && !should_hide_responses
+}
+
+pub(super) fn query_context_references(
+    input: &AIAgentInput,
+    displayed_query: &str,
+) -> Vec<QueryContextReference> {
+    let referenced_attachments = match input {
+        AIAgentInput::UserQuery {
+            referenced_attachments,
+            ..
+        } => referenced_attachments,
+        AIAgentInput::InvokeSkill {
+            user_query: Some(user_query),
+            ..
+        } => &user_query.referenced_attachments,
+        AIAgentInput::AutoCodeDiffQuery { .. }
+        | AIAgentInput::ActionResult { .. }
+        | AIAgentInput::ResumeConversation { .. }
+        | AIAgentInput::InitProjectRules { .. }
+        | AIAgentInput::TriggerPassiveSuggestion { .. }
+        | AIAgentInput::CreateNewProject { .. }
+        | AIAgentInput::CloneRepository { .. }
+        | AIAgentInput::CodeReview { .. }
+        | AIAgentInput::FetchReviewComments { .. }
+        | AIAgentInput::SummarizeConversation { .. }
+        | AIAgentInput::StartFromAmbientRunPrompt { .. }
+        | AIAgentInput::MessagesReceivedFromAgents { .. }
+        | AIAgentInput::EventsFromAgents { .. }
+        | AIAgentInput::PassiveSuggestionResult { .. }
+        | AIAgentInput::InvokeSkill {
+            user_query: None, ..
+        } => return vec![],
+    };
+
+    let mut references = referenced_attachments
+        .iter()
+        .filter(|(reference, _)| reference.starts_with('@') && displayed_query.contains(*reference))
+        .map(|(reference, attachment)| QueryContextReference {
+            label: reference.clone(),
+            icon: context_reference_icon(attachment),
+        })
+        .collect_vec();
+    references.sort_by(|left, right| left.label.cmp(&right.label));
+    references
+}
+
+fn context_reference_icon(attachment: &AIAgentAttachment) -> Icon {
+    match attachment {
+        AIAgentAttachment::DriveObject {
+            payload:
+                Some(DriveObjectPayload::Workflow {
+                    name: _,
+                    description: _,
+                    command: _,
+                }),
+            ..
+        } => Icon::Workflow,
+        AIAgentAttachment::DriveObject {
+            payload:
+                Some(DriveObjectPayload::Notebook {
+                    title: _,
+                    content: _,
+                }),
+            ..
+        } => Icon::Notebook,
+        AIAgentAttachment::DocumentContent { .. } => Icon::Notebook,
+        AIAgentAttachment::FilePathReference { .. } => Icon::File,
+        AIAgentAttachment::Block(_) => Icon::Terminal,
+        AIAgentAttachment::DiffHunk { .. } | AIAgentAttachment::DiffSet { .. } => Icon::Diff,
+        AIAgentAttachment::PlainText(_)
+        | AIAgentAttachment::DriveObject {
+            payload:
+                Some(DriveObjectPayload::GenericStringObject {
+                    payload: _,
+                    object_type: _,
+                })
+                | None,
+            ..
+        } => Icon::AtSign,
+    }
+}
+
+pub(super) fn display_query_without_context_references(
+    displayed_query: &str,
+    context_references: &[QueryContextReference],
+) -> String {
+    let mut query = displayed_query.to_string();
+    let mut reference_labels = context_references
+        .iter()
+        .map(|reference| reference.label.as_str())
+        .collect_vec();
+    reference_labels.sort_by_key(|label| std::cmp::Reverse(label.len()));
+
+    for reference in reference_labels {
+        query = query.replace(reference, " ");
+    }
+
+    query.split_whitespace().join(" ")
 }
 
 /// Renders query text with all interactive features: link detection, secret redaction, and highlights.
@@ -3508,7 +3626,7 @@ pub fn render_query_text(props: UserQueryProps<'_>, app: &AppContext) -> Text {
 /// Renders a scrollable collapsible content area with auto-scroll-to-bottom
 /// during streaming. Returns `None` if the state is collapsed.
 ///
-/// Shared by reasoning/summarization blocks and orchestration blocks.
+/// Shared by reasoning/summarization blocks and structured event blocks.
 pub(crate) fn render_scrollable_collapsible_content(
     message_id: &MessageId,
     state: &CollapsibleElementState,

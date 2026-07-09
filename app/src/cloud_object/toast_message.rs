@@ -1,16 +1,14 @@
 use warpui::AppContext;
 
-use crate::server::cloud_objects::update_manager::{
-    InitiatedBy, ObjectOperation, OperationSuccessType,
-};
+use crate::cloud_object::update_manager::{InitiatedBy, ObjectOperation, OperationSuccessType};
 
-use super::{CloudObject, GenericStringObjectFormat, JsonObjectType, ObjectType};
+use super::{GenericStringObjectFormat, JsonObjectType, ObjectType, StoredObject};
 
-pub struct CloudObjectToastMessage;
+pub struct StoredObjectToastMessage;
 
-impl CloudObjectToastMessage {
+impl StoredObjectToastMessage {
     pub fn toast_message(
-        object: &dyn CloudObject,
+        object: &dyn StoredObject,
         operation: &ObjectOperation,
         success_type: &OperationSuccessType,
         app: &AppContext,
@@ -95,12 +93,6 @@ impl CloudObjectToastMessage {
             }
             (_, ObjectOperation::TakeEditAccess, OperationSuccessType::Failure) => {
                 Some(format!("Failed to start editing {object_name_lowercase}"))
-            }
-            (_, ObjectOperation::UpdatePermissions, OperationSuccessType::Success) => {
-                Some(format!("Successfully updated permissions for {object_name_lowercase}"))
-            }
-            (_, ObjectOperation::UpdatePermissions, OperationSuccessType::Failure) => {
-                Some(format!("Failed to update permissions for {object_name_lowercase}"))
             }
             _ => None,
         }

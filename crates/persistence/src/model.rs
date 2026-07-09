@@ -14,10 +14,9 @@ use super::schema::{
     generic_string_objects, ignored_suggestions, mcp_environment_variables,
     mcp_server_installations, mcp_server_panes, notebook_panes, notebooks, object_actions,
     object_metadata, object_permissions, pane_branches, pane_leaves, pane_nodes, panels,
-    project_rules, projects, server_experiments, settings_panes, ssh_nodes, ssh_servers, tabs,
-    team_members, team_settings, teams, terminal_panes, user_profiles, welcome_panes, windows,
-    workflow_panes, workflows, workspace_language_server, workspace_metadata, workspace_teams,
-    workspaces,
+    project_rules, projects, server_experiments, settings_panes, ssh_nodes, ssh_onekey_credentials,
+    ssh_servers, sync_meta, tabs, team_members, team_settings, teams, terminal_panes,
+    user_profiles, welcome_panes, windows, workflow_panes, workflows, workspace_teams, workspaces,
 };
 
 #[derive(Insertable)]
@@ -43,6 +42,7 @@ pub struct Window {
     pub agent_management_filters: Option<String>,
     pub left_panel_open: Option<bool>,
     pub vertical_tabs_panel_open: Option<bool>,
+    pub theme_override: Option<String>,
 }
 
 #[derive(Identifiable, Insertable, Queryable)]
@@ -183,42 +183,6 @@ pub struct NewProjectRules {
     pub project_root: String,
 }
 
-#[derive(Clone, Identifiable, Queryable, AsChangeset)]
-#[diesel(table_name = workspace_metadata)]
-pub struct WorkspaceMetadata {
-    pub id: i32,
-    pub repo_path: String,
-    pub navigated_ts: Option<NaiveDateTime>,
-    pub modified_ts: Option<NaiveDateTime>,
-    pub queried_ts: Option<NaiveDateTime>,
-}
-
-#[derive(Clone, Insertable, AsChangeset)]
-#[diesel(table_name = workspace_metadata)]
-pub struct NewWorkspaceMetadata {
-    pub repo_path: String,
-    pub navigated_ts: Option<NaiveDateTime>,
-    pub modified_ts: Option<NaiveDateTime>,
-    pub queried_ts: Option<NaiveDateTime>,
-}
-
-#[derive(Clone, Identifiable, Insertable, Queryable, AsChangeset)]
-#[diesel(table_name = workspace_language_server)]
-pub struct WorkspaceLanguageServer {
-    pub id: i32,
-    pub workspace_id: i32,
-    pub language_server_name: String,
-    pub enabled: String,
-}
-
-#[derive(Clone, Insertable, AsChangeset)]
-#[diesel(table_name = workspace_language_server)]
-pub struct NewWorkspaceLanguageServer {
-    pub workspace_id: i32,
-    pub language_server_name: String,
-    pub enabled: String,
-}
-
 #[derive(Default, Clone, Debug, Insertable, Queryable, AsChangeset)]
 #[diesel(table_name = projects)]
 pub struct Project {
@@ -340,6 +304,7 @@ pub struct NewWindow {
     pub agent_management_filters: Option<String>,
     pub left_panel_open: Option<bool>,
     pub vertical_tabs_panel_open: Option<bool>,
+    pub theme_override: Option<String>,
 }
 
 #[derive(Identifiable, Queryable, Associations)]
@@ -753,7 +718,7 @@ pub struct Block {
     pub host: Option<String>,
     pub is_background: bool,
     pub rprompt: Option<String>,
-    /// JSON-serialized representation of the Warp prompt snapshot (Context Chips). Note that this
+    /// JSON-serialized representation of the Zap prompt snapshot (Context Chips). Note that this
     /// is different from PS1 and RPROMPT1
     pub prompt_snapshot: Option<String>,
     pub block_id: String,
@@ -811,13 +776,13 @@ pub struct UserProfile {
 
 #[derive(Insertable)]
 #[diesel(table_name = cloud_objects_refreshes)]
-pub struct NewCloudObjectsRefresh {
+pub struct NewObjectStoreRefresh {
     pub time_of_next_refresh: NaiveDateTime,
 }
 
 #[derive(Identifiable, Queryable)]
 #[diesel(table_name = cloud_objects_refreshes)]
-pub struct CloudObjectsRefresh {
+pub struct ObjectStoreRefresh {
     pub id: i32,
     pub time_of_next_refresh: NaiveDateTime,
 }
@@ -1030,9 +995,8 @@ pub struct AgentConversationData {
     /// The local conversation ID of the parent conversation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_conversation_id: Option<String>,
-    /// The server-assigned run identifier (`ai_tasks.id`) for v2 orchestration.
-    /// For local agents this arrives via StreamInit; for cloud agents it will
-    /// come from SpawnAgentResponse once the local→cloud spawn path is wired.
+    /// The run identifier for v2 orchestration. For local agents this arrives
+    /// via StreamInit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1046,6 +1010,12 @@ pub struct AgentConversationData {
     /// `None` means no compaction has occurred.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compaction_state_json: Option<String>,
+    /// Opaque serialized BYOP repair sidecar. The app layer owns validation semantics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub byop_repair_state_json: Option<String>,
+    /// CLI subagent 终端 block 快照 sidecar。具体 JSON schema 由 app 层负责。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cli_subagent_block_snapshots_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -1209,7 +1179,6 @@ impl From<&stream_finished::ApplyFileDiffStats> for ApplyFileDiffStats {
 pub struct ToolUsageMetadata {
     pub run_command_stats: RunCommandStats,
     pub read_files_stats: ToolCallStats,
-    pub search_codebase_stats: ToolCallStats,
     pub grep_stats: ToolCallStats,
     pub file_glob_stats: ToolCallStats,
     pub apply_file_diff_stats: ApplyFileDiffStats,
@@ -1226,7 +1195,6 @@ impl ToolUsageMetadata {
     pub fn total_tool_calls(&self) -> i32 {
         self.run_command_stats.count
             + self.read_files_stats.count
-            + self.search_codebase_stats.count
             + self.grep_stats.count
             + self.file_glob_stats.count
             + self.write_to_long_running_shell_command_stats.count
@@ -1245,7 +1213,6 @@ impl From<&ToolUsageMetadata> for stream_finished::ToolUsageMetadata {
         Self {
             run_command_stats: Some((&metadata.run_command_stats).into()),
             read_files_stats: Some((&metadata.read_files_stats).into()),
-            search_codebase_stats: Some((&metadata.search_codebase_stats).into()),
             grep_stats: Some((&metadata.grep_stats).into()),
             file_glob_stats: Some((&metadata.file_glob_stats).into()),
             apply_file_diff_stats: Some((&metadata.apply_file_diff_stats).into()),
@@ -1275,7 +1242,6 @@ impl From<&stream_finished::ToolUsageMetadata> for ToolUsageMetadata {
                 .map(Into::into)
                 .unwrap_or_default(),
             read_files_stats: convert(&tool_usage_metadata.read_files_stats),
-            search_codebase_stats: convert(&tool_usage_metadata.search_codebase_stats),
             grep_stats: convert(&tool_usage_metadata.grep_stats),
             file_glob_stats: convert(&tool_usage_metadata.file_glob_stats),
             apply_file_diff_stats: tool_usage_metadata
@@ -1356,6 +1322,8 @@ mod tests {
             autoexecute_override: None,
             last_event_sequence: Some(42),
             compaction_state_json: None,
+            byop_repair_state_json: None,
+            cli_subagent_block_snapshots_json: None,
         };
         let json = serde_json::to_string(&data).expect("serialize");
         let roundtripped: AgentConversationData = serde_json::from_str(&json).expect("deserialize");
@@ -1370,6 +1338,8 @@ mod tests {
         let data: AgentConversationData =
             serde_json::from_str(legacy_json).expect("legacy rows must deserialize");
         assert_eq!(data.last_event_sequence, None);
+        assert_eq!(data.byop_repair_state_json, None);
+        assert_eq!(data.cli_subagent_block_snapshots_json, None);
     }
 
     #[test]
@@ -1387,11 +1357,75 @@ mod tests {
             autoexecute_override: None,
             last_event_sequence: None,
             compaction_state_json: None,
+            byop_repair_state_json: None,
+            cli_subagent_block_snapshots_json: None,
         };
         let json = serde_json::to_string(&data).expect("serialize");
         assert!(
             !json.contains("last_event_sequence"),
             "None should be skipped in serialized output: {json}"
+        );
+        assert!(
+            !json.contains("cli_subagent_block_snapshots_json"),
+            "None should be skipped in serialized output: {json}"
+        );
+    }
+
+    #[test]
+    fn agent_conversation_data_roundtrips_byop_repair_sidecar() {
+        let data = AgentConversationData {
+            server_conversation_token: None,
+            conversation_usage_metadata: None,
+            reverted_action_ids: None,
+            forked_from_server_conversation_token: None,
+            artifacts_json: None,
+            parent_agent_id: None,
+            agent_name: None,
+            parent_conversation_id: None,
+            run_id: None,
+            autoexecute_override: None,
+            last_event_sequence: None,
+            compaction_state_json: None,
+            byop_repair_state_json: Some(r#"{"version":1,"records":[]}"#.to_string()),
+            cli_subagent_block_snapshots_json: None,
+        };
+
+        let json = serde_json::to_string(&data).expect("serialize");
+        let roundtripped: AgentConversationData = serde_json::from_str(&json).expect("deserialize");
+
+        assert_eq!(
+            roundtripped.byop_repair_state_json.as_deref(),
+            Some(r#"{"version":1,"records":[]}"#)
+        );
+    }
+
+    #[test]
+    fn agent_conversation_data_roundtrips_cli_subagent_block_snapshots_sidecar() {
+        let data = AgentConversationData {
+            server_conversation_token: None,
+            conversation_usage_metadata: None,
+            reverted_action_ids: None,
+            forked_from_server_conversation_token: None,
+            artifacts_json: None,
+            parent_agent_id: None,
+            agent_name: None,
+            parent_conversation_id: None,
+            run_id: None,
+            autoexecute_override: None,
+            last_event_sequence: None,
+            compaction_state_json: None,
+            byop_repair_state_json: None,
+            cli_subagent_block_snapshots_json: Some(
+                r#"[{"task_id":"cli-task","block_id":"cli-block","block":{}}]"#.to_string(),
+            ),
+        };
+
+        let json = serde_json::to_string(&data).expect("serialize");
+        let roundtripped: AgentConversationData = serde_json::from_str(&json).expect("deserialize");
+
+        assert_eq!(
+            roundtripped.cli_subagent_block_snapshots_json,
+            data.cli_subagent_block_snapshots_json
         );
     }
 }
@@ -1418,6 +1452,8 @@ pub struct Panel {
 // nullable for root-level entries; `kind` is `'folder'` or `'server'`.
 // Server-only metadata lives in `ssh_servers`. Secrets (password/passphrase)
 // are NOT stored here — they go into the OS keychain keyed by `node_id`.
+// Shared OneKey credentials keep username/label in `ssh_onekey_credentials`;
+// their password also lives in the OS keychain keyed by credential id.
 
 #[derive(Identifiable, Queryable, Selectable, Clone, Debug)]
 #[diesel(table_name = ssh_nodes)]
@@ -1444,10 +1480,34 @@ pub struct NewSshNode<'a> {
     pub sort_order: i32,
 }
 
+#[derive(Identifiable, Queryable, Selectable, Clone, Debug)]
+#[diesel(table_name = ssh_onekey_credentials)]
+#[diesel(primary_key(id))]
+pub struct SshOneKeyCredentialRow {
+    pub id: String,
+    pub label: String,
+    pub username: String,
+    pub kind: String,
+    pub key_path: Option<String>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Insertable, AsChangeset, Clone, Debug)]
+#[diesel(table_name = ssh_onekey_credentials)]
+pub struct NewSshOneKeyCredential<'a> {
+    pub id: &'a str,
+    pub label: &'a str,
+    pub username: &'a str,
+    pub kind: &'a str,
+    pub key_path: Option<&'a str>,
+}
+
 #[derive(Identifiable, Queryable, Selectable, Associations, Clone, Debug)]
 #[diesel(table_name = ssh_servers)]
 #[diesel(primary_key(node_id))]
 #[diesel(belongs_to(SshNodeRow, foreign_key = node_id))]
+#[diesel(belongs_to(SshOneKeyCredentialRow, foreign_key = credential_id))]
 pub struct SshServerRow {
     pub node_id: String,
     pub host: String,
@@ -1455,7 +1515,10 @@ pub struct SshServerRow {
     pub username: String,
     pub auth_type: String,
     pub key_path: Option<String>,
+    pub startup_command: Option<String>,
+    pub notes: Option<String>,
     pub last_connected_at: Option<NaiveDateTime>,
+    pub credential_id: Option<String>,
 }
 
 #[derive(Insertable, AsChangeset, Clone, Debug)]
@@ -1467,4 +1530,24 @@ pub struct NewSshServer<'a> {
     pub username: &'a str,
     pub auth_type: &'a str,
     pub key_path: Option<&'a str>,
+    pub startup_command: Option<&'a str>,
+    pub notes: Option<&'a str>,
+    pub credential_id: Option<&'a str>,
+}
+
+// --- Sync Meta ---------------------------------------------------------
+
+#[derive(Identifiable, Queryable, Selectable, Clone, Debug)]
+#[diesel(table_name = sync_meta)]
+#[diesel(primary_key(key))]
+pub struct SyncMetaRow {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Insertable, AsChangeset, Clone, Debug)]
+#[diesel(table_name = sync_meta)]
+pub struct NewSyncMeta<'a> {
+    pub key: &'a str,
+    pub value: &'a str,
 }

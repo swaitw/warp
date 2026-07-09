@@ -16,7 +16,6 @@ use crate::ai::agent::{
     AIAgentExchangeId, AIAgentOutputStatus, FinishedAIAgentOutput, RenderableAIError,
 };
 use crate::ai::blocklist::agent_view::shortcuts::AgentShortcutViewModel;
-use crate::ai::blocklist::agent_view::zero_state_block::render_ambient_credits_banner;
 use crate::ai::blocklist::agent_view::{
     agent_view_bg_fill, AgentViewController, AgentViewControllerEvent,
 };
@@ -31,6 +30,7 @@ use crate::ai::mcp::{
 };
 use crate::ai::request_usage_model::{AIRequestUsageModel, AIRequestUsageModelEvent};
 use crate::search::slash_command_menu::static_commands::commands;
+use crate::settings::{InputSettings, InputSettingsChangedEvent};
 use crate::terminal::input::buffer_model::{InputBufferModel, InputBufferUpdateEvent};
 use crate::terminal::input::message_bar::attached_context::{
     AttachedBlocksMessageProducer, AttachedContextArgs, AttachedTextSelectionMessageProducer,
@@ -196,6 +196,16 @@ impl AgentMessageBar {
             }
         });
 
+        // 订阅「显示 Agent 快捷键提示」设置，开关改变后重渲染 message bar 以隐藏/恢复 4 项 hint。
+        ctx.subscribe_to_model(&InputSettings::handle(ctx), |_, _, event, ctx| {
+            if matches!(
+                event,
+                InputSettingsChangedEvent::ShowAgentZeroStateHints { .. }
+            ) {
+                ctx.notify();
+            }
+        });
+
         if FeatureFlag::FigmaDetection.is_enabled() {
             // When the state of the Figma MCP changes, re-render to update the Figma CTA button.
             ctx.subscribe_to_model(
@@ -339,35 +349,23 @@ impl View for AgentMessageBar {
             return Empty::new().finish();
         };
 
-        // Show credits banner when user has ambient credits remaining.
-        use crate::ai::request_usage_model::AMBIENT_AGENT_TRIAL_CREDIT_THRESHOLD;
-        let right_element = if cfg!(target_family = "wasm") {
-            None
-        } else if let Some(credits) =
-            AIRequestUsageModel::as_ref(app).ambient_only_credits_remaining()
-        {
-            if credits >= AMBIENT_AGENT_TRIAL_CREDIT_THRESHOLD {
-                Some(render_ambient_credits_banner(credits, app))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        // Zap(Phase 3c A1):删除 ambient credits banner UI。
+        // 本地化后 `ambient_only_credits_remaining` 恒为 None，原分支只会走 None。
+        let right_element: Option<Box<dyn warpui::Element>> = None;
 
         // Append a Figma MCP chip to the message if applicable.
         match self.figma_button_status(app) {
             Some(FigmaMcpStatus::NotInstalled) => {
                 message.items.push(figma_chip(
                     self.mouse_states.figma_install_button.clone(),
-                    "Get Figma MCP",
+                    crate::t!("agent-message-bar-get-figma-mcp"),
                     Some(InputAction::FigmaAddButtonClicked),
                 ));
             }
             Some(FigmaMcpStatus::Installed) => {
                 message.items.push(figma_chip(
                     self.mouse_states.figma_enable_button.clone(),
-                    "Enable Figma MCP",
+                    crate::t!("agent-message-bar-enable-figma-mcp"),
                     Some(InputAction::FigmaEnableButtonClicked),
                 ));
             }
@@ -375,7 +373,7 @@ impl View for AgentMessageBar {
                 message.items.push(
                     figma_chip(
                         self.mouse_states.figma_enable_button.clone(),
-                        "Enabling...",
+                        crate::t!("agent-message-bar-enabling"),
                         None,
                     )
                     .with_is_disabled(true),
@@ -444,7 +442,7 @@ struct BootstrappingMessageProducer;
 impl MessageProvider<AgentMessageArgs<'_>> for BootstrappingMessageProducer {
     fn produce_message(&self, args: AgentMessageArgs<'_>) -> Option<Message> {
         if args.terminal_model.block_list().is_bootstrapped()
-            || args.terminal_model.is_dummy_cloud_mode_session()
+            || args.terminal_model.is_dummy_ambient_agent_session()
             || args.terminal_model.is_shared_ambient_agent_session()
         {
             None
@@ -517,57 +515,63 @@ impl MessageProvider<AgentMessageArgs<'_>> for ZeroStateMessageProducer {
             bg_color_override_for_shortcuts_and_commands,
         ) = disableable_message_item_color_overrides(!is_buffer_empty, app);
 
-        items.push(
-            MessageItem::clickable(
-                vec![
-                    MessageItem::Keystroke {
-                        keystroke: Keystroke {
-                            key: "?".to_owned(),
-                            ..Default::default()
-                        },
-                        color: color_override_for_shortcuts_and_commands,
-                        background_color: bg_color_override_for_shortcuts_and_commands,
-                    },
-                    MessageItem::Text {
-                        content: crate::t!("agent-message-bar-for-help").into(),
-                        color: color_override_for_shortcuts_and_commands,
-                    },
-                ],
-                |ctx| {
-                    ctx.dispatch_typed_action(InputAction::ToggleAgentViewShortcuts);
-                },
-                mouse_states.toggle_shortcuts.clone(),
-            )
-            .with_is_disabled(!is_buffer_empty),
-        );
+        // 「显示 Agent 快捷键提示」总开关：false 时跳过底部 4 项 hint(? 帮助 / / 命令 /
+        // 打开对话 / 代码评审)。resume / plan / fork 不受影响，因为它们不是提示而是状态性入口。
+        let show_zero_state_hints = *InputSettings::as_ref(app).show_agent_zero_state_hints;
 
-        items.push(
-            MessageItem::clickable(
-                vec![
-                    MessageItem::Keystroke {
-                        keystroke: Keystroke {
-                            key: "/".to_owned(),
-                            ..Default::default()
+        if show_zero_state_hints {
+            items.push(
+                MessageItem::clickable(
+                    vec![
+                        MessageItem::Keystroke {
+                            keystroke: Keystroke {
+                                key: "?".to_owned(),
+                                ..Default::default()
+                            },
+                            color: color_override_for_shortcuts_and_commands,
+                            background_color: bg_color_override_for_shortcuts_and_commands,
                         },
-                        color: color_override_for_shortcuts_and_commands,
-                        background_color: bg_color_override_for_shortcuts_and_commands,
+                        MessageItem::Text {
+                            content: crate::t!("agent-message-bar-for-help").into(),
+                            color: color_override_for_shortcuts_and_commands,
+                        },
+                    ],
+                    |ctx| {
+                        ctx.dispatch_typed_action(InputAction::ToggleAgentViewShortcuts);
                     },
-                    MessageItem::Text {
-                        content: crate::t!("agent-message-bar-for-commands").into(),
-                        color: color_override_for_shortcuts_and_commands,
-                    },
-                ],
-                |ctx| {
-                    ctx.dispatch_typed_action(InputAction::ToggleSlashCommandsMenu);
-                },
-                mouse_states.toggle_slash_commands.clone(),
-            )
-            .with_is_disabled(!is_buffer_empty),
-        );
+                    mouse_states.toggle_shortcuts.clone(),
+                )
+                .with_is_disabled(!is_buffer_empty),
+            );
 
-        let is_cloud_agent = matches!(
+            items.push(
+                MessageItem::clickable(
+                    vec![
+                        MessageItem::Keystroke {
+                            keystroke: Keystroke {
+                                key: "/".to_owned(),
+                                ..Default::default()
+                            },
+                            color: color_override_for_shortcuts_and_commands,
+                            background_color: bg_color_override_for_shortcuts_and_commands,
+                        },
+                        MessageItem::Text {
+                            content: crate::t!("agent-message-bar-for-commands").into(),
+                            color: color_override_for_shortcuts_and_commands,
+                        },
+                    ],
+                    |ctx| {
+                        ctx.dispatch_typed_action(InputAction::ToggleSlashCommandsMenu);
+                    },
+                    mouse_states.toggle_slash_commands.clone(),
+                )
+                .with_is_disabled(!is_buffer_empty),
+            );
+        }
+
+        let is_ambient_agent = matches!(
             agent_view_controller.agent_view_state(),
-            AgentViewState::Active { origin, .. } if origin.is_cloud_agent()
+            AgentViewState::Active { origin, .. } if origin.is_ambient_agent()
         );
 
         let plan_count = AIDocumentModel::as_ref(app)
@@ -577,7 +581,10 @@ impl MessageProvider<AgentMessageArgs<'_>> for ZeroStateMessageProducer {
         let has_conversation_been_updated_since_agent_view_entry =
             *original_conversation_length != active_conversation.exchange_count();
 
-        if !is_cloud_agent && !has_conversation_been_updated_since_agent_view_entry {
+        if show_zero_state_hints
+            && !is_ambient_agent
+            && !has_conversation_been_updated_since_agent_view_entry
+        {
             if let Some(conversations_keystroke) =
                 keybinding_name_to_keystroke(commands::CONVERSATIONS.name, app)
             {
@@ -596,7 +603,10 @@ impl MessageProvider<AgentMessageArgs<'_>> for ZeroStateMessageProducer {
 
         // Code review only works locally.
         #[cfg(not(target_family = "wasm"))]
-        if !is_cloud_agent && *TabSettings::as_ref(app).show_code_review_button {
+        if show_zero_state_hints
+            && !is_ambient_agent
+            && *TabSettings::as_ref(app).show_code_review_button
+        {
             let code_review_keystroke = if OperatingSystem::get().is_mac() {
                 Keystroke::parse("cmd-shift-+").expect("keystroke should parse")
             } else {
@@ -896,7 +906,7 @@ impl MessageProvider<AgentMessageArgs<'_>> for ExitBashModeMessageProducer {
 /// When `action` is `None`, the chip is returned without an action (caller should disable it).
 fn figma_chip(
     mouse_state: MouseStateHandle,
-    label: &'static str,
+    label: String,
     action: Option<InputAction>,
 ) -> MessageItem {
     let items = vec![

@@ -2,11 +2,12 @@ use crate::ai::agent::comment::CodeReview;
 use crate::ai::agent::linearization::compute_task_depths;
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::artifacts::Artifact;
+use crate::ai::blocklist::block::cli_controller::LongRunningCommandControlState;
 use crate::ai::blocklist::{RequestInput, ResponseStreamId, SerializedBlockListItem};
+use crate::ai::byop_readiness::RepairStateStatus;
 use crate::code_review::CodeReviewTelemetryEvent;
 use crate::notebooks::NotebookId;
 use crate::persistence::model::{ConversationUsageMetadata, ModelTokenUsage, ToolUsageMetadata};
-use crate::server::ids::ServerId;
 use crate::terminal::general_settings::GeneralSettings;
 use crate::terminal::model::block::{
     AgentInteractionMetadata, AgentViewVisibility, BlockId, SerializedAIMetadata, SerializedBlock,
@@ -95,6 +96,12 @@ pub(crate) struct CommandBlockInfo {
     pub(crate) output: String,
     pub(crate) exit_code: ExitCode,
     pub(crate) ai_metadata: Option<String>,
+    /// 为 CLI subagent 恢复时保留稳定的 command block id。
+    pub(crate) block_id: Option<BlockId>,
+    /// 记录发起命令的 action id，用于恢复 requested command 关联。
+    pub(crate) requested_command_action_id: Option<AIAgentActionId>,
+    /// 记录 CLI subagent task id，用于恢复只读详情卡关联。
+    pub(crate) subagent_task_id: Option<TaskId>,
     /// The api message ID that this command block was extracted from.
     /// Used to find the corresponding exchange for timestamp and PWD.
     pub(crate) message_id: String,
@@ -116,6 +123,69 @@ pub enum RestoreConversationError {
 #[derive(thiserror::Error, Debug)]
 #[error("Subagent task not found")]
 pub struct SubagentTaskNotFound;
+
+/// CLI subagent 终端 block 的持久化快照。
+#[derive(Debug, Clone)]
+struct CliSubagentBlockSnapshot {
+    task_id: TaskId,
+    block_id: BlockId,
+    block: SerializedBlock,
+}
+
+impl CliSubagentBlockSnapshot {
+    fn new(task_id: TaskId, block: SerializedBlock) -> Self {
+        let block_id = block.id.clone();
+        Self {
+            task_id,
+            block_id,
+            block,
+        }
+    }
+}
+
+impl Serialize for CliSubagentBlockSnapshot {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        #[derive(Serialize)]
+        struct Snapshot<'a> {
+            task_id: &'a TaskId,
+            block_id: &'a BlockId,
+            block: &'a SerializedBlock,
+        }
+
+        Snapshot {
+            task_id: &self.task_id,
+            block_id: &self.block_id,
+            block: &self.block,
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for CliSubagentBlockSnapshot {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Snapshot {
+            task_id: TaskId,
+            block_id: BlockId,
+            block: SerializedBlock,
+        }
+
+        let mut snapshot = Snapshot::deserialize(deserializer)?;
+        // 反序列化时同步 block.id，保证后续 block_list 查找使用稳定 id。
+        snapshot.block.id = snapshot.block_id.clone();
+        Ok(Self {
+            task_id: snapshot.task_id,
+            block_id: snapshot.block_id,
+            block: snapshot.block,
+        })
+    }
+}
 
 /// An Agent Mode conversation.
 #[derive(Debug, Clone)]
@@ -153,7 +223,7 @@ pub struct AIConversation {
     server_conversation_token: Option<ServerConversationToken>,
 
     /// The server-assigned task/run identifier (`ai_tasks.id`) for this
-    /// conversation, used for v2 orchestration.
+    /// conversation, used for local run and restored task identity.
     ///
     /// For local conversations, parsed from `StreamInit.run_id` on the first
     /// response. For remote child agents spawned via `POST /agent/run`, set
@@ -167,13 +237,6 @@ pub struct AIConversation {
 
     /// The server conversation ID of the source conversation if this conversation was forked.
     forked_from_server_conversation_token: Option<ServerConversationToken>,
-
-    /// Metadata from the server for this conversation (permissions, timestamps, etc.).
-    /// This is None for new conversations and gets populated after the first response completes.
-    /// TODO (roland): server_conversation_token, conversation_usage_metadata, and artifacts are duplicated in here.
-    /// Those are updated via stream events on init and finished respectively, while this is fetched via graphQL
-    /// Consider consolidating by having the stream events return this whole metadata
-    server_metadata: Option<ServerAIConversationMetadata>,
 
     /// The active transaction for this conversation, if any.
     transaction: Option<Transaction>,
@@ -210,8 +273,8 @@ pub struct AIConversation {
     artifacts: Vec<Artifact>,
 
     /// Server-side identifier of the parent agent that spawned this child, if any.
-    /// In v1 this holds the parent's `server_conversation_token`; in v2 (OrchestrationV2)
-    /// it holds the parent's `run_id`. Persisted as `parent_agent_id` for serde compat.
+    /// Restored legacy conversations may store a server conversation token here;
+    /// newer local child-agent paths use the parent run id.
     parent_agent_id: Option<String>,
     /// The display name for this agent (e.g. "Agent 1"), assigned by the orchestrator.
     agent_name: Option<String>,
@@ -223,16 +286,21 @@ pub struct AIConversation {
     /// reporting. TaskStatusSyncModel skips status updates for these.
     is_remote_child: bool,
 
-    /// The last event sequence number observed from the v2 orchestration
-    /// event log. Used on restore to resume event delivery without
-    /// re-delivering already-processed events.
+    /// Legacy cloud event cursor retained only for deserializing older conversations.
     last_event_sequence: Option<i64>,
 
-    /// OpenWarp BYOP 本地会话压缩 sidecar — 与 warp protobuf message 解耦,
+    /// Zap BYOP 本地会话压缩 sidecar — 与 warp protobuf message 解耦,
     /// 通过 message_id 索引挂"is_summary / tool_output_compacted_at / synthetic_continue"等元数据。
     /// 默认空表 = 未压缩状态,完全无侵入。
     /// 详见 [`crate::ai::byop_compaction`]。
     pub(crate) compaction_state: crate::ai::byop_compaction::state::CompactionState,
+    /// Zap BYOP repair sidecar。invalid sidecar 必须原样保留,避免保存时
+    /// 静默授权 repair 或抹掉损坏元数据。
+    pub(crate) byop_repair_state: RepairStateStatus,
+
+    /// CLI subagent 真实终端 block 快照。task messages 可能只包含截断/摘要输出，
+    /// 因此关闭标签后需要靠这里恢复 SSH 等交互式终端内容。
+    cli_subagent_block_snapshots: HashMap<BlockId, CliSubagentBlockSnapshot>,
 }
 
 pub(crate) fn artifact_from_fork_proto(
@@ -266,7 +334,6 @@ impl AIConversation {
             server_conversation_token: None,
             task_id: None,
             forked_from_server_conversation_token: None,
-            server_metadata: None,
             transaction: None,
             autoexecute_override: Default::default(),
             added_exchanges_by_response: Default::default(),
@@ -284,6 +351,52 @@ impl AIConversation {
             is_remote_child: false,
             last_event_sequence: None,
             compaction_state: Default::default(),
+            byop_repair_state: RepairStateStatus::default(),
+            cli_subagent_block_snapshots: Default::default(),
+        }
+    }
+
+    fn cli_subagent_block_snapshots_from_json(
+        json: Option<String>,
+    ) -> HashMap<BlockId, CliSubagentBlockSnapshot> {
+        let Some(json) = json else {
+            return HashMap::new();
+        };
+
+        let snapshots = match serde_json::from_str::<Vec<CliSubagentBlockSnapshot>>(&json) {
+            Ok(snapshots) => snapshots,
+            Err(e) => {
+                log::warn!(
+                    "Failed to deserialize CLI subagent block snapshots; falling back to task messages: {e}"
+                );
+                return HashMap::new();
+            }
+        };
+
+        snapshots
+            .into_iter()
+            .map(|snapshot| (snapshot.block_id.clone(), snapshot))
+            .collect()
+    }
+
+    fn cli_subagent_block_snapshots_json(&self) -> Option<String> {
+        if self.cli_subagent_block_snapshots.is_empty() {
+            return None;
+        }
+
+        // 排序仅用于让持久化 JSON 稳定，避免无意义写入抖动。
+        let snapshots = self
+            .cli_subagent_block_snapshots
+            .values()
+            .sorted_by_key(|snapshot| snapshot.block_id.as_str().to_owned())
+            .cloned()
+            .collect_vec();
+        match serde_json::to_string(&snapshots) {
+            Ok(json) => Some(json),
+            Err(e) => {
+                log::error!("Failed to serialize CLI subagent block snapshots: {e}");
+                None
+            }
         }
     }
 
@@ -365,6 +478,8 @@ impl AIConversation {
             autoexecute_override,
             last_event_sequence,
             compaction_state,
+            byop_repair_state,
+            cli_subagent_block_snapshots,
         ) = if let Some(data) = conversation_data {
             let server_conversation_token = data
                 .server_conversation_token
@@ -404,6 +519,16 @@ impl AIConversation {
                         .ok()
                 })
                 .unwrap_or_default();
+            let byop_repair_state =
+                RepairStateStatus::from_sidecar_json(data.byop_repair_state_json);
+            let cli_subagent_block_snapshots = Self::cli_subagent_block_snapshots_from_json(
+                data.cli_subagent_block_snapshots_json,
+            );
+            if let Some(error_category) = byop_repair_state.error_category() {
+                log::error!(
+                    "[byop-repair] failed to load repair sidecar category={error_category:?}"
+                );
+            }
 
             (
                 server_conversation_token,
@@ -418,6 +543,8 @@ impl AIConversation {
                 autoexecute_override,
                 last_event_sequence,
                 compaction_state,
+                byop_repair_state,
+                cli_subagent_block_snapshots,
             )
         } else {
             (
@@ -433,6 +560,8 @@ impl AIConversation {
                 AIConversationAutoexecuteMode::default(),
                 None,
                 crate::ai::byop_compaction::state::CompactionState::default(),
+                RepairStateStatus::default(),
+                HashMap::new(),
             )
         };
 
@@ -458,7 +587,6 @@ impl AIConversation {
             server_conversation_token,
             task_id: run_id.as_deref().and_then(|id| id.parse().ok()),
             forked_from_server_conversation_token,
-            server_metadata: None,
             transaction: None,
             autoexecute_override,
             added_exchanges_by_response: Default::default(),
@@ -477,6 +605,8 @@ impl AIConversation {
             is_remote_child: false,
             last_event_sequence,
             compaction_state,
+            byop_repair_state,
+            cli_subagent_block_snapshots,
         })
     }
 
@@ -492,6 +622,45 @@ impl AIConversation {
             self.task_store.modify_task(&task_id, |task| {
                 task.reassign_exchange_ids();
             });
+        }
+    }
+
+    fn is_default_restored_timestamp(timestamp: DateTime<Local>) -> bool {
+        timestamp.timestamp() == 0 && timestamp.timestamp_subsec_nanos() == 0
+    }
+
+    pub(crate) fn repair_default_restored_exchange_timestamps(
+        &mut self,
+        fallback_timestamp: DateTime<Local>,
+    ) {
+        let exchange_ids_to_repair: Vec<_> = self
+            .task_store
+            .all_exchanges()
+            .filter(|exchange| {
+                Self::is_default_restored_timestamp(exchange.start_time)
+                    || exchange
+                        .finish_time
+                        .is_some_and(Self::is_default_restored_timestamp)
+            })
+            .map(|exchange| exchange.id)
+            .collect();
+
+        for exchange_id in exchange_ids_to_repair {
+            let Some(exchange) = self.task_store.exchange_mut(exchange_id) else {
+                continue;
+            };
+
+            // 旧数据或本地合成消息可能没有 CurrentTime/timestamp,恢复时会落到 Unix epoch。
+            // 只修正这种默认值,避免覆盖消息中已经恢复出的真实时间。
+            if Self::is_default_restored_timestamp(exchange.start_time) {
+                exchange.start_time = fallback_timestamp;
+            }
+            if exchange
+                .finish_time
+                .is_some_and(Self::is_default_restored_timestamp)
+            {
+                exchange.finish_time = Some(fallback_timestamp);
+            }
         }
     }
 
@@ -742,17 +911,13 @@ impl AIConversation {
         self.task_id = Some(id);
     }
 
-    /// Returns the server-side agent identifier appropriate for the active
-    /// orchestration version: `task_id` (as string) under v2,
-    /// `server_conversation_token` under v1.
-    pub fn orchestration_agent_id(&self) -> Option<String> {
-        if FeatureFlag::OrchestrationV2.is_enabled() {
-            self.run_id()
-        } else {
+    /// Returns the best available server-side agent identifier for parent/child linking.
+    pub fn agent_link_id(&self) -> Option<String> {
+        self.run_id().or_else(|| {
             self.server_conversation_token
                 .as_ref()
                 .map(|t| t.as_str().to_string())
-        }
+        })
     }
 
     /// Updates the server conversation token for this conversation.
@@ -777,20 +942,6 @@ impl AIConversation {
         self.forked_from_server_conversation_token = None;
     }
 
-    pub fn server_id(&self) -> Option<ServerId> {
-        self.server_metadata
-            .as_ref()
-            .map(|metadata| metadata.metadata.uid)
-    }
-
-    pub fn server_metadata(&self) -> Option<&ServerAIConversationMetadata> {
-        self.server_metadata.as_ref()
-    }
-
-    pub fn set_server_metadata(&mut self, metadata: ServerAIConversationMetadata) {
-        self.server_metadata = Some(metadata);
-    }
-
     pub fn parent_agent_id(&self) -> Option<&str> {
         self.parent_agent_id.as_deref()
     }
@@ -813,16 +964,6 @@ impl AIConversation {
 
     pub fn set_parent_conversation_id(&mut self, id: AIConversationId) {
         self.parent_conversation_id = Some(id);
-    }
-
-    /// Returns the last observed v2 orchestration event sequence number, if any.
-    pub fn last_event_sequence(&self) -> Option<i64> {
-        self.last_event_sequence
-    }
-
-    /// Updates the last observed v2 orchestration event sequence number.
-    pub fn set_last_event_sequence(&mut self, sequence: i64) {
-        self.last_event_sequence = Some(sequence);
     }
 
     /// Returns true if this conversation was spawned by a parent orchestrator agent.
@@ -1181,7 +1322,7 @@ impl AIConversation {
         });
     }
 
-    /// Updates the notebook_uid for a plan artifact when it's synced to Warp Drive.
+    /// Updates the notebook_uid for a plan artifact when it's synced to Zap Drive.
     pub fn update_plan_notebook_uid(
         &mut self,
         document_uid: AIDocumentId,
@@ -1384,6 +1525,45 @@ impl AIConversation {
         // turn 启动即落盘:user query 提交时先写一次,stream 中途强退也能保留提问记录。
         self.write_updated_conversation_state(ctx);
         Ok(())
+    }
+
+    pub fn append_byop_preflight_messages_to_task(
+        &mut self,
+        task_id: TaskId,
+        messages: Vec<api::Message>,
+        ctx: &mut ModelContext<BlocklistAIHistoryModel>,
+    ) -> Result<usize, UpdateConversationError> {
+        let message_count = messages.len();
+        if message_count == 0 {
+            return Ok(0);
+        }
+        self.ensure_can_persist_byop_preflight_state(ctx)?;
+
+        let message_ids = messages
+            .iter()
+            .map(|message| message.id.clone())
+            .collect::<HashSet<_>>();
+        self.task_store
+            .modify_task(&task_id, |task| task.append_source_messages(messages))
+            .ok_or(UpdateConversationError::TaskNotFound)??;
+        if let Err(e) = self.send_updated_conversation_state_for_byop_preflight(ctx) {
+            if let Some(rollback_result) = self.task_store.modify_task(&task_id, |task| {
+                task.remove_source_messages_by_ids(&message_ids)
+            }) {
+                if let Err(rollback_error) = rollback_result {
+                    log::error!(
+                        "[byop-readiness] failed to roll back preflight messages after \
+                         persistence error: {rollback_error:?}"
+                    );
+                }
+            } else {
+                log::error!(
+                    "[byop-readiness] failed to find task while rolling back preflight messages"
+                );
+            }
+            return Err(e);
+        }
+        Ok(message_count)
     }
 
     pub fn append_reassigned_exchange(
@@ -2042,7 +2222,7 @@ impl AIConversation {
 
                     if let Some(optimistic_subtask) = optimistic_cli_subagent_subtask {
                         log::debug!(
-                            "Upgrading optimistically created subtask with ID {:?} to server task with ID {:?}",
+                            "Upgrading optimistically created subtask with ID {:?} to confirmed task with ID {:?}",
                             optimistic_subtask.id(),
                             task.id
                         );
@@ -2056,7 +2236,7 @@ impl AIConversation {
                         )?;
                         ctx.emit(BlocklistAIHistoryEvent::UpgradedTask {
                             optimistic_id: optimistic_id.clone(),
-                            server_id: server_subtask.id().clone(),
+                            confirmed_task_id: server_subtask.id().clone(),
                             terminal_view_id,
                         });
 
@@ -2179,7 +2359,7 @@ impl AIConversation {
                         )?;
                         ctx.emit(BlocklistAIHistoryEvent::UpgradedTask {
                             optimistic_id: old_id,
-                            server_id: root_task.id().clone(),
+                            confirmed_task_id: root_task.id().clone(),
                             terminal_view_id,
                         });
 
@@ -2492,7 +2672,7 @@ impl AIConversation {
                     })
                     .ok_or(UpdateConversationError::ExchangeNotFound)?;
 
-                // OpenWarp 优化 1:文本/推理流的 fast path。
+                // Zap 优化 1:文本/推理流的 fast path。
                 // mask 为 `agent_output.text` 或 `agent_reasoning.reasoning` 时
                 // 不会触发 todos_op(只有 UpdateTodos message 才会),
                 // current_todo_list / current_comment_state 在
@@ -2678,7 +2858,7 @@ impl AIConversation {
         new_task_id
     }
 
-    /// OpenWarp BYOP 专用:agent 自起 LRC 收到 snapshot 时,在 conversation 直接落地
+    /// Zap BYOP 专用:agent 自起 LRC 收到 snapshot 时,在 conversation 直接落地
     /// 一个 Server-backed cli subagent task。
     ///
     /// 不走 `create_optimistic_cli_subagent_task`(它产出 `TaskImpl::Optimistic`,且
@@ -2748,10 +2928,7 @@ impl AIConversation {
     /// Returns true if any subagent task is currently active (not yet finished).
     ///
     /// This covers both optimistic CLI subagent tasks (created before server
-    /// confirmation) and server-backed subagent tasks. Used to prevent
-    /// piggybacking orchestration events onto followup requests while a
-    /// subagent is active, since subagents cannot interpret those events and
-    /// inserting them breaks tool_use/tool_result ordering requirements.
+    /// confirmation) and server-backed subagent tasks.
     pub fn has_active_subagent(&self) -> bool {
         if self.optimistic_cli_subagent_subtask_id.is_some() {
             return true;
@@ -2824,29 +3001,7 @@ impl AIConversation {
         }
     }
 
-    pub(crate) fn write_updated_conversation_state(
-        &mut self,
-        ctx: &mut ModelContext<BlocklistAIHistoryModel>,
-    ) {
-        // We should not persist non-local conversations (e.g. shared sessions).
-        if self.is_viewing_shared_session {
-            return;
-        }
-
-        if !*GeneralSettings::as_ref(ctx).persist_conversations
-            || !AppExecutionMode::as_ref(ctx).can_save_session()
-        {
-            return;
-        }
-
-        let Some(sqlite_sender) = GlobalResourceHandlesProvider::as_ref(ctx)
-            .get()
-            .model_event_sender
-            .clone()
-        else {
-            return;
-        };
-
+    fn updated_conversation_state_event(&self) -> ModelEvent {
         let reverted_action_ids = if self.reverted_action_ids.is_empty() {
             None
         } else {
@@ -2873,7 +3028,7 @@ impl AIConversation {
             }
         };
 
-        let event = ModelEvent::UpdateMultiAgentConversation {
+        ModelEvent::UpdateMultiAgentConversation {
             conversation_id: self.id.to_string(),
             updated_tasks: self
                 .all_tasks()
@@ -2910,8 +3065,96 @@ impl AIConversation {
                         }
                     }
                 },
+                byop_repair_state_json: self.byop_repair_state.to_sidecar_json(),
+                cli_subagent_block_snapshots_json: self.cli_subagent_block_snapshots_json(),
             },
+        }
+    }
+
+    fn ensure_can_persist_byop_preflight_state(
+        &self,
+        ctx: &mut ModelContext<BlocklistAIHistoryModel>,
+    ) -> Result<(), UpdateConversationError> {
+        if self.is_viewing_shared_session {
+            return Err(
+                UpdateConversationError::ByopPreflightPersistenceUnavailable(
+                    "shared session conversations are not persisted".to_owned(),
+                ),
+            );
+        }
+        if !*GeneralSettings::as_ref(ctx).persist_conversations {
+            return Err(
+                UpdateConversationError::ByopPreflightPersistenceUnavailable(
+                    "conversation persistence is disabled".to_owned(),
+                ),
+            );
+        }
+        if !AppExecutionMode::as_ref(ctx).can_save_session() {
+            return Err(
+                UpdateConversationError::ByopPreflightPersistenceUnavailable(
+                    "current execution mode cannot save sessions".to_owned(),
+                ),
+            );
+        }
+        if GlobalResourceHandlesProvider::as_ref(ctx)
+            .get()
+            .model_event_sender
+            .is_none()
+        {
+            return Err(
+                UpdateConversationError::ByopPreflightPersistenceUnavailable(
+                    "sqlite sender is unavailable".to_owned(),
+                ),
+            );
+        }
+        Ok(())
+    }
+
+    fn send_updated_conversation_state_for_byop_preflight(
+        &self,
+        ctx: &mut ModelContext<BlocklistAIHistoryModel>,
+    ) -> Result<(), UpdateConversationError> {
+        // 调用方(`append_byop_preflight_messages_to_task`)在写入前已经调用过
+        // `ensure_can_persist_byop_preflight_state`,此处不再重复校验 sender 是否存在;
+        // 只关心 try_send 自身的 Full/Closed 错误,沿用现有的 ByopPreflightPersistenceSend。
+        let sqlite_sender = GlobalResourceHandlesProvider::as_ref(ctx)
+            .get()
+            .model_event_sender
+            .clone()
+            .ok_or_else(|| {
+                UpdateConversationError::ByopPreflightPersistenceUnavailable(
+                    "sqlite sender is unavailable".to_owned(),
+                )
+            })?;
+        sqlite_sender
+            .try_send(self.updated_conversation_state_event())
+            .map_err(|e| UpdateConversationError::ByopPreflightPersistenceSend(format!("{e:?}")))
+    }
+
+    pub(crate) fn write_updated_conversation_state(
+        &mut self,
+        ctx: &mut ModelContext<BlocklistAIHistoryModel>,
+    ) {
+        // We should not persist non-local conversations (e.g. shared sessions).
+        if self.is_viewing_shared_session {
+            return;
+        }
+
+        if !*GeneralSettings::as_ref(ctx).persist_conversations
+            || !AppExecutionMode::as_ref(ctx).can_save_session()
+        {
+            return;
+        }
+
+        let Some(sqlite_sender) = GlobalResourceHandlesProvider::as_ref(ctx)
+            .get()
+            .model_event_sender
+            .clone()
+        else {
+            return;
         };
+
+        let event = self.updated_conversation_state_event();
         ctx.spawn(
             async move {
                 if let Err(e) = sqlite_sender.send(event) {
@@ -3041,6 +3284,73 @@ impl AIConversation {
         s.replace('\n', "\r\n").into_bytes()
     }
 
+    fn cli_subagent_ai_metadata_json(
+        &self,
+        task_id: &TaskId,
+        requested_command_action_id: Option<AIAgentActionId>,
+    ) -> Option<String> {
+        serde_json::to_string(&Some(Into::<SerializedAIMetadata>::into(
+            AgentInteractionMetadata::new(
+                requested_command_action_id,
+                self.id(),
+                Some(task_id.clone()),
+                Some(LongRunningCommandControlState::Agent {
+                    is_blocked: false,
+                    should_hide_responses: false,
+                }),
+                false,
+                false,
+            ),
+        )))
+        .ok()
+    }
+
+    fn requested_command_action_id_from_snapshot(
+        block: &SerializedBlock,
+    ) -> Option<AIAgentActionId> {
+        block
+            .ai_metadata
+            .as_ref()
+            .and_then(|json| serde_json::from_str::<Option<SerializedAIMetadata>>(json).ok())
+            .flatten()
+            .map(AgentInteractionMetadata::from)
+            .and_then(|metadata| metadata.requested_command_action_id().cloned())
+    }
+
+    fn normalized_cli_subagent_snapshot_block(
+        &self,
+        snapshot: &CliSubagentBlockSnapshot,
+        requested_command_action_id: Option<AIAgentActionId>,
+    ) -> SerializedBlock {
+        let mut block = snapshot.block.clone();
+        let requested_command_action_id = requested_command_action_id
+            .or_else(|| Self::requested_command_action_id_from_snapshot(&block));
+
+        // 恢复历史时必须同时恢复终端内容和 agent 关联元数据，
+        // 否则 block 能显示但展开的 CLI subagent 视图找不到归属。
+        block.id = snapshot.block_id.clone();
+        block.ai_metadata =
+            self.cli_subagent_ai_metadata_json(&snapshot.task_id, requested_command_action_id);
+        block.agent_view_visibility =
+            Some(AgentViewVisibility::new_from_conversation(self.id).into());
+        block
+    }
+
+    pub(crate) fn upsert_cli_subagent_block_snapshot(
+        &mut self,
+        task_id: TaskId,
+        block: SerializedBlock,
+        requested_command_action_id: Option<AIAgentActionId>,
+        ctx: &mut ModelContext<BlocklistAIHistoryModel>,
+    ) {
+        let mut snapshot = CliSubagentBlockSnapshot::new(task_id, block);
+        snapshot.block =
+            self.normalized_cli_subagent_snapshot_block(&snapshot, requested_command_action_id);
+        self.cli_subagent_block_snapshots
+            .insert(snapshot.block_id.clone(), snapshot);
+        self.write_updated_conversation_state(ctx);
+    }
+
     /// Finds the RunShellCommand result for a given tool_call_id.
     /// Returns both the result and the message ID of the result message.
     pub(crate) fn find_run_shell_command_result(
@@ -3098,6 +3408,10 @@ impl AIConversation {
         messages: &[api::Message],
         command_blocks: &mut Vec<CommandBlockInfo>,
     ) {
+        // 记录每个 RunShellCommand 的稳定 command id，CLI subagent 会用这个 id
+        // 指向实际被接管的命令块，不能只按最近一条命令猜测。
+        let mut run_shell_command_block_indices_by_id = HashMap::new();
+
         // Build a map from tool_call_id to (RunShellCommandResult, result_message_id)
         // for efficient lookup within this message set.
         let tool_call_results: HashMap<&str, (&api::RunShellCommandResult, &str)> = messages
@@ -3150,9 +3464,9 @@ impl AIConversation {
                     {
                         if let Some(api::run_shell_command_result::Result::CommandFinished(
                             api::ShellCommandFinished {
+                                command_id,
                                 output: command_output,
                                 exit_code,
-                                ..
                             },
                         )) = &cmd_result.result
                         {
@@ -3171,8 +3485,32 @@ impl AIConversation {
                                     ))
                                     .unwrap_or_default(),
                                 ),
+                                block_id: None,
+                                requested_command_action_id: Some(tool_call_id.clone().into()),
+                                subagent_task_id: None,
                                 message_id: (*result_message_id).to_string(),
                             });
+                            if let Some(index) = command_blocks.len().checked_sub(1) {
+                                run_shell_command_block_indices_by_id
+                                    .insert(command_id.clone(), index);
+                            }
+                        }
+                    }
+                }
+
+                // CLI subagent metadata 中的 command_id 是恢复时的真实关联源。
+                // 同一组 messages 里可能有多条命令，必须按 command_id 精确回填。
+                if let Some(subagent) = tool_call.subagent() {
+                    if let Some(api::message::tool_call::subagent::Metadata::Cli(cli)) =
+                        &subagent.metadata
+                    {
+                        if let Some(command_block) = run_shell_command_block_indices_by_id
+                            .get(&cli.command_id)
+                            .and_then(|index| command_blocks.get_mut(*index))
+                        {
+                            command_block.block_id = Some(BlockId::from(cli.command_id.clone()));
+                            command_block.subagent_task_id =
+                                Some(TaskId::new(subagent.task_id.clone()));
                         }
                     }
                 }
@@ -3199,6 +3537,9 @@ impl AIConversation {
                         output: cmd.output.clone(),
                         exit_code: ExitCode::from(cmd.exit_code),
                         ai_metadata: None,
+                        block_id: None,
+                        requested_command_action_id: None,
+                        subagent_task_id: None,
                         message_id: message_id.clone(),
                     });
                 }
@@ -3222,6 +3563,9 @@ impl AIConversation {
                             output: executed_shell_command.output.clone(),
                             exit_code: ExitCode::from(executed_shell_command.exit_code),
                             ai_metadata: None,
+                            block_id: None,
+                            requested_command_action_id: None,
+                            subagent_task_id: None,
                             message_id: message_id.clone(),
                         });
                     }
@@ -3238,6 +3582,7 @@ impl AIConversation {
     /// to know where to insert AI blocks relative to the command blocks.
     pub fn to_serialized_blocklist_items(&self) -> Vec<SerializedBlockListItem> {
         let mut serialized_blocks = Vec::new();
+        let mut used_cli_snapshot_block_ids = HashSet::new();
 
         // Extract all command blocks from the task messages
         let command_blocks = self.extract_command_blocks();
@@ -3258,14 +3603,54 @@ impl AIConversation {
 
         // Create serialized blocks from the extracted command blocks
         for command_block in command_blocks {
+            let matching_cli_snapshot = command_block.block_id.as_ref().and_then(|block_id| {
+                self.cli_subagent_block_snapshots
+                    .get(block_id)
+                    .filter(|snapshot| {
+                        command_block.subagent_task_id.as_ref() == Some(&snapshot.task_id)
+                    })
+            });
+            if let Some(snapshot) = matching_cli_snapshot {
+                // task message 里的输出可能只是 SSH 交互的截断结果；真实终端快照优先。
+                used_cli_snapshot_block_ids.insert(snapshot.block_id.clone());
+                serialized_blocks.push(SerializedBlockListItem::Command {
+                    block: Box::new(self.normalized_cli_subagent_snapshot_block(
+                        snapshot,
+                        command_block.requested_command_action_id,
+                    )),
+                });
+                continue;
+            }
+
             // Find the exchange that contains this command block's message ID
             let (pwd, timestamp) = message_id_to_exchange
                 .get(command_block.message_id.as_str())
                 .map(|exchange| (exchange.working_directory.clone(), exchange.start_time))
                 .unwrap_or((fallback_pwd.clone(), fallback_time));
 
+            // CLI subagent 恢复时序列化可见、只读的 agent 关联元数据；其他块保持原有元数据。
+            let ai_metadata = if let Some(subagent_task_id) = command_block.subagent_task_id.clone()
+            {
+                serde_json::to_string(&Some(Into::<SerializedAIMetadata>::into(
+                    AgentInteractionMetadata::new(
+                        command_block.requested_command_action_id.clone(),
+                        self.id(),
+                        Some(subagent_task_id),
+                        Some(LongRunningCommandControlState::Agent {
+                            is_blocked: false,
+                            should_hide_responses: false,
+                        }),
+                        false,
+                        false,
+                    ),
+                )))
+                .ok()
+            } else {
+                command_block.ai_metadata
+            };
+
             let serialized_block = SerializedBlock {
-                id: BlockId::new(),
+                id: command_block.block_id.unwrap_or_else(BlockId::new),
                 stylized_command: Self::to_stylized_bytes(&command_block.command),
                 stylized_output: Self::to_stylized_bytes(&command_block.output),
                 pwd,
@@ -3285,7 +3670,7 @@ impl AIConversation {
                 shell_host: None,
                 is_background: false,
                 prompt_snapshot: None,
-                ai_metadata: command_block.ai_metadata,
+                ai_metadata,
                 is_local: Some(true),
                 agent_view_visibility: Some(
                     AgentViewVisibility::new_from_conversation(self.id).into(),
@@ -3293,6 +3678,31 @@ impl AIConversation {
             };
             serialized_blocks.push(SerializedBlockListItem::Command {
                 block: Box::new(serialized_block),
+            });
+        }
+
+        // 有些交互式 CLI subagent 会话没有可用的 RunShellCommand 完成结果；
+        // 此时 task messages 无法生成 command block，仍要靠 sidecar 追加真实终端快照。
+        let remaining_cli_snapshots = self
+            .cli_subagent_block_snapshots
+            .values()
+            .filter(|snapshot| !used_cli_snapshot_block_ids.contains(&snapshot.block_id))
+            .filter(|snapshot| {
+                self.task_store
+                    .get(&snapshot.task_id)
+                    .is_some_and(|task| task.is_cli_subagent())
+            })
+            .sorted_by_key(|snapshot| {
+                (
+                    snapshot.block.start_ts.unwrap_or_default(),
+                    snapshot.block_id.as_str().to_owned(),
+                )
+            })
+            .collect_vec();
+
+        for snapshot in remaining_cli_snapshots {
+            serialized_blocks.push(SerializedBlockListItem::Command {
+                block: Box::new(self.normalized_cli_subagent_snapshot_block(snapshot, None)),
             });
         }
 
@@ -3403,7 +3813,7 @@ impl AIConversation {
     }
 }
 
-/// OpenWarp 优化 1: 检测 AppendToMessageContent 的 mask 是不是纯
+/// Zap 优化 1: 检测 AppendToMessageContent 的 mask 是不是纯
 /// 文本/推理 append。这两类 mask path:
 /// - `agent_output.text` —— BYOP / 云路径文本 chunk
 /// - `agent_reasoning.reasoning` —— BYOP / 云路径思考 chunk
@@ -3555,7 +3965,7 @@ pub enum UpdateConversationError {
     ExchangeNotFound,
     #[error("Could not update task: {0:?}")]
     UpdateTask(#[from] UpdateTaskError),
-    #[error("Could not update upgrade optimistic task for server task: {0:?}")]
+    #[error("Could not update optimistic task with confirmed task: {0:?}")]
     UpgradeOptimisticTask(#[from] UpgradeOptimisticTaskError),
     #[error("Could not extract messages: {0:?}")]
     ExtractMessages(#[from] ExtractMessagesError),
@@ -3575,6 +3985,10 @@ pub enum UpdateConversationError {
     NoActiveTask,
     #[error("No pending request.")]
     NoPendingRequest,
+    #[error("BYOP preflight conversation persistence is unavailable: {0}")]
+    ByopPreflightPersistenceUnavailable(String),
+    #[error("Failed to persist BYOP preflight conversation state: {0}")]
+    ByopPreflightPersistenceSend(String),
 }
 
 /// A globally unique ID for a conversation with an AI agent.
@@ -3625,14 +4039,13 @@ pub enum AIAgentSerializedBlockFormat {
 /// Describes the format capabilities of a conversation.
 #[derive(Debug, Clone)]
 pub struct AIAgentConversationFormat {
-    /// Whether there is a Warp MAA task list available for this conversation.
+    /// Whether there is a Zap MAA task list available for this conversation.
     pub has_task_list: bool,
     /// The format of the TUI serialized block, if available.
     pub block_snapshot: Option<AIAgentSerializedBlockFormat>,
 }
 
-/// Metadata for an AI conversation, containing all information from the GraphQL API
-/// except the full task list data.
+/// Metadata for an AI conversation, containing restore data outside the full task list data.
 #[derive(Debug, Clone)]
 pub struct ServerAIConversationMetadata {
     /// The title of the conversation.
@@ -3646,12 +4059,6 @@ pub struct ServerAIConversationMetadata {
 
     /// Usage metadata including token counts, credits spent, etc.
     pub usage: ConversationUsageMetadata,
-
-    /// Server metadata (revision, timestamps, creator info, etc.).
-    pub metadata: crate::cloud_object::ServerMetadata,
-
-    /// Permissions for this conversation (space, guests, link sharing).
-    pub permissions: crate::cloud_object::ServerPermissions,
 
     /// The ID of the associated ambient agent task, if any.
     pub ambient_agent_task_id: Option<crate::ai::ambient_agents::AmbientAgentTaskId>,

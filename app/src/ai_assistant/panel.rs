@@ -30,8 +30,6 @@ use crate::editor::{
 use crate::input_suggestions::{Event as InputSuggestionsEvent, InputSuggestions};
 
 use crate::send_telemetry_from_ctx;
-use crate::server::server_api::ai::AIClient;
-use crate::server::server_api::ServerApi;
 use crate::server::telemetry::{TelemetryEvent, WarpAIActionType};
 use crate::terminal::resizable_data::{ModalType, ResizableData, DEFAULT_WARP_AI_WIDTH};
 use crate::ui_components::blended_colors;
@@ -71,11 +69,8 @@ const PANEL_HORIZONTAL_PADDING: f32 = 6.;
 const EDITOR_MARGIN: f32 = 16.;
 const LOGO_SIZE: f32 = 20.;
 
-const BODY_FONT_SIZE: f32 = 13.;
-const TITLE_FONT_SIZE: f32 = 16.;
-const ZERO_STATE_HELP_TEXT_FONT_SIZE: f32 = 12.;
 
-const ZERO_STATE_HELP_TEXT: &str = "Shift + ctrl + space a block or text selection to ask Warp AI.";
+const ZERO_STATE_HELP_TEXT: &str = "Shift + ctrl + space a block or text selection to ask Zap AI.";
 const SCRIPT_ZERO_STATE_PROMPT: &str = "Write a script to connect to an AWS EC2 instance.";
 const GIT_ZERO_STATE_PROMPT: &str = "How do I undo the most recent commits in git?";
 const FILES_ZERO_STATE_PROMPT: &str = "How do I find all files containing specific text?";
@@ -181,16 +176,12 @@ pub fn init(app: &mut AppContext) {
 }
 
 impl AIAssistantPanelView {
-    pub fn new(
-        server_api: Arc<ServerApi>,
-        ai_client: Arc<dyn AIClient>,
-        ctx: &mut ViewContext<Self>,
-    ) -> Self {
+    pub fn new(ctx: &mut ViewContext<Self>) -> Self {
         let editor = {
             ctx.add_typed_action_view(|ctx| {
                 let appearance = Appearance::as_ref(ctx);
                 let options = EditorOptions {
-                    text: TextOptions::ui_text(Some(BODY_FONT_SIZE), appearance),
+                    text: TextOptions::ui_text(Some(appearance.ui_font_body_large()), appearance),
                     propagate_and_no_op_vertical_navigation_keys:
                         PropagateAndNoOpNavigationKeys::Always,
                     autogrow: true,
@@ -212,8 +203,7 @@ impl AIAssistantPanelView {
         let active_session_model = ActiveSession::handle(ctx);
         ctx.observe(&active_session_model, Self::on_active_session_change);
 
-        let requests_model =
-            ctx.add_model(|ctx| Requests::new(server_api.clone(), ai_client.clone(), ctx));
+        let requests_model = ctx.add_model(Requests::new);
         ctx.subscribe_to_model(&requests_model, move |me, _, event, ctx| {
             me.handle_requests_model_event(event, ctx);
         });
@@ -661,14 +651,14 @@ impl AIAssistantPanelView {
         let time_now = Local::now();
 
         result.push_str(&format!(
-            "## Warp AI Transcript ({})\n\n",
+            "## Zap AI Transcript ({})\n\n",
             time_now.format("%x %l:%M %p")
         ));
 
         for part in transcript {
             result.push_str(&format!("Prompt: {}\n\n", part.raw_user_prompt().trim()));
             result.push_str(&format!(
-                "Warp AI: {}\n\n",
+                "Zap AI: {}\n\n",
                 part.raw_assistant_answer().trim()
             ));
         }
@@ -724,7 +714,7 @@ impl AIAssistantPanelView {
                         .wrappable_text(AI_ASSISTANT_FEATURE_NAME.to_string(), false)
                         .with_style(UiComponentStyles {
                             font_family_id: Some(appearance.ui_font_family()),
-                            font_size: Some(TITLE_FONT_SIZE),
+                            font_size: Some(appearance.ui_font_heading_3()),
                             font_weight: Some(warpui::fonts::Weight::Semibold),
                             font_color: Some(appearance.theme().active_ui_text_color().into()),
                             ..Default::default()
@@ -848,7 +838,7 @@ impl AIAssistantPanelView {
                     Text::new_inline(
                         "Character limit exceeded.",
                         appearance.ui_font_family(),
-                        BODY_FONT_SIZE,
+                        appearance.ui_font_body_large(),
                     )
                     .with_style(Properties {
                         weight: warpui::fonts::Weight::Bold,
@@ -862,7 +852,7 @@ impl AIAssistantPanelView {
                 Text::new_inline(
                     format!("{buffer_len} / {PROMPT_CHARACTER_LIMIT}"),
                     appearance.ui_font_family(),
-                    BODY_FONT_SIZE,
+                    appearance.ui_font_body_large(),
                 )
                 .with_color(appearance.theme().ui_error_color())
                 .finish(),
@@ -976,7 +966,7 @@ impl AIAssistantPanelView {
                                 .wrappable_text(ZERO_STATE_HELP_TEXT.to_string(), true)
                                 .with_style(UiComponentStyles {
                                     font_family_id: Some(appearance.ui_font_family()),
-                                    font_size: Some(ZERO_STATE_HELP_TEXT_FONT_SIZE),
+                                    font_size: Some(appearance.ui_font_body()),
                                     font_color: Some(theme.active_ui_text_color().into()),
                                     ..Default::default()
                                 })

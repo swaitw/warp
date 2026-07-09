@@ -19,10 +19,6 @@ const PLUGIN_KEY: &str = "warp@claude-code-warp";
 const MARKETPLACE_REPO: &str = "warpdotdev/claude-code-warp";
 const MARKETPLACE_NAME: &str = "claude-code-warp";
 
-const PLATFORM_PLUGIN_KEY: &str = "oz-harness-support@claude-code-warp";
-// Note: we will eventually publish this to the same marketplace repo, but are using the internal one as we build out multi-harness.
-const PLATFORM_MARKETPLACE_REPO: &str = "warpdotdev/claude-code-warp-internal";
-
 // Keep in sync with the plugin version in warpdotdev/claude-code-warp.
 // (See the Versioning section of that repo's README.)
 const MINIMUM_PLUGIN_VERSION: &str = "2.0.0";
@@ -122,11 +118,11 @@ impl CliAgentPluginManager for ClaudeCodePluginManager {
     }
 
     fn install_success_message(&self) -> &'static str {
-        "Warp plugin installed. Please run /reload-plugins to activate."
+        "Zap plugin installed. Please run /reload-plugins to activate."
     }
 
     fn update_success_message(&self) -> &'static str {
-        "Warp plugin updated. Please run /reload-plugins to activate."
+        "Zap plugin updated. Please run /reload-plugins to activate."
     }
 
     fn install_instructions(&self) -> &'static PluginInstructions {
@@ -146,18 +142,6 @@ impl CliAgentPluginManager for ClaudeCodePluginManager {
             // No version field means very old plugin.
             None => check_installed(&claude_dir),
         }
-    }
-
-    async fn install_platform_plugin(&self) -> Result<(), PluginInstallError> {
-        let mut log = String::new();
-        self.run_logged(
-            &["plugin", "marketplace", "add", PLATFORM_MARKETPLACE_REPO],
-            &mut log,
-        )
-        .await?;
-        self.run_logged(&["plugin", "install", PLATFORM_PLUGIN_KEY], &mut log)
-            .await?;
-        Ok(())
     }
 }
 
@@ -228,7 +212,7 @@ fn check_installed(claude_dir: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Reads the installed version string for the Warp plugin, if present.
+/// Reads the installed version string for the Zap plugin, if present.
 fn installed_version(claude_dir: &Path) -> Option<String> {
     let plugins_path = claude_dir.join("plugins").join("installed_plugins.json");
     let contents = fs::read_to_string(plugins_path).ok()?;

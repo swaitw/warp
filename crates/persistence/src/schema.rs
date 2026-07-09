@@ -368,6 +368,18 @@ diesel::table! {
 }
 
 diesel::table! {
+    ssh_onekey_credentials (id) {
+        id -> Text,
+        label -> Text,
+        username -> Text,
+        kind -> Text,
+        key_path -> Nullable<Text>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     ssh_servers (node_id) {
         node_id -> Text,
         host -> Text,
@@ -375,7 +387,10 @@ diesel::table! {
         username -> Text,
         auth_type -> Text,
         key_path -> Nullable<Text>,
+        startup_command -> Nullable<Text>,
+        notes -> Nullable<Text>,
         last_connected_at -> Nullable<Timestamp>,
+        credential_id -> Nullable<Text>,
     }
 }
 
@@ -472,6 +487,7 @@ diesel::table! {
         agent_management_filters -> Nullable<Text>,
         left_panel_open -> Nullable<Bool>,
         vertical_tabs_panel_open -> Nullable<Bool>,
+        theme_override -> Nullable<Text>,
     }
 }
 
@@ -487,25 +503,6 @@ diesel::table! {
     workflows (id) {
         id -> Integer,
         data -> Text,
-    }
-}
-
-diesel::table! {
-    workspace_language_server (id) {
-        id -> Integer,
-        workspace_id -> Integer,
-        language_server_name -> Text,
-        enabled -> Text,
-    }
-}
-
-diesel::table! {
-    workspace_metadata (id) {
-        id -> Integer,
-        repo_path -> Text,
-        navigated_ts -> Nullable<Timestamp>,
-        modified_ts -> Nullable<Timestamp>,
-        queried_ts -> Nullable<Timestamp>,
     }
 }
 
@@ -526,6 +523,13 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    sync_meta (key) {
+        key -> Text,
+        value -> Text,
+    }
+}
+
 diesel::joinable!(ambient_agent_panes -> pane_nodes (id));
 diesel::joinable!(app -> windows (active_window_id));
 diesel::joinable!(code_pane_tabs -> code_panes (code_pane_id));
@@ -534,11 +538,11 @@ diesel::joinable!(pane_branches -> pane_nodes (pane_node_id));
 diesel::joinable!(pane_leaves -> pane_nodes (pane_node_id));
 diesel::joinable!(pane_nodes -> tabs (tab_id));
 diesel::joinable!(panels -> tabs (tab_id));
+diesel::joinable!(ssh_servers -> ssh_onekey_credentials (credential_id));
 diesel::joinable!(ssh_servers -> ssh_nodes (node_id));
 diesel::joinable!(tabs -> windows (window_id));
 diesel::joinable!(team_members -> teams (team_id));
 diesel::joinable!(team_settings -> teams (team_id));
-diesel::joinable!(workspace_language_server -> workspace_metadata (workspace_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     ambient_agent_panes,
@@ -553,4 +557,5 @@ diesel::allow_tables_to_appear_in_same_query!(
 diesel::allow_tables_to_appear_in_same_query!(code_pane_tabs, code_panes,);
 diesel::allow_tables_to_appear_in_same_query!(object_metadata, object_permissions,);
 diesel::allow_tables_to_appear_in_same_query!(team_members, team_settings, teams,);
-diesel::allow_tables_to_appear_in_same_query!(workspace_language_server, workspace_metadata,);
+diesel::allow_tables_to_appear_in_same_query!(sync_meta,);
+diesel::allow_tables_to_appear_in_same_query!(ssh_nodes, ssh_onekey_credentials, ssh_servers,);

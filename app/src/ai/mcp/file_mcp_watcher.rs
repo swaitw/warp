@@ -128,9 +128,6 @@ pub struct FileMCPWatcher {
     /// Set of project repository root paths we are already watching for file-based MCP configs.
     /// Used purely for deduplication — we never tear down project watchers during the session.
     project_repo_watchers: HashSet<PathBuf>,
-    /// Tracks how many provider config files remain to be parsed for each cloud environment repo.
-    /// When the count reaches zero, a `CloudEnvironmentScanComplete` event is emitted.
-    cloud_env_pending: HashMap<PathBuf, usize>,
 }
 
 impl FileMCPWatcher {
@@ -150,20 +147,8 @@ impl FileMCPWatcher {
             let file_mcp_tx = file_mcp_tx.clone();
             move |me, event, ctx| {
                 let DetectedRepositoriesEvent::DetectedGitRepo { repository, source } = event;
-                // Register MCP servers for repos the user actively navigated to, and for
-                // repos cloned during cloud agent environment preparation.
-                if matches!(
-                    source,
-                    RepoDetectionSource::TerminalNavigation
-                        | RepoDetectionSource::CloudEnvironmentPrep
-                ) {
+                if matches!(source, RepoDetectionSource::TerminalNavigation) {
                     let repo_path = repository.as_ref(ctx).root_dir().to_local_path_lossy();
-                    if matches!(source, RepoDetectionSource::CloudEnvironmentPrep) {
-                        // Track how many MCP config files remain to be parsed for the cloud environment repo.
-                        let count =
-                            providers_in_scope(repo_path.clone(), repo_path.clone()).count();
-                        me.cloud_env_pending.insert(repo_path.clone(), count);
-                    }
                     me.register_repo_for_file_mcp_watching(repo_path, ctx, file_mcp_tx.clone());
                 }
             }
@@ -182,14 +167,14 @@ impl FileMCPWatcher {
             Self::spawn_config_parse(
                 mcp_config_path.config_path,
                 mcp_config_path.root_path,
-                MCPProvider::Warp,
+                MCPProvider::Zap,
                 ctx,
             );
         }
 
         if let Some(home_dir) = dirs::home_dir() {
             for provider in MCPProvider::iter() {
-                if provider == MCPProvider::Warp {
+                if provider == MCPProvider::Zap {
                     continue;
                 }
                 match home_subdir_to_watch(provider) {
@@ -223,7 +208,6 @@ impl FileMCPWatcher {
             file_mcp_tx,
             home_provider_watchers,
             project_repo_watchers: HashSet::new(),
-            cloud_env_pending: HashMap::new(),
         }
     }
 
@@ -347,7 +331,7 @@ impl FileMCPWatcher {
         };
 
         for provider in MCPProvider::iter() {
-            if provider == MCPProvider::Warp {
+            if provider == MCPProvider::Zap {
                 continue;
             }
             match home_subdir_to_watch(provider) {
@@ -440,7 +424,7 @@ impl FileMCPWatcher {
             || update.moved.keys().any(|target| target.path == config_path);
         self.handle_single_config_update(
             mcp_config_path.root_path,
-            MCPProvider::Warp,
+            MCPProvider::Zap,
             config_path,
             was_deleted,
             was_added,
@@ -568,23 +552,12 @@ impl FileMCPWatcher {
         let config_file_path = config_file_path.to_path_buf();
         let _ = ctx.spawn(
             async move { parse_mcp_config_file(&config_file_path, provider).await },
-            move |me, servers, ctx| {
-                let repo_path_for_countdown = root_path.clone();
+            move |_, servers, ctx| {
                 ctx.emit(FileMCPWatcherEvent::ConfigParsed {
                     root_path,
                     provider,
                     servers,
                 });
-                if let Some(count) = me.cloud_env_pending.get_mut(&repo_path_for_countdown) {
-                    *count = count.saturating_sub(1);
-                    if *count == 0 {
-                        // If we've parsed all MCP config files for the cloud environment repo, emit a `CloudEnvironmentScanComplete` event.
-                        me.cloud_env_pending.remove(&repo_path_for_countdown);
-                        ctx.emit(FileMCPWatcherEvent::CloudEnvMcpScanComplete {
-                            repo_path: repo_path_for_countdown,
-                        });
-                    }
-                }
             },
         );
     }
@@ -679,7 +652,7 @@ async fn parse_mcp_config_file(
                 return vec![];
             }
         },
-        MCPProvider::Claude | MCPProvider::Warp | MCPProvider::Agents => file_contents,
+        MCPProvider::Claude | MCPProvider::Zap | MCPProvider::Agents => file_contents,
     };
 
     let resolved_contents = match substitute_env_vars(&json) {
@@ -732,8 +705,6 @@ pub enum FileMCPWatcherEvent {
         root_path: PathBuf,
         provider: MCPProvider,
     },
-    /// All provider config files for a cloud environment repo have been parsed.
-    CloudEnvMcpScanComplete { repo_path: PathBuf },
 }
 
 impl Entity for FileMCPWatcher {

@@ -8,7 +8,7 @@ use std::time::Duration;
 /// - HTTP/2 adaptive flow-control window
 /// - Connection pool: 4 idle connections per host
 ///
-/// **Note (OpenWarp fork)**: gzip default is **false**. Upstream genai defaults
+/// **Note (Zap fork)**: gzip default is **false**. Upstream genai defaults
 /// to `true`, but for AI streaming endpoints (Anthropic / OpenAI compatible)
 /// `Accept-Encoding: gzip` causes proxies (nginx with `gzip on; gzip_proxied any;`)
 /// to compress SSE responses. SSE over gzip forces the server to flush full
@@ -24,7 +24,12 @@ pub struct WebConfig {
 	pub read_timeout: Option<Duration>,
 	pub default_headers: Option<reqwest::header::HeaderMap>,
 	pub proxy: Option<reqwest::Proxy>,
-	/// Enable gzip response decompression. **Default: false** (OpenWarp fork
+	/// When true, disable automatic proxy discovery (system proxy, env vars).
+	/// Calls `reqwest::ClientBuilder::no_proxy()`. If an explicit `proxy` is
+	/// also set on this config, the explicit proxy still takes effect.
+	/// Default: false.
+	pub no_proxy: bool,
+	/// Enable gzip response decompression. **Default: false** (Zap fork
 	/// — upstream genai default is true). See struct-level docs for rationale.
 	pub gzip: bool,
 	/// Enable TCP_NODELAY (disable Nagle's algorithm). Default: true.
@@ -39,7 +44,8 @@ impl Default for WebConfig {
 			read_timeout: None,
 			default_headers: None,
 			proxy: None,
-			// OpenWarp: gzip off by default — see struct-level docs above.
+			no_proxy: false,
+			// Zap: gzip off by default — see struct-level docs above.
 			gzip: false,
 			tcp_nodelay: true,
 		}
@@ -92,6 +98,30 @@ impl WebConfig {
 		Ok(self)
 	}
 
+	/// Sets proxy from a URL with optional credentials and no-proxy host list.
+	///
+	/// Called from application code where the workspace reqwest version differs from
+	/// this library's reqwest, so all proxy construction is done here within this library.
+	pub fn set_proxy_settings(
+		&mut self,
+		url: &str,
+		username: &str,
+		password: &str,
+		no_proxy: &str,
+	) -> Result<(), reqwest::Error> {
+		let mut proxy = reqwest::Proxy::all(url)?;
+		if !username.is_empty() || !password.is_empty() {
+			proxy = proxy.basic_auth(username, password);
+		}
+		if !no_proxy.trim().is_empty() {
+			if let Some(no_proxy_val) = reqwest::NoProxy::from_string(no_proxy.trim()) {
+				proxy = proxy.no_proxy(Some(no_proxy_val));
+			}
+		}
+		self.proxy = Some(proxy);
+		Ok(())
+	}
+
 	/// Applies this config to a reqwest::ClientBuilder.
 	pub fn apply_to_builder(&self, mut builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
 		if let Some(timeout) = self.timeout {
@@ -105,6 +135,9 @@ impl WebConfig {
 		}
 		if let Some(ref headers) = self.default_headers {
 			builder = builder.default_headers(headers.clone());
+		}
+		if self.no_proxy {
+			builder = builder.no_proxy();
 		}
 		if let Some(ref proxy) = self.proxy {
 			builder = builder.proxy(proxy.clone());
@@ -124,5 +157,32 @@ impl WebConfig {
 			.http2_keep_alive_while_idle(true)
 			.http2_adaptive_window(true);
 		builder
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn set_proxy_settings_valid_http_url() {
+		let mut cfg = WebConfig::default();
+		assert!(cfg.set_proxy_settings("http://proxy.corp:8080", "", "", "").is_ok());
+		assert!(cfg.proxy.is_some());
+	}
+
+	#[test]
+	fn set_proxy_settings_socks5_url() {
+		let mut cfg = WebConfig::default();
+		assert!(cfg.set_proxy_settings("socks5://127.0.0.1:1080", "", "", "").is_ok());
+		assert!(cfg.proxy.is_some());
+	}
+
+	#[test]
+	fn set_proxy_settings_invalid_url_returns_err() {
+		let mut cfg = WebConfig::default();
+		// Malformed IPv6 bracket causes reqwest::Proxy::all to return Err.
+		assert!(cfg.set_proxy_settings("http://[invalid", "", "", "").is_err());
+		assert!(cfg.proxy.is_none());
 	}
 }

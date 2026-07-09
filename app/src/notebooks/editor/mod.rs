@@ -24,7 +24,7 @@ use crate::{
     themes::theme::Fill,
     ui_components::icons::Icon,
     util::color::{ContrastingColor, MinimumAllowedContrast},
-    workflows::{CloudWorkflow, WorkflowSource, WorkflowType},
+    workflows::{WorkflowObject, WorkflowSource, WorkflowType},
 };
 
 mod block_insertion_menu;
@@ -330,7 +330,7 @@ impl<'a> From<&'a BufferBlockStyle> for BlockType {
 /// Wrapper around the shared [`Workflow`] type with additional context for workflows contained
 /// within a notebook.
 ///
-/// This may be a command block that's part of the notebook text, or an embedded Warp Drive workflow.
+/// This may be a command block that's part of the notebook text, or an embedded Zap Drive workflow.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NotebookWorkflow {
     /// Definition of the workflow itself.
@@ -341,7 +341,7 @@ pub struct NotebookWorkflow {
 }
 
 impl NotebookWorkflow {
-    pub fn from_cloud_workflow(cloud_workflow: Box<CloudWorkflow>) -> Self {
+    pub fn from_cloud_workflow(cloud_workflow: Box<WorkflowObject>) -> Self {
         Self {
             source: Some(cloud_workflow.permissions.owner.into()),
             workflow: UserInput::new(Arc::new(WorkflowType::Cloud(cloud_workflow))),

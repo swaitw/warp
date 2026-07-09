@@ -4,14 +4,15 @@ import I18nScript from '../components/I18nScript.astro';
 import Banner from '../components/Banner.astro';
 import LandingNav from '../components/LandingNav.astro';
 import LandingFooter from '../components/LandingFooter.astro';
+import Analytics from '../components/Analytics.astro';
 
 interface Props {
   title?: string;
   description?: string;
 }
 const {
-  title = 'OpenWarp — Bring any AI model into your terminal',
-  description = 'A community fork of Warp that keeps the full terminal experience and opens the AI layer.',
+  title = 'Zap — Bring any AI model into your terminal',
+  description = 'A derivative product built on Warp — a fully open, local-first agentic terminal that brings any AI model into your shell.',
 } = Astro.props;
 ---
 <!doctype html>
@@ -24,13 +25,37 @@ const {
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <Analytics />
+    {/* FOUC 防护:在页面渲染前先设好 theme 与 locale */}
+    <script is:inline>
+      (function () {
+        try {
+          var stored = localStorage.getItem('zap:theme');
+          var theme = stored;
+          if (!theme || (theme !== 'light' && theme !== 'dark')) {
+            theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          }
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (_) {}
+        try {
+          var lc = localStorage.getItem('zap:locale');
+          if (!lc) {
+            var nav = (navigator.language || 'en').toLowerCase();
+            lc = nav.startsWith('zh') ? 'zh' : nav.startsWith('ja') ? 'ja' : 'en';
+          }
+          document.documentElement.setAttribute('data-locale', lc);
+        } catch (_) {}
+      })();
+    </script>
   </head>
   <body data-locale="en">
+    <div class="scroll-progress" aria-hidden="true"><div id="scroll-progress"></div></div>
     <I18nScript />
     <Banner
-      en="Early development · Unofficial fork of Warp · Not affiliated with Warp Inc."
-      zh="早期开发阶段 · Warp 的非官方社区分支 · 与 Warp Inc. 无隶属关系"
+      en="Early development · An independent product built on Warp · Not affiliated with Warp Inc."
+      zh="早期开发阶段 · 基于 Warp 构建的独立产品 · 与 Warp Inc. 无隶属关系"
+      ja="初期開発段階 · Warp を基にした独立プロダクト · Warp Inc. とは無関係"
     />
     <LandingNav />
 
@@ -39,39 +64,74 @@ const {
     <LandingFooter />
 
     <script>
-      // Locale switching, lang pill, in-page nav, tab + copy widgets, scroll fade-in
+      // 语言切换、页内导航、标签页、复制按钮与滚动渐显
       (function () {
+        const htmlLang: Record<string, string> = { en: 'en', zh: 'zh-CN', ja: 'ja' };
+        function normalizeLocale(value: string | null) {
+          const tag = String(value || '').toLowerCase();
+          if (tag.startsWith('zh')) return 'zh';
+          if (tag.startsWith('ja')) return 'ja';
+          if (tag.startsWith('en')) return 'en';
+          return htmlLang[tag] ? tag : null;
+        }
         function applyLocale(l: string) {
-          document.body.dataset.locale = l;
-          document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en';
-          document.querySelectorAll('.lang button').forEach((b) => {
-            b.classList.toggle('active', (b as HTMLElement).getAttribute('data-set-lang') === l);
+          const locale = normalizeLocale(l) || 'en';
+          document.body.dataset.locale = locale;
+          document.documentElement.lang = htmlLang[locale] || 'en';
+          document.querySelectorAll<HTMLElement>('[data-set-lang]').forEach((option) => {
+            const active = option.getAttribute('data-set-lang') === locale;
+            option.classList.toggle('active', active);
+            option.setAttribute('aria-selected', String(active));
           });
-          positionPill();
+        }
+        function closeLocaleMenus() {
+          document.querySelectorAll<HTMLElement>('[data-locale-options]').forEach((menu) => {
+            menu.hidden = true;
+          });
+          document.querySelectorAll<HTMLElement>('[data-locale-trigger]').forEach((trigger) => {
+            trigger.setAttribute('aria-expanded', 'false');
+          });
+          document.querySelectorAll<HTMLElement>('[data-locale-menu]').forEach((menu) => {
+            menu.removeAttribute('data-open');
+          });
         }
         function setLocale(l: string) {
-          // Only persist when the user explicitly chose a language; auto-detection
-          // should keep following the OS / browser on subsequent visits.
-          localStorage.setItem('openwarp:locale', l);
-          applyLocale(l);
-        }
-        function positionPill() {
-          document.querySelectorAll<HTMLElement>('.lang').forEach((lang) => {
-            const a = lang.querySelector<HTMLElement>('button.active');
-            if (!a) return;
-            lang.style.setProperty('--lp-x', a.offsetLeft + 'px');
-            lang.style.setProperty('--lp-w', a.offsetWidth + 'px');
-          });
+          // 仅在用户显式选择语言时持久化;自动检测应在后续访问继续跟随系统/浏览器。
+          const locale = normalizeLocale(l) || 'en';
+          localStorage.setItem('zap:locale', locale);
+          applyLocale(locale);
         }
         const initialLocale = (document.body.dataset.locale as string) || 'en';
         applyLocale(initialLocale);
-        window.addEventListener('load', positionPill);
-        window.addEventListener('resize', positionPill);
-        document.querySelectorAll<HTMLButtonElement>('.lang button').forEach((b) => {
-          b.addEventListener('click', () => setLocale(b.getAttribute('data-set-lang') || 'en'));
+        document.querySelectorAll<HTMLElement>('[data-locale-menu]').forEach((menu) => {
+          const trigger = menu.querySelector<HTMLButtonElement>('[data-locale-trigger]');
+          const options = menu.querySelector<HTMLElement>('[data-locale-options]');
+          if (!trigger || !options) return;
+          trigger.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const shouldOpen = options.hidden;
+            closeLocaleMenus();
+            options.hidden = !shouldOpen;
+            trigger.setAttribute('aria-expanded', String(shouldOpen));
+            if (shouldOpen) menu.setAttribute('data-open', 'true');
+          });
+          menu.querySelectorAll<HTMLButtonElement>('[data-set-lang]').forEach((option) => {
+            option.addEventListener('click', (event) => {
+              event.stopPropagation();
+              setLocale(option.getAttribute('data-set-lang') || 'en');
+              closeLocaleMenus();
+            });
+          });
+        });
+        document.addEventListener('click', (event) => {
+          const target = event.target as Element | null;
+          if (!target?.closest('[data-locale-menu]')) closeLocaleMenus();
+        });
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') closeLocaleMenus();
         });
 
-        // Header scroll shadow
+        // 顶部导航滚动阴影
         const navEl = document.querySelector('header.nav');
         function onScroll() {
           if (navEl) navEl.classList.toggle('scrolled', window.scrollY > 8);
@@ -79,7 +139,19 @@ const {
         document.addEventListener('scroll', onScroll, { passive: true });
         onScroll();
 
-        // Mobile nav toggle
+        // 主题切换
+        function applyTheme(theme) {
+          document.documentElement.setAttribute('data-theme', theme);
+          try { localStorage.setItem('zap:theme', theme); } catch (_) {}
+        }
+        document.querySelectorAll('[data-theme-toggle]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+            applyTheme(cur === 'dark' ? 'light' : 'dark');
+          });
+        });
+
+        // 移动端导航开关
         const toggle = document.querySelector<HTMLButtonElement>('.nav-toggle');
         const links = document.getElementById('primary-nav');
         if (toggle && links) {
@@ -95,7 +167,7 @@ const {
           );
         }
 
-        // Smooth in-page nav
+        // 页内平滑滚动
         document.querySelectorAll<HTMLAnchorElement>('a[href^="#"]').forEach((a) => {
           a.addEventListener('click', (e) => {
             const id = a.getAttribute('href')?.slice(1);
@@ -106,36 +178,7 @@ const {
           });
         });
 
-        // Provider tabs (animated rail)
-        document.querySelectorAll<HTMLElement>('.prov-tabs').forEach((tabs) => {
-          const rail = tabs.querySelector<HTMLElement>('[data-prov-rail]');
-          const moveRail = (b: HTMLButtonElement) => {
-            if (!rail) return;
-            const r = b.getBoundingClientRect();
-            const t = tabs.getBoundingClientRect();
-            rail.style.width = `${r.width}px`;
-            rail.style.transform = `translateX(${r.left - t.left - 4}px)`;
-          };
-          const buttons = tabs.querySelectorAll<HTMLButtonElement>('button');
-          const initial = tabs.querySelector<HTMLButtonElement>('button.active') ?? buttons[0];
-          if (initial) requestAnimationFrame(() => moveRail(initial));
-          window.addEventListener('resize', () => {
-            const a = tabs.querySelector<HTMLButtonElement>('button.active');
-            if (a) moveRail(a);
-          });
-          buttons.forEach((b) => {
-            b.addEventListener('click', () => {
-              const name = b.getAttribute('data-pf');
-              buttons.forEach((x) => x.classList.toggle('active', x === b));
-              moveRail(b);
-              document.querySelectorAll<HTMLElement>('[data-pf-pane]').forEach((p) => {
-                p.hidden = p.getAttribute('data-pf-pane') !== name;
-              });
-            });
-          });
-        });
-
-        // Install tabs
+        // 安装方式标签页
         document.querySelectorAll<HTMLElement>('.install-tabs').forEach((tabs) => {
           tabs.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
             b.addEventListener('click', () => {
@@ -149,13 +192,13 @@ const {
           });
         });
 
-        // Copy buttons
+        // 复制按钮
         document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((btn) => {
           btn.addEventListener('click', () => {
             const pre = btn.closest('.pre-wrap, .code-card')?.querySelector<HTMLElement>('pre.code');
             if (pre && navigator.clipboard) navigator.clipboard.writeText(pre.innerText);
             const prev = btn.textContent;
-            btn.textContent = document.body.dataset.locale === 'zh' ? '已复制' : 'Copied';
+            btn.textContent = document.body.dataset.locale === 'zh' ? '已复制' : document.body.dataset.locale === 'ja' ? 'コピー済み' : 'Copied';
             btn.classList.add('copied');
             setTimeout(() => {
               btn.textContent = prev;
@@ -164,19 +207,41 @@ const {
           });
         });
 
-        // Scroll fade-in
+        // 滚动渐显(支持 [data-stagger] 容器内子项依次错峰出现)
         const io = new IntersectionObserver(
           (entries) => {
             entries.forEach((e) => {
-              if (e.isIntersecting) {
-                e.target.classList.add('in');
-                io.unobserve(e.target);
+              if (!e.isIntersecting) return;
+              const target = e.target as HTMLElement;
+              if (target.hasAttribute('data-stagger')) {
+                target.classList.add('in');
+                const items = Array.from(target.querySelectorAll<HTMLElement>('.stagger-item')).filter((el) => el.offsetParent !== null || el.getClientRects().length > 0);
+                items.forEach((el, i) => {
+                  el.style.transitionDelay = `${Math.min(i * 70, 420)}ms`;
+                  el.classList.add('in');
+                });
+              } else {
+                target.classList.add('in');
               }
+              io.unobserve(target);
             });
           },
           { rootMargin: '0px 0px -10% 0px', threshold: 0.05 },
         );
         document.querySelectorAll('.fade-in').forEach((el) => io.observe(el));
+
+        // 顶部滚动进度条
+        const progress = document.getElementById('scroll-progress');
+        if (progress) {
+          const updateProgress = () => {
+            const h = document.documentElement;
+            const max = h.scrollHeight - h.clientHeight;
+            const pct = max > 0 ? (h.scrollTop / max) * 100 : 0;
+            progress.style.width = `${pct}%`;
+          };
+          document.addEventListener('scroll', updateProgress, { passive: true });
+          updateProgress();
+        }
       })();
     </script>
   </body>

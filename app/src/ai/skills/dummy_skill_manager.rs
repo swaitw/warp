@@ -1,9 +1,37 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use ai::skills::{ParsedSkill, SkillProvider, SkillReference};
+use ai::skills::{ParsedSkill, SkillProvider, SkillReference, SkillScope};
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
 use crate::ai::skills::SkillDescriptor;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SkillManagerEvent {
+    InventoryChanged,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillInventoryDuplicate {
+    pub path: PathBuf,
+    pub name: String,
+    pub description: String,
+    pub content: String,
+    pub provider: SkillProvider,
+    pub scope: SkillScope,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillInventoryItem {
+    pub name: String,
+    pub default_skill: SkillInventoryDuplicate,
+    pub duplicates: Vec<SkillInventoryDuplicate>,
+}
+
+impl SkillInventoryItem {
+    pub fn has_duplicates(&self) -> bool {
+        self.duplicates.len() > 1
+    }
+}
 
 pub struct SkillManager {}
 
@@ -24,11 +52,20 @@ impl SkillManager {
         None
     }
 
+    pub fn list_skill_inventory(&self, ctx: &AppContext) -> Vec<SkillInventoryItem> {
+        let _ = ctx;
+        vec![]
+    }
+
     pub fn reference_for_skill_path(&self, skill_path: &Path) -> SkillReference {
         SkillReference::Path(skill_path.to_path_buf())
     }
 
     pub fn skill_by_reference(&self, _reference: &SkillReference) -> Option<&ParsedSkill> {
+        None
+    }
+
+    pub fn find_skill_by_name(&self, _name: &str) -> Option<&ParsedSkill> {
         None
     }
 
@@ -54,7 +91,7 @@ impl SkillManager {
 }
 
 impl Entity for SkillManager {
-    type Event = ();
+    type Event = SkillManagerEvent;
 }
 
 impl SingletonEntity for SkillManager {}

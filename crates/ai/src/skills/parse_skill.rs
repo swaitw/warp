@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use super::parser::parse_markdown_file;
-use super::skill_provider::{get_provider_for_path, get_scope_for_path, SkillProvider, SkillScope};
+use super::skill_provider::{get_provider_for_path, SkillProvider, SkillScope};
 use thiserror::Error;
 
 const MAX_SKILL_DESCRIPTION_CHARS: usize = 512;
@@ -37,14 +37,14 @@ pub struct ParsedSkill {
     /// The line range where the markdown content (without front matter) is located (1-indexed)
     /// None if there is no front matter (content is the entire file)
     pub line_range: Option<Range<usize>>,
-    /// The provider of the skill (Agents, Claude, Codex, or Warp), determined from the path.
+    /// The provider of the skill (Agents, Claude, Codex, or Zap), determined from the path.
     pub provider: SkillProvider,
-    /// The scope of the skill (home directory vs project directory).
+    /// The scope of the skill.
     pub scope: SkillScope,
 }
 
 impl ParsedSkill {
-    /// Returns true if this skill is bundled with Warp (not a user-editable file).
+    /// Returns true if this skill is bundled with Zap (not a user-editable file).
     pub fn is_bundled(&self) -> bool {
         self.scope == SkillScope::Bundled
     }
@@ -65,14 +65,13 @@ impl Display for ParsedSkill {
 /// * `Result<ParsedSkill>` - Parsed skill with validated name and description
 pub fn parse_skill(path: &Path) -> Result<ParsedSkill> {
     let provider = get_provider_for_path(path).unwrap_or(SkillProvider::Agents);
-    let scope = get_scope_for_path(path);
-    parse_skill_internal(path, provider, scope)
+    parse_skill_internal(path, provider, SkillScope::Project)
 }
 
 /// Parse a bundled skill markdown file.
 ///
 /// Unlike `parse_skill`, this function does not require the path to match a known
-/// skill provider directory. Bundled skills are always assigned `SkillProvider::Warp`
+/// skill provider directory. Bundled skills are always assigned `SkillProvider::Zap`
 /// and `SkillScope::Bundled`.
 ///
 /// # Arguments
@@ -81,7 +80,7 @@ pub fn parse_skill(path: &Path) -> Result<ParsedSkill> {
 /// # Returns
 /// * `Result<ParsedSkill>` - Parsed skill with validated name and description
 pub fn parse_bundled_skill(path: &Path) -> Result<ParsedSkill> {
-    parse_skill_internal(path, SkillProvider::Warp, SkillScope::Bundled)
+    parse_skill_internal(path, SkillProvider::Zap, SkillScope::Bundled)
 }
 
 fn parse_skill_internal(

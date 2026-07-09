@@ -53,7 +53,6 @@ impl From<ParsedSkill> for api::Skill {
 impl From<SkillScope> for api::skill_descriptor::Scope {
     fn from(scope: SkillScope) -> Self {
         let scope_type: api::skill_descriptor::scope::Type = match scope {
-            SkillScope::Home => api::skill_descriptor::scope::Type::Home(()),
             SkillScope::Project => api::skill_descriptor::scope::Type::Project(()),
             SkillScope::Bundled => api::skill_descriptor::scope::Type::Bundled(()),
         };
@@ -67,7 +66,7 @@ impl From<SkillScope> for api::skill_descriptor::Scope {
 impl From<SkillProvider> for api::skill_descriptor::Provider {
     fn from(scope: SkillProvider) -> Self {
         let provider_type: api::skill_descriptor::provider::Type = match scope {
-            SkillProvider::Warp => api::skill_descriptor::provider::Type::Warp(()),
+            SkillProvider::Zap => api::skill_descriptor::provider::Type::Warp(()),
             SkillProvider::Agents => api::skill_descriptor::provider::Type::Agents(()),
             SkillProvider::Claude => api::skill_descriptor::provider::Type::Claude(()),
             SkillProvider::Codex => api::skill_descriptor::provider::Type::Codex(()),
@@ -138,8 +137,8 @@ fn convert_scope(scope: api::skill_descriptor::Scope) -> Result<SkillScope, Skil
     };
 
     match scope_type {
-        api::skill_descriptor::scope::Type::Home(_) => Ok(SkillScope::Home),
-        api::skill_descriptor::scope::Type::Project(_) => Ok(SkillScope::Project),
+        api::skill_descriptor::scope::Type::Home(_)
+        | api::skill_descriptor::scope::Type::Project(_) => Ok(SkillScope::Project),
         api::skill_descriptor::scope::Type::Bundled(_) => Ok(SkillScope::Bundled),
     }
 }
@@ -152,7 +151,7 @@ fn convert_provider(
     };
 
     match provider_type {
-        api::skill_descriptor::provider::Type::Warp(_) => Ok(SkillProvider::Warp),
+        api::skill_descriptor::provider::Type::Warp(_) => Ok(SkillProvider::Zap),
         api::skill_descriptor::provider::Type::Agents(_) => Ok(SkillProvider::Agents),
         api::skill_descriptor::provider::Type::Claude(_) => Ok(SkillProvider::Claude),
         api::skill_descriptor::provider::Type::Codex(_) => Ok(SkillProvider::Codex),

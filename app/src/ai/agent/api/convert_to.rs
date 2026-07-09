@@ -113,18 +113,6 @@ pub(super) fn convert_input(
                     )),
                 });
             }
-            AIAgentInput::CreateEnvironment {
-                context,
-                repo_paths,
-                ..
-            } => {
-                return Ok(api::request::Input {
-                    context: Some(convert_context(context.as_ref())),
-                    r#type: Some(api::request::input::Type::CreateEnvironment(
-                        api::request::input::CreateEnvironment { repo_paths },
-                    )),
-                });
-            }
             AIAgentInput::TriggerPassiveSuggestion {
                 context,
                 attachments,
@@ -442,7 +430,6 @@ fn convert_input_to_user_input(
         AIAgentInput::InitProjectRules { .. } => Err(ConvertToAPITypeError::Ignore),
         AIAgentInput::CodeReview { .. } => Err(ConvertToAPITypeError::Ignore),
         AIAgentInput::FetchReviewComments { .. } => Err(ConvertToAPITypeError::Ignore),
-        AIAgentInput::CreateEnvironment { .. } => Err(ConvertToAPITypeError::Ignore),
         AIAgentInput::InvokeSkill { .. } => Err(ConvertToAPITypeError::Ignore),
         invalid_input => Err(anyhow!(
             "Cannot convert non user query or action result input into API UserInput: {invalid_input:?}"
@@ -488,9 +475,6 @@ impl From<UserQueryMode> for warp_multi_agent_api::UserQueryMode {
             UserQueryMode::Normal => warp_multi_agent_api::UserQueryMode { r#type: None },
             UserQueryMode::Plan => warp_multi_agent_api::UserQueryMode {
                 r#type: Some(warp_multi_agent_api::user_query_mode::Type::Plan(())),
-            },
-            UserQueryMode::Orchestrate => warp_multi_agent_api::UserQueryMode {
-                r#type: Some(warp_multi_agent_api::user_query_mode::Type::Orchestrate(())),
             },
         }
     }
@@ -617,9 +601,6 @@ impl TryFrom<AIAgentActionResult> for api::request::input::user_inputs::user_inp
             }
             AIAgentActionResultType::ReadFiles(read_files_result) => {
                 Some(read_files_result.try_into()?)
-            }
-            AIAgentActionResultType::SearchCodebase(search_codebase_result) => {
-                Some(search_codebase_result.try_into()?)
             }
             AIAgentActionResultType::RequestFileEdits(request_file_edits_result) => {
                 Some(request_file_edits_result.try_into()?)

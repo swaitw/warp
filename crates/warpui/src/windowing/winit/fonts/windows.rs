@@ -195,8 +195,7 @@ impl TextLayoutSystem {
             }
         }
 
-        let fallback_result =
-            loaded_font.get_fallbacks(character.to_string().as_str(), &locale);
+        let fallback_result = loaded_font.get_fallbacks(character.to_string().as_str(), &locale);
 
         // Convert each font-kit fallback `Font` into a UI framework `FontHandle` and load it into
         // fontdb. We deliberately avoid `font_kit::Font::handle()` here: its default impl reads
@@ -221,6 +220,75 @@ impl TextLayoutSystem {
         }));
 
         Ok(fallback_font_vec)
+    }
+
+    /// 启动期预热当前 UI locale 偏好的 CJK 字体族(`preferred_cjk_families_for_locale`),
+    /// 在 `FontDB` 构造后立即同步调用一次。
+    ///
+    /// 修复 zerx-lab/warp#68 「启动后中文字体渲染出错,关闭面板重开才好」的回归:
+    /// PR #62 在 `get_fallback_fonts_for_character` 中按 locale prepend 系统 CJK 字体到
+    /// cosmic-text 的回退链;但首屏首次触发 CJK 回退时,`SystemSource::select_family_by_name`
+    /// 在 Windows DirectWrite cold path 下偶发拿不到字体,prepend 段为空,回退落到
+    /// `IDWriteFontFallback::MapCharacters` 的 cold 输出(可能给出非 locale 偏好的家族)。
+    /// 一旦该结果写入 cosmic-text 的 `font_codepoint_support_info_cache` /
+    /// `shape_run_cache`(FontSystem 实例级、locale 不变不会失效),后续渲染会一直复用错误回退,
+    /// 直到面板销毁/字号/font_id 变化绕过 cache key 才会重走一次。
+    ///
+    /// 预热在这里同步把 preferred 家族灌进 fontdb(`insert_font` 走
+    /// `loaded_fonts` 按 `(path, index)` 去重,后续 `get_fallback_fonts_for_character` 命中时
+    /// 直接返回已存在的 `FontId`,不会重复加载),消除 cold path 的不确定性。
+    ///
+    /// 性能开销:启动期一次性构造 `SystemSource`,并 select、load、insert 一个
+    /// preferred family。`load_font_from_handle` 走 font_kit Path 句柄转 `OwnedFace`,
+    /// fontdb 内部 mmap lazily。在 Windows 11 + 装机自带 YaHei UI 上实测不过数毫秒,
+    /// 且净收益为正 —— 之前 `get_fallback_fonts_for_character` 每次 CJK 字符 cache miss
+    /// 都会新建一次 `SystemSource` 并重新 select/load,预热后这条路径首屏即命中已加载 FontId。
+    ///
+    /// 非 CJK locale 也会预热 Windows 默认简中 UI 字体族,保证英文 UI 下的中文文件名
+    /// 等普通 `Text` 元素首帧就有可用 Han 字形,且不需要枚举全部系统字体。
+    ///
+    /// 失败(系统未装该 family / 句柄加载失败)只记 warn,不影响启动 —— 此时退化到
+    /// DirectWrite 默认回退。
+    pub(crate) fn warm_up_preferred_cjk_families(&self) {
+        let locale = current_fallback_locale();
+        let families = preferred_cjk_families_for_locale(&locale);
+        if families.is_empty() {
+            return;
+        }
+        let source = FKSource::new();
+        let mut warmed_any = false;
+        for family in families {
+            let Ok(fam) = source.select_family_by_name(family) else {
+                // 系统未装该 family(例如纯净版 Windows 11 可能没有 SimSun) —— 继续试下一个。
+                continue;
+            };
+            let mut family_loaded = false;
+            for fk_handle in fam.fonts() {
+                match load_font_from_handle(fk_handle, ValidateFontSupportsEn::No) {
+                    Ok(handle) => {
+                        if self.insert_font(handle).is_ok() {
+                            family_loaded = true;
+                        }
+                    }
+                    Err(err) => {
+                        log::debug!(
+                            "warm_up_preferred_cjk_families: 跳过 {family:?} 的一个 face: {err:?}"
+                        );
+                    }
+                }
+            }
+            if family_loaded {
+                warmed_any = true;
+                // 与 `get_fallback_fonts_for_character` 的「一个 family 命中即 break」行为对齐,
+                // 避免预热超过实际回退会使用的字体集合。
+                break;
+            }
+        }
+        if !warmed_any {
+            log::warn!(
+                "warm_up_preferred_cjk_families: locale={locale:?} 下未能预热任何 CJK family ({families:?}) —— 首屏 CJK 回退将走 DirectWrite cold path"
+            );
+        }
     }
 
     /// Critical section for fetching the font style, weight and family name from fontdb.
@@ -274,28 +342,40 @@ fn load_font_from_handle(
 /// 用于精确判断主语言,避免 `starts_with("ko")` 这类前缀匹配把
 /// `kok-IN`(孔卡尼语)误判为韩文,或 `zha-CN`(壮语)误判为中文。
 fn primary_subtag(lower: &str) -> &str {
-    lower
-        .split(|c: char| c == '-' || c == '_')
-        .next()
-        .unwrap_or("")
+    lower.split(['-', '_']).next().unwrap_or("")
 }
 
+const SIMPLIFIED_CHINESE_CJK_FAMILIES: &[&str] =
+    &["Microsoft YaHei UI", "Microsoft YaHei", "SimSun"];
+const TRADITIONAL_CHINESE_CJK_FAMILIES: &[&str] = &[
+    "Microsoft JhengHei UI",
+    "Microsoft JhengHei",
+    "PMingLiU",
+    "MingLiU",
+];
+const JAPANESE_CJK_FAMILIES: &[&str] = &[
+    "Yu Gothic UI",
+    "Yu Gothic",
+    "Meiryo UI",
+    "Meiryo",
+    "MS Gothic",
+];
+const KOREAN_CJK_FAMILIES: &[&str] = &["Malgun Gothic", "Gulim", "Dotum"];
+
 /// 按 locale 优先返回 Windows 系统 CJK 字体族(按优先级)。
-/// 用于覆盖 DirectWrite 不参考 locale 的 Han 回退(默认偏向 Microsoft YaHei /
-/// 简体中文,这在 Windows 英文 / 开发环境下尤其明显)。
+/// 用于覆盖 DirectWrite 不参考 locale 的 Han 回退。
 ///
 /// 路由同时识别 BCP-47 region 子标签(zh-TW / zh-HK / zh-MO)和 script 子标签
 /// (zh-Hant / zh-Hans,可带 region:zh-Hant-TW 等),调用方无需事先规范化 tag。
+/// 非 CJK locale 使用简中字体族作为稳定兜底,避免英文 UI 下中文文件名首帧缺字。
 fn preferred_cjk_families_for_locale(locale: &str) -> &'static [&'static str] {
     let lower = locale.to_ascii_lowercase();
     match primary_subtag(&lower) {
-        "ja" => &["Yu Gothic UI", "Yu Gothic", "Meiryo UI", "Meiryo", "MS Gothic"],
-        "ko" => &["Malgun Gothic", "Gulim", "Dotum"],
-        "zh" if is_zh_traditional(&lower) => {
-            &["Microsoft JhengHei UI", "Microsoft JhengHei", "PMingLiU", "MingLiU"]
-        }
-        "zh" => &["Microsoft YaHei UI", "Microsoft YaHei", "SimSun"],
-        _ => &[],
+        "ja" => JAPANESE_CJK_FAMILIES,
+        "ko" => KOREAN_CJK_FAMILIES,
+        "zh" if is_zh_traditional(&lower) => TRADITIONAL_CHINESE_CJK_FAMILIES,
+        "zh" => SIMPLIFIED_CHINESE_CJK_FAMILIES,
+        _ => SIMPLIFIED_CHINESE_CJK_FAMILIES,
     }
 }
 
@@ -333,4 +413,52 @@ fn fallback_font_path_handle(font: &font_kit::loaders::directwrite::Font) -> Opt
     let path = file.font_file_path().ok()?;
     let font_index = native.dwrite_font_face.get_index();
     Some(FontHandle::new(path, font_index, font.is_monospace()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        preferred_cjk_families_for_locale, JAPANESE_CJK_FAMILIES, KOREAN_CJK_FAMILIES,
+        SIMPLIFIED_CHINESE_CJK_FAMILIES, TRADITIONAL_CHINESE_CJK_FAMILIES,
+    };
+
+    #[test]
+    fn preferred_cjk_families_defaults_to_simplified_chinese_for_non_cjk_locale() {
+        assert_eq!(
+            preferred_cjk_families_for_locale("en-US"),
+            SIMPLIFIED_CHINESE_CJK_FAMILIES
+        );
+        assert_eq!(
+            preferred_cjk_families_for_locale(""),
+            SIMPLIFIED_CHINESE_CJK_FAMILIES
+        );
+    }
+
+    #[test]
+    fn preferred_cjk_families_respects_cjk_locale() {
+        assert_eq!(
+            preferred_cjk_families_for_locale("zh-CN"),
+            SIMPLIFIED_CHINESE_CJK_FAMILIES
+        );
+        assert_eq!(
+            preferred_cjk_families_for_locale("zh-Hans-US"),
+            SIMPLIFIED_CHINESE_CJK_FAMILIES
+        );
+        assert_eq!(
+            preferred_cjk_families_for_locale("zh-TW"),
+            TRADITIONAL_CHINESE_CJK_FAMILIES
+        );
+        assert_eq!(
+            preferred_cjk_families_for_locale("zh-Hant-HK"),
+            TRADITIONAL_CHINESE_CJK_FAMILIES
+        );
+        assert_eq!(
+            preferred_cjk_families_for_locale("ja-JP"),
+            JAPANESE_CJK_FAMILIES
+        );
+        assert_eq!(
+            preferred_cjk_families_for_locale("ko-KR"),
+            KOREAN_CJK_FAMILIES
+        );
+    }
 }

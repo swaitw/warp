@@ -52,10 +52,7 @@ use parking_lot::FairMutex;
 use warpui::{AppContext, Entity, EntityId, ModelContext, ModelHandle, SingletonEntity};
 
 use crate::{
-    ai::{
-        agent::{AIAgentAction, AIAgentActionId, AIAgentActionResult},
-        get_relevant_files::controller::GetRelevantFilesController,
-    },
+    ai::agent::{AIAgentAction, AIAgentActionId, AIAgentActionResult},
     terminal::{
         model::session::active_session::ActiveSession, model_events::ModelEventDispatcher,
         TerminalModel,
@@ -63,9 +60,8 @@ use crate::{
 };
 
 use self::execute::{
-    ask_user_question::AskUserQuestionExecutor, search_codebase::SearchCodebaseExecutor,
-    BlocklistAIActionExecutor, BlocklistAIActionExecutorEvent, NotExecutedReason,
-    RunningActionPhase, TryExecuteResult,
+    ask_user_question::AskUserQuestionExecutor, BlocklistAIActionExecutor,
+    BlocklistAIActionExecutorEvent, NotExecutedReason, RunningActionPhase, TryExecuteResult,
 };
 
 use super::BlocklistAIHistoryModel;
@@ -259,7 +255,6 @@ impl BlocklistAIActionModel {
         terminal_model: Arc<FairMutex<TerminalModel>>,
         active_session: ModelHandle<ActiveSession>,
         model_event_dispatcher: &ModelHandle<ModelEventDispatcher>,
-        get_relevant_files_controller: ModelHandle<GetRelevantFilesController>,
         terminal_view_id: EntityId,
         ctx: &mut ModelContext<Self>,
     ) -> Self {
@@ -268,7 +263,6 @@ impl BlocklistAIActionModel {
                 terminal_model,
                 active_session.clone(),
                 model_event_dispatcher,
-                get_relevant_files_controller,
                 terminal_view_id,
                 ctx,
             )
@@ -376,13 +370,6 @@ impl BlocklistAIActionModel {
             .as_ref(app)
             .request_file_edits_executor()
             .clone()
-    }
-
-    pub fn search_codebase_executor<'a>(
-        &'a self,
-        app: &'a AppContext,
-    ) -> &'a ModelHandle<SearchCodebaseExecutor> {
-        self.executor.as_ref(app).search_codebase_executor()
     }
 
     pub fn suggest_prompt_executor(
@@ -589,6 +576,39 @@ impl BlocklistAIActionModel {
             .running_actions
             .get(&conversation_id)
             .is_some_and(|running| !running.is_empty());
+        has_pending || has_running
+    }
+
+    pub(super) fn has_unfinished_action_for_tool_call(
+        &self,
+        conversation_id: AIConversationId,
+        task_id: &str,
+        tool_call_id: &str,
+        app: &AppContext,
+    ) -> bool {
+        // 在 action model 里 `AIAgentActionId` 即 tool_call_id,这里只是把入参显式重命名,
+        // 让调用点(controller 的 byop preflight)读起来更直观。
+        let action_id = crate::ai::agent::AIAgentActionId::from(tool_call_id.to_owned());
+        let has_pending = self
+            .pending_actions
+            .get(&conversation_id)
+            .is_some_and(|queue| {
+                queue
+                    .iter()
+                    .any(|action| action.id == action_id && action.task_id.to_string() == task_id)
+            });
+        let has_running = self
+            .running_actions
+            .get(&conversation_id)
+            .is_some_and(|running| running.contains(&action_id))
+            && self
+                .executor
+                .as_ref(app)
+                .async_executing_action(&action_id)
+                .is_some_and(|action| {
+                    action.id == action_id && action.task_id.to_string() == task_id
+                });
+
         has_pending || has_running
     }
 
@@ -872,7 +892,7 @@ impl BlocklistAIActionModel {
     /// (内部走 `is_user_initiated=true` 路径,绕过 `NeedsConfirmation` 检查),
     /// 而不是默认的 `try_to_execute_available_actions`(`is_user_initiated=false`)。
     ///
-    /// 用途:OpenWarp BYOP 路径下 LRC tag-in 场景 — 用户主动 SetInputModeAgent 把
+    /// 用途:Zap BYOP 路径下 LRC tag-in 场景 — 用户主动 SetInputModeAgent 把
     /// 控制权交给 agent,但 alt-screen 全屏下看不到 RequestedCommand 的 Accept 按钮,
     /// controller 检测到 LRC 状态后用本方法绕开手动确认死锁。
     pub(super) fn queue_actions_with_options(
@@ -968,7 +988,7 @@ impl BlocklistAIActionModel {
             }
         }
         if auto_accept && !auto_accept_ids.is_empty() {
-            // OpenWarp:LRC tag-in 自动授权路径。Bypass 默认的
+            // Zap:LRC tag-in 自动授权路径。Bypass 默认的
             // try_to_execute_available_actions(is_user_initiated=false),
             // 直接对每个刚 push 的 action 调用 execute_action(等价用户 Accept)。
             log::info!(
@@ -1125,6 +1145,51 @@ impl BlocklistAIActionModel {
             .into_iter()
             .map(|result| (*result).clone())
             .collect_vec()
+    }
+
+    pub(super) fn finished_action_results_matching(
+        &self,
+        conversation_id: AIConversationId,
+        keys: &HashSet<(String, String)>,
+    ) -> Vec<AIAgentActionResult> {
+        self.finished_action_results
+            .get(&conversation_id)
+            .into_iter()
+            .flat_map(|results| results.iter())
+            .filter(|result| keys.contains(&(result.task_id.to_string(), result.id.to_string())))
+            .map(|result| (**result).clone())
+            .collect_vec()
+    }
+
+    pub(super) fn remove_finished_action_results_matching(
+        &mut self,
+        conversation_id: AIConversationId,
+        keys: &HashSet<(String, String)>,
+    ) -> usize {
+        let mut should_remove_bucket = false;
+        let mut removed = 0;
+        if let Some(results) = self.finished_action_results.get_mut(&conversation_id) {
+            let mut index = 0;
+            while index < results.len() {
+                let key = (
+                    results[index].task_id.to_string(),
+                    results[index].id.to_string(),
+                );
+                if keys.contains(&key) {
+                    let result = results.remove(index);
+                    self.past_action_results.insert(result.id.clone(), result);
+                    removed += 1;
+                } else {
+                    index += 1;
+                }
+            }
+            should_remove_bucket = results.is_empty();
+        }
+        if should_remove_bucket {
+            self.action_order.remove(&conversation_id);
+            self.finished_action_results.remove(&conversation_id);
+        }
+        removed
     }
 
     /// Clears finished action results for a conversation. Used when reverting.

@@ -1,18 +1,17 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, str::FromStr};
 
-use chrono::{DateTime, Local};
-use session_sharing_protocol::common::SessionId;
+use serde::{Deserialize, Serialize};
 use warp_core::ui::appearance::Appearance;
 use warpui::{
     color::ColorU,
     ui_components::components::{UiComponent, UiComponentStyles},
-    AppContext, SingletonEntity, WeakViewHandle,
+    AppContext, SingletonEntity,
 };
 
 use crate::{
-    cloud_object::model::persistence::CloudModel,
-    server::{ids::ServerId, server_api::object::GuestIdentifier},
-    terminal::{shared_session::join_link, TerminalView},
+    auth::UserUid,
+    cloud_object::{model::persistence::ObjectStoreModel, Owner},
+    server::ids::ServerId,
     ui_components::{
         avatar::{Avatar, AvatarContent},
         icons::Icon,
@@ -20,39 +19,163 @@ use crate::{
     workspaces::{user_profiles::UserProfiles, user_workspaces::UserWorkspaces},
 };
 
-// OpenWarp Phase 2a: `dialog/` (cloud sharing modal UI) deleted along with
+// Zap Phase 2a: `dialog/` (cloud sharing modal UI) deleted along with
 // all consumer triggers. `style.rs` is retained because the Subject /
-// UserKind avatar helpers in this module still depend on it. Phase 6 deletes
-// the rest along with `warp_server_client::drive::sharing` re-exports.
+// UserKind avatar helpers in this module still depend on it.
 mod style;
 
-pub use warp_server_client::drive::sharing::{
-    LinkSharingSubjectType, SharingAccessLevel, Subject, TeamKind, UserKind,
-};
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum SharingAccessLevel {
+    View,
+    Edit,
+    Full,
+}
 
-/// Identifier for an object that's shareable via the Warp Drive ACL model. Not all sharing in Warp
+impl SharingAccessLevel {
+    pub fn label(&self) -> &'static str {
+        match self {
+            SharingAccessLevel::View => "Can view",
+            SharingAccessLevel::Edit => "Can edit",
+            SharingAccessLevel::Full => "Full access",
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            SharingAccessLevel::View => "view",
+            SharingAccessLevel::Edit => "edit",
+            SharingAccessLevel::Full => "access",
+        }
+    }
+
+    pub fn can_trash(self) -> bool {
+        self >= SharingAccessLevel::Edit
+    }
+
+    pub fn can_delete(self) -> bool {
+        self >= SharingAccessLevel::Full
+    }
+
+    pub fn can_move_drive(self) -> bool {
+        self >= SharingAccessLevel::Full
+    }
+
+    pub fn can_edit_access(self) -> bool {
+        self >= SharingAccessLevel::Full
+    }
+
+    pub fn to_serializable_value(self) -> &'static str {
+        match self {
+            SharingAccessLevel::View => "VIEW",
+            SharingAccessLevel::Edit => "EDIT",
+            SharingAccessLevel::Full => "FULL",
+        }
+    }
+}
+
+impl FromStr for SharingAccessLevel {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "VIEW" => Ok(Self::View),
+            "EDIT" => Ok(Self::Edit),
+            "FULL" => Ok(Self::Full),
+            _ => Err(anyhow::anyhow!("unknown access level {value}")),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum LinkSharingSubjectType {
+    None,
+    Anyone,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Subject {
+    User(UserKind),
+    #[allow(dead_code)]
+    PendingUser {
+        email: Option<String>,
+    },
+    Team(TeamKind),
+    AnyoneWithLink(LinkSharingSubjectType),
+}
+
+#[derive(Debug, Clone)]
+pub enum UserKind {
+    Account(UserUid),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TeamKind {
+    Team { team_uid: ServerId },
+}
+
+impl TeamKind {
+    pub fn team_uid(&self) -> ServerId {
+        match self {
+            TeamKind::Team { team_uid } => *team_uid,
+        }
+    }
+}
+
+impl Subject {
+    pub fn from_owner(owner: Owner) -> Self {
+        match owner {
+            Owner::User { user_uid } => Subject::User(UserKind::Account(user_uid)),
+            Owner::Team { team_uid } => Subject::Team(TeamKind::Team { team_uid }),
+        }
+    }
+
+    pub fn user_uid(&self) -> Option<UserUid> {
+        match self {
+            Subject::User(user_kind) => match user_kind {
+                UserKind::Account(user_uid) => Some(*user_uid),
+            },
+            Subject::PendingUser { .. } | Subject::Team(_) | Subject::AnyoneWithLink(_) => None,
+        }
+    }
+
+    pub fn is_user(&self, other_uid: UserUid) -> bool {
+        match self {
+            Subject::User(UserKind::Account(user_uid)) => *user_uid == other_uid,
+            Subject::PendingUser { .. } | Subject::Team(_) | Subject::AnyoneWithLink(_) => false,
+        }
+    }
+
+    pub fn team_uid(&self) -> Option<ServerId> {
+        match self {
+            Subject::Team(team_kind) => Some(team_kind.team_uid()),
+            Subject::User(_) | Subject::PendingUser { .. } | Subject::AnyoneWithLink(_) => None,
+        }
+    }
+}
+
+impl PartialEq for UserKind {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Account(self_uid), Self::Account(other_uid)) => self_uid == other_uid,
+        }
+    }
+}
+
+/// Identifier for an object that's shareable via the Zap Drive ACL model. Not all sharing in Zap
 /// is _currently_ tied into this model (e.g. block sharing).
 #[derive(Debug, Clone)]
 pub enum ShareableObject {
-    /// A shareable Warp Drive object.
+    /// A shareable Zap Drive object.
     WarpDriveObject(ServerId),
-    /// A shared terminal session. Shared sessions are identified by the participating terminal
-    /// pane.
-    Session {
-        handle: WeakViewHandle<TerminalView>,
-        session_id: SessionId,
-        started_at: DateTime<Local>,
-    },
 }
 
 impl ShareableObject {
     /// The canonical link to this object.
     pub fn link(&self, app: &AppContext) -> Option<String> {
         match self {
-            ShareableObject::WarpDriveObject(id) => CloudModel::as_ref(app)
+            ShareableObject::WarpDriveObject(id) => ObjectStoreModel::as_ref(app)
                 .get_by_uid(&id.uid())
                 .and_then(|object| object.object_link()),
-            ShareableObject::Session { session_id, .. } => Some(join_link(session_id)),
         }
     }
 }
@@ -86,9 +209,6 @@ pub trait SubjectExt {
     fn email<'a>(&'a self, app: &'a AppContext) -> Option<&'a str>;
     /// Checks if this subject refers to the same user as an email address.
     fn matches_email(&self, email: &str, app: &AppContext) -> bool;
-    /// Converts this subject to a [`GuestIdentifier`] for guest removal.
-    /// Returns `Some` for team or user subjects (that have an email), `None` otherwise.
-    fn to_guest_identifier(&self, app: &AppContext) -> Option<GuestIdentifier>;
 }
 
 impl SubjectExt for Subject {
@@ -133,7 +253,6 @@ impl SubjectExt for Subject {
                 UserKind::Account(user_uid) => UserProfiles::as_ref(app)
                     .profile_for_uid(*user_uid)
                     .map(|profile| profile.email.as_str()),
-                UserKind::SharedSessionParticipant(profile_data) => profile_data.email.as_deref(),
             },
             Subject::PendingUser { email } => email.as_deref(),
             Subject::Team(_) => None,
@@ -144,16 +263,6 @@ impl SubjectExt for Subject {
     fn matches_email(&self, email: &str, app: &AppContext) -> bool {
         self.email(app)
             .is_some_and(|subject_email| subject_email == email)
-    }
-
-    fn to_guest_identifier(&self, app: &AppContext) -> Option<GuestIdentifier> {
-        if let Some(team_uid) = self.team_uid() {
-            return Some(GuestIdentifier::TeamUid(team_uid));
-        }
-        if let Some(email) = self.email(app) {
-            return Some(GuestIdentifier::Email(email.to_owned()));
-        }
-        None
     }
 }
 
@@ -173,9 +282,6 @@ impl UserKindExt for UserKind {
             UserKind::Account(id) => UserProfiles::as_ref(app)
                 .displayable_identifier_for_uid(*id)
                 .map(Cow::from),
-            UserKind::SharedSessionParticipant(participant_info) => {
-                Some(participant_info.display_name.clone().into())
-            }
         }
     }
 
@@ -190,18 +296,6 @@ impl UserKindExt for UserKind {
                     None
                 }
             }
-            UserKind::SharedSessionParticipant(participant_info) => {
-                // Only show the user's email if it's not the display name.
-                if participant_info
-                    .email
-                    .as_ref()
-                    .is_some_and(|email| email == &participant_info.display_name)
-                {
-                    None
-                } else {
-                    participant_info.email.clone()
-                }
-            }
         }
     }
 
@@ -214,15 +308,6 @@ impl UserKindExt for UserKind {
                 },
                 None => AvatarContent::DisplayName(String::new()),
             },
-            UserKind::SharedSessionParticipant(participant_info) => {
-                match &participant_info.photo_url {
-                    Some(url) => AvatarContent::Image {
-                        url: url.clone(),
-                        display_name: participant_info.display_name.clone(),
-                    },
-                    None => AvatarContent::DisplayName(participant_info.display_name.clone()),
-                }
-            }
         }
     }
 }
@@ -239,7 +324,6 @@ impl TeamKindExt for TeamKind {
             TeamKind::Team { team_uid, .. } => UserWorkspaces::as_ref(app)
                 .team_from_uid(*team_uid)
                 .map(|team| team.name.clone()),
-            TeamKind::SharedSessionTeam { name, .. } => Some(name.clone()),
         }
     }
 }

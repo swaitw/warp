@@ -9,15 +9,16 @@ use warp_core::user_preferences::GetUserPreferences as _;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity, UpdateModel};
 
 use crate::ai::blocklist::telemetry_banner::should_collect_ai_ugc_telemetry;
-use crate::auth::auth_state::AuthState;
+use crate::auth::AuthState;
 use crate::auth::AuthStateProvider;
-use crate::cloud_object::model::persistence::CloudModel;
+use crate::auth::SyncedUserSettings;
+use crate::cloud_object::model::persistence::ObjectStoreModel;
 use crate::report_error;
-use crate::server::cloud_objects::update_manager::UpdateManager;
-#[cfg(test)]
-use crate::server::server_api::auth::MockAuthClient;
-use crate::server::server_api::auth::{AuthClient, SyncedUserSettings};
-use crate::server::server_api::ServerApiProvider;
+// Zap Wave 3-1:`AuthClient` trait + `MockAuthClient` 随 server_api/auth.rs
+// 整件物理删,`SyncedUserSettings` 迁到 `crate::auth`。
+// Zap Wave 3-1:`ServerApiProvider` 不再被本文件使用 ——
+// `auth_client = ServerApiProvider::as_ref(ctx).get_auth_client()` 的所有调用点
+// 随 AuthClient trait 一同物理删。
 use crate::terminal::safe_mode_settings::SafeModeSettings;
 
 use settings::{
@@ -27,7 +28,7 @@ use settings::{
 
 use serde::{Deserialize, Serialize};
 
-use super::cloud_preferences_syncer::CloudPreferencesSyncer;
+// Zap(本地化,Phase 5):`PreferencesSyncer` 已物理删除。
 use crate::workspaces::workspace::EnterpriseSecretRegex;
 
 pub trait RegexDisplayInfo {
@@ -92,9 +93,9 @@ impl PartialEq for CustomSecretRegex {
 
 impl settings_value::SettingsValue for CustomSecretRegex {}
 
-// openWarp 闭源遥测剥离:三个隐私开关默认值 true → false。原 Warp 默认开是商业产品的
-// "选择退出"模式;openWarp 已物理切断 Rudder/Sentry/cloud-conversation-storage 三条
-// 外发链路,默认开关只会在新用户面前显示 ON 但实际不外发,造成认知割裂。改为默认 OFF。
+// openWarp 闭源遥测剥离:三个隐私开关默认值 true → false。原 Zap 默认开是商业产品的
+// "选择退出"模式;Zap 已物理切断遥测、崩溃上报、云端对话存储三条外发链路,
+// 默认开关只会在新用户面前显示 ON 但实际不外发,造成认知割裂。改为默认 OFF。
 define_settings_group!(WarpDrivePrivacySettings, settings: [
     is_telemetry_enabled: IsTelemetryEnabled {
         type: bool,
@@ -140,7 +141,9 @@ maybe_define_setting!(HasInitializedDefaultSecretRegexes, group: PrivacySettings
 /// reporting and/or telemetry).
 pub struct PrivacySettings {
     auth_state: Arc<AuthState>,
-    auth_client: Arc<dyn AuthClient>,
+    // Zap Wave 3-1:`auth_client: Arc<dyn AuthClient>` 字段随 AuthClient trait
+    // 一同物理删。原用于在 telemetry / crash reporting 设置变动时向服务端
+    // 同步,Zap 已不再同步任何服务端设置。
     pub is_telemetry_enabled: bool,
     pub is_crash_reporting_enabled: bool,
     pub has_initialized_default_secret_regexes: HasInitializedDefaultSecretRegexes,
@@ -228,7 +231,6 @@ impl PrivacySettings {
     /// `on_user_fetched` after the user's auth state is established.
     fn new(ctx: &mut ModelContext<Self>) -> Self {
         let auth_state = AuthStateProvider::as_ref(ctx).get().clone();
-        let auth_client = ServerApiProvider::as_ref(ctx).get_auth_client();
 
         // openWarp 闭源遥测剥离:user_preferences 缺值时也默认 false,与 setting macro 默认一致。
         let is_telemetry_enabled: bool = ctx
@@ -246,7 +248,7 @@ impl PrivacySettings {
             .unwrap_or(false);
 
         // Make sure the user-preferences stores match what's in memory.
-        // Needed for warp drive preferences to work and no harm in doing in general.
+        // Needed for zap drive preferences to work and no harm in doing in general.
         let _ = ctx.private_user_preferences().write_value(
             TELEMETRY_ENABLED_DEFAULTS_KEY,
             serde_json::to_string(&is_telemetry_enabled)
@@ -258,7 +260,7 @@ impl PrivacySettings {
                 .expect("is_crash_reporting_enabled is a boolean."),
         );
 
-        // Listen for changes to the cloud model and update ourselves when they happen.
+        // Listen for changes to the object store and update ourselves when they happen.
         ctx.subscribe_to_model(&WarpDrivePrivacySettings::handle(ctx), |me, event, ctx| {
             let privacy_settings = WarpDrivePrivacySettings::as_ref(ctx);
             match event {
@@ -284,7 +286,6 @@ impl PrivacySettings {
 
         Self {
             auth_state,
-            auth_client,
             is_crash_reporting_enabled,
             is_telemetry_enabled,
             user_secret_regex_list,
@@ -361,12 +362,9 @@ impl PrivacySettings {
     }
 
     /// Fetch the user's privacy settings from the server if any or update the server settings.
-    pub fn fetch_or_update_settings(&self, ctx: &mut ModelContext<Self>) {
-        let auth_client_clone = self.auth_client.clone();
-        let _ = ctx.spawn(
-            async move { auth_client_clone.get_user_settings().await },
-            Self::initialize_from_fetched_settings_or_update_settings,
-        );
+    pub fn fetch_or_update_settings(&self, _ctx: &mut ModelContext<Self>) {
+        // Zap Wave 3-1:原调 `auth_client.get_user_settings().await` 随 AuthClient
+        // 整 trait 物理删。Zap 本地化后隱私设置仅本地保存,入口 no-op。
     }
 
     /// Initializes state from the [`SyncedUserSettings`] fetched from the server, if any.
@@ -432,7 +430,6 @@ impl PrivacySettings {
     pub fn mock(_ctx: &mut ModelContext<Self>) -> Self {
         Self {
             auth_state: Arc::new(AuthState::new_for_test()),
-            auth_client: Arc::new(MockAuthClient::new()),
             is_crash_reporting_enabled: true,
             is_telemetry_enabled: true,
             user_secret_regex_list: CustomSecretRegexList::new(None),
@@ -481,10 +478,10 @@ impl PrivacySettings {
             });
 
             if self.auth_state.is_logged_in() {
-                let auth_client = self.auth_client.clone();
-                let _ = ctx.spawn(
-                    async move { auth_client.set_is_crash_reporting_enabled(new_value).await },
-                    |_, _, _| (),
+                // Zap Wave 3-1:原调 `auth_client.set_is_crash_reporting_enabled(new_value)`
+                // 随 AuthClient 一同物理删。Zap 本地仅更新本地状态。
+                log::debug!(
+                    "set_is_crash_reporting_enabled 远端同步已本地化,new_value={new_value}"
                 );
             }
             ctx.emit(PrivacySettingsChangedEvent::UpdateIsCrashReportingEnabled {
@@ -515,11 +512,8 @@ impl PrivacySettings {
             });
 
             if self.auth_state.is_logged_in() {
-                let auth_client = self.auth_client.clone();
-                let _ = ctx.spawn(
-                    async move { auth_client.set_is_telemetry_enabled(new_value).await },
-                    |_, _, _| (),
-                );
+                // Zap Wave 3-1:同上。
+                log::debug!("set_is_telemetry_enabled 远端同步已本地化,new_value={new_value}");
             }
             ctx.emit(PrivacySettingsChangedEvent::UpdateIsTelemetryEnabled {
                 old_value,
@@ -607,36 +601,31 @@ impl PrivacySettings {
         }
     }
 
-    /// openWarp 闭源遥测剥离 P3:原会调 `auth_client.update_user_settings(snapshot)`
-    /// 把 telemetry_enabled / crash_reporting_enabled 等隐私设置同步到 Warp 官方
-    /// GraphQL `UpdateUserSettings` mutation(指向 app.warp.dev)。这是云端 settings
-    /// 同步链路:本地关掉遥测后,如果云端拉到旧值会再被覆盖回 true。剥离后纯本地落盘
-    /// (调用方仍会写 settings.toml + warp_drive 本地缓存),无外发。
-    /// `update_user_settings` mutation + `auth_client` 字段暂留死代码,P4 物理清理。
+    /// openWarp 闭源遥测剥离 P3:隐私设置不再同步到上游云端 settings。
+    /// 剥离后纯本地落盘(调用方仍会写 settings.toml + warp_drive 本地缓存),无外发。
     fn update_server_with_local_settings(&self, _ctx: &mut ModelContext<Self>) {}
 
-    /// We wait until warp drive prefs have loaded and then either
+    /// We wait until zap drive prefs have loaded and then either
     /// 1) use them as the data store for is_telemetry_enabled and is_crash_reporting_enabled, if those
-    ///    values are set in warp drive, or
-    /// 2) update the warp drive prefs to match the values from the legacy user_settings endpoint so
-    ///    that we can use warp drive prefs going forward.
+    ///    values are set in zap drive, or
+    /// 2) update the zap drive prefs to match the values from the legacy user_settings endpoint so
+    ///    that we can use zap drive prefs going forward.
     pub fn maybe_sync_with_warp_drive_prefs(&mut self, ctx: &mut ModelContext<Self>) {
-        // Wait for cloud objects to load, and, if telemetry & crash reporting are synced to warp drive
-        // initialize from the warp drive values.
-        let update_manager = UpdateManager::as_ref(ctx);
+        // Wait for cloud objects to load, and, if telemetry & crash reporting are synced to zap drive
+        // initialize from the zap drive values.
         ctx.spawn(
-            update_manager.initial_load_complete(),
+            ObjectStoreModel::as_ref(ctx).initial_load_complete(),
             Self::handle_warp_drive_objects_loaded,
         );
     }
 
     fn handle_warp_drive_objects_loaded(&mut self, _: (), ctx: &mut ModelContext<Self>) {
         self.initialize_default_regexes_once(ctx);
-        // Check if the warp drive preferences are set. If they are, and telemetry and crash reporting
-        // are set as warp drive prefs, then use those.  Otherwise, update the warp drive prefs to match
-        // the values from the legacy user_settings endpoint so that we can use warp drive prefs going forward.
-        let cloud_model = CloudModel::as_ref(ctx);
-        let cloud_prefs = cloud_model.get_all_cloud_preferences_by_storage_key();
+        // Check if the zap drive preferences are set. If they are, and telemetry and crash reporting
+        // are set as zap drive prefs, then use those.  Otherwise, update the zap drive prefs to match
+        // the values from the legacy user_settings endpoint so that we can use zap drive prefs going forward.
+        let object_store_model = ObjectStoreModel::as_ref(ctx);
+        let cloud_prefs = object_store_model.get_all_preferences_by_storage_key();
         let cloud_telemetry_value =
             cloud_prefs
                 .get(IsTelemetryEnabled::storage_key())
@@ -660,7 +649,7 @@ impl PrivacySettings {
         match (cloud_telemetry_value, cloud_crash_reporting_value) {
             (Some(is_telemetry_enabled), Some(is_crash_reporting_enabled)) => {
                 log::info!(
-                    "Warp Drive privacy preferences are set, using those for telemetry={is_telemetry_enabled}, \
+                    "Zap Drive privacy preferences are set, using those for telemetry={is_telemetry_enabled}, \
                     crash_reporting={is_crash_reporting_enabled}"
                 );
                 self.set_is_telemetry_enabled(is_telemetry_enabled, ctx);
@@ -668,7 +657,7 @@ impl PrivacySettings {
             }
             _ => {
                 log::info!(
-                    "Warp Drive privacy preferences are not set, syncing local PrivacySettings values to \
+                    "Zap Drive privacy preferences are not set, syncing local PrivacySettings values to \
                     WarpDrivePrivacySettings and cloud. telemetry={}, crash_reporting={}",
                     self.is_telemetry_enabled,
                     self.is_crash_reporting_enabled
@@ -681,15 +670,8 @@ impl PrivacySettings {
                         .is_crash_reporting_enabled
                         .set_value(self.is_crash_reporting_enabled, ctx));
                 });
-                CloudPreferencesSyncer::handle(ctx).update(ctx, |syncer, ctx| {
-                    syncer.maybe_sync_local_prefs_to_cloud(
-                        vec![
-                            IsTelemetryEnabled::storage_key().to_string(),
-                            IsCrashReportingEnabled::storage_key().to_string(),
-                        ],
-                        ctx,
-                    );
-                });
+                // Zap(本地化,Phase 5):原 `PreferencesSyncer::maybe_sync_local_prefs_to_cloud`
+                // 同步本地隐私设置到云端,随同步器物理删除。本地设置仅写入 sqlite。
             }
         }
     }

@@ -3,7 +3,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
+    path::PathBuf,
     str::FromStr,
     sync::Arc,
 };
@@ -29,7 +29,6 @@ use crate::{
         },
         document::ai_document_model::AIDocumentId,
         llms::{LLMPreferences, LLMPreferencesEvent},
-        outline::RepoOutlines,
     },
     terminal::{
         event::{BlockCompletedEvent, BlockType},
@@ -52,12 +51,12 @@ pub struct PendingFile {
 }
 
 /// 单个 text-like PendingFile inline 进 prompt 的硬上限,超出直接 skip(避免拉爆 context)。
-/// 与 `attachment_utils::MAX_ATTACHMENT_SIZE_BYTES`(10MB,用于 cloud upload)区别:
-/// 那个是上传字节上限,这个是 inline 进 LLM prompt 的 token 友好上限。
+/// 与 `attachment_utils::MAX_ATTACHMENT_SIZE_BYTES`(10MB,用于二进制附件)区别:
+/// 那个是字节上限,这个是 inline 进 LLM prompt 的 token 友好上限。
 const MAX_INLINE_TEXT_FILE_BYTES: usize = 256 * 1024;
 
 /// 单个 binary PendingFile(PDF / 音频 / 其它)送进 BYOP `Binary` ContentPart 的硬上限。
-/// 跟 cloud upload 用同一个 10MB 上限对齐,避免一次请求 base64 后撑爆 HTTP body。
+/// 跟二进制附件使用同一个 10MB 上限,避免一次请求 base64 后撑爆 HTTP body。
 const MAX_INLINE_BINARY_FILE_BYTES: usize = 10 * 1024 * 1024;
 
 /// 判断 PendingFile 是否"看起来是文本",决定 P0 是否 inline。
@@ -362,6 +361,9 @@ pub struct BlocklistAIContextModel {
     /// Storage for diff hunk attachments that can be referenced in queries
     pending_inline_diff_hunk_attachments: HashMap<String, AIAgentAttachment>,
 
+    /// 输入框中以可见 @名称 展示的上下文附件。
+    pending_inline_at_context_attachments: HashMap<String, AIAgentAttachment>,
+
     /// The pending query could be new, which means it starts a new conversation, or follow-up, which means
     /// it continues the selected conversation.
     ///
@@ -551,6 +553,7 @@ impl BlocklistAIContextModel {
             terminal_view_id,
             agent_view_controller,
             pending_inline_diff_hunk_attachments: Default::default(),
+            pending_inline_at_context_attachments: Default::default(),
             pending_document_id: None,
             auto_attached_agent_view_user_block_ids: Vec::new(),
             queue_next_prompt_enabled: false,
@@ -579,6 +582,7 @@ impl BlocklistAIContextModel {
             terminal_view_id,
             agent_view_controller,
             pending_inline_diff_hunk_attachments: Default::default(),
+            pending_inline_at_context_attachments: Default::default(),
             pending_document_id: None,
             auto_attached_agent_view_user_block_ids: Vec::new(),
             queue_next_prompt_enabled: false,
@@ -592,6 +596,7 @@ impl BlocklistAIContextModel {
         self.set_pending_context_selected_text(None, true, ctx);
         self.clear_pending_attachments(ctx);
         self.clear_diff_hunk_attachments();
+        self.clear_at_context_attachments();
         self.set_pending_document(None, ctx);
         self.auto_attached_agent_view_user_block_ids.clear();
     }
@@ -599,7 +604,9 @@ impl BlocklistAIContextModel {
     /// Returns `true` if the next AI query has any context that should force the input to be
     /// locked in AI mode (skipping NLD): a pending image or file attachment, or a pending block.
     pub fn has_locking_attachment(&self) -> bool {
-        !self.pending_context_block_ids.is_empty() || !self.pending_attachments.is_empty()
+        !self.pending_context_block_ids.is_empty()
+            || !self.pending_attachments.is_empty()
+            || !self.pending_inline_at_context_attachments.is_empty()
     }
 
     /// Returns the set `BlockId`s corresponding to blocks to be included as context with the next
@@ -657,20 +664,21 @@ impl BlocklistAIContextModel {
     /// If false, excludes these user-specific contexts but includes everything else.
     pub fn pending_context(&self, app: &AppContext, is_user_query: bool) -> Vec<AIAgentContext> {
         let pwd = self.current_pwd();
-        let is_pwd_indexed = if cfg!(feature = "agent_mode_evals") {
-            // In evals, we want to disable file outline based search.
-            false
-        } else {
-            pwd.as_ref()
-                .is_some_and(|pwd| RepoOutlines::as_ref(app).is_directory_indexed(Path::new(&pwd)))
-        };
+        // Zap:原会查 RepoOutlines 判断当前 pwd 下仓库是否已建索引,以便
+        // 可选择“使用代码库语义搜索”作为上下文。现 outline 已下线,总是为 false。
+        let is_pwd_indexed = false;
 
         let project_rules = if let Some(pwd) = pwd.clone().and_then(|path| {
             PathBuf::from_str(&path)
                 .ok()
                 .and_then(|s| s.canonicalize().ok())
         }) {
-            ProjectContextModel::as_ref(app).find_applicable_rules(&pwd)
+            // 优先走正常路径(零 IO,异步索引完成后从 HashMap 拿结果);
+            // 未就绪时同步 fast-path stat + 读 cwd/祖先目录的规则文件。
+            // 对齐 opencode `findUp` 模式,保证 cd 后立即发问也能拿到 AGENTS.md 。
+            // fast-path 内部有 cache + 时间预算,UI 绝不阻塞。详见
+            // `crates/ai/src/project_context/model.rs::find_rules_with_fast_path`。
+            ProjectContextModel::as_ref(app).find_rules_with_fast_path(&pwd)
         } else {
             None
         };
@@ -755,7 +763,7 @@ impl BlocklistAIContextModel {
                 }
             }
 
-            // OpenWarp P0/P1: 把 PendingFile 同步读入并以 AIAgentContext::File 推进 context。
+            // Zap P0/P1: 把 PendingFile 同步读入并以 AIAgentContext::File 推进 context。
             // - text-like (UTF-8 解析成功) → StringContent → 走 user_context.rs::render_file
             //   渲染成 <file> XML 块(BYOP)/ api::input_context::File(warp-own)
             // - binary (PDF / 音频 / 其它) → BinaryContent → 走 BYOP user_context Binary
@@ -1214,6 +1222,84 @@ impl BlocklistAIContextModel {
     /// Clear all diff hunk attachments (should be called after each request)
     pub fn clear_diff_hunk_attachments(&mut self) {
         self.pending_inline_diff_hunk_attachments.clear();
+    }
+
+    /// 登记一个可在后续 query 中按 @名称 引用的上下文附件。
+    pub fn register_at_context_attachment(
+        &mut self,
+        reference: String,
+        attachment: AIAgentAttachment,
+    ) {
+        self.pending_inline_at_context_attachments
+            .insert(reference, attachment);
+    }
+
+    /// 返回按可见引用字符串索引的 @ 上下文附件。
+    pub fn pending_at_context_attachments(&self) -> &HashMap<String, AIAgentAttachment> {
+        &self.pending_inline_at_context_attachments
+    }
+
+    fn at_context_references_in_query(&self, query: &str) -> HashSet<String> {
+        let mut references = self
+            .pending_inline_at_context_attachments
+            .keys()
+            .collect::<Vec<_>>();
+        references
+            .sort_by(|left, right| right.len().cmp(&left.len()).then_with(|| left.cmp(right)));
+
+        let mut used_ranges = Vec::new();
+        let mut matched_references = HashSet::new();
+
+        for reference in references {
+            let mut search_start = 0;
+            while search_start <= query.len() {
+                let Some(index) = query[search_start..].find(reference.as_str()) else {
+                    break;
+                };
+                let start = search_start + index;
+                let end = start + reference.len();
+                let overlaps_used_range = used_ranges
+                    .iter()
+                    .any(|range: &std::ops::Range<usize>| start < range.end && end > range.start);
+
+                if !overlaps_used_range {
+                    used_ranges.push(start..end);
+                    matched_references.insert(reference.clone());
+                }
+
+                search_start = end;
+            }
+        }
+
+        matched_references
+    }
+
+    /// 返回当前 query 中仍然存在的 @ 上下文附件。
+    pub fn referenced_at_context_attachments(
+        &self,
+        query: &str,
+    ) -> HashMap<String, AIAgentAttachment> {
+        self.at_context_references_in_query(query)
+            .into_iter()
+            .filter_map(|reference| {
+                self.pending_inline_at_context_attachments
+                    .get(&reference)
+                    .cloned()
+                    .map(|attachment| (reference, attachment))
+            })
+            .collect()
+    }
+
+    /// 删除输入框中已经不存在的 @ 上下文附件。
+    pub fn retain_at_context_attachments_in_query(&mut self, query: &str) {
+        let references = self.at_context_references_in_query(query);
+        self.pending_inline_at_context_attachments
+            .retain(|reference, _attachment| references.contains(reference));
+    }
+
+    /// 清空所有 @ 上下文附件。
+    pub fn clear_at_context_attachments(&mut self) {
+        self.pending_inline_at_context_attachments.clear();
     }
 
     /// Appends attachments to the pending list.

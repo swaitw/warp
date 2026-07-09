@@ -6,11 +6,18 @@ use std::sync::Arc;
 
 use crate::ai::agent::conversation::ConversationStatus;
 use parking_lot::FairMutex;
+use warp_multi_agent_api as api;
 use warp_terminal::model::escape_sequences::{BRACKETED_PASTE_END, BRACKETED_PASTE_START};
 use warpui::{notification::UserNotification, Presenter, WindowInvalidation};
 
+use crate::ai::agent::conversation::{AIConversation, AIConversationId};
 use crate::ai::agent::task::TaskId;
-use crate::ai::blocklist::block::cli_controller::UserTakeOverReason;
+#[cfg(windows)]
+use crate::ai::blocklist::block::cli::CLISubagentViewEvent;
+use crate::ai::blocklist::block::cli_controller::{
+    CLISubagentEvent, LongRunningCommandControlState, UserTakeOverReason,
+};
+use crate::ai::blocklist::SerializedBlockListItem;
 use warpui::App;
 
 use crate::pane_group::focus_state::PaneGroupFocusState;
@@ -46,10 +53,18 @@ use crate::terminal::block_list_viewport::{ClampingMode, ScrollLines};
 use crate::terminal::session_settings::AgentToolbarChipSelection;
 use crate::view_components::find::FindWithinBlockState;
 
+use crate::persistence::model::AgentConversationData;
 use crate::terminal::model::ansi::{self, InitShellValue};
 use crate::terminal::model::ansi::{BootstrappedValue, PreexecValue};
+use crate::terminal::model::block::{
+    AgentInteractionMetadata, AgentViewVisibility, BlockId, SerializedAIMetadata, SerializedBlock,
+};
 use crate::terminal::model::blocks::{insert_block, TotalIndex};
 use crate::terminal::model::terminal_model::WithinBlock;
+use crate::terminal::view::load_ai_conversation::RestoredAIConversation;
+use crate::test_util::ai_agent_tasks::{
+    create_api_subtask, create_api_task, create_message, create_subagent_tool_call_message,
+};
 
 use crate::terminal::{MockTerminalManager, TerminalManager, TerminalModel};
 use crate::test_util::terminal::initialize_app_for_terminal_view;
@@ -78,6 +93,722 @@ impl TerminalManager for TestTerminalManager {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
+}
+
+fn tool_call_message_with_tool_for_test(
+    id: &str,
+    call_id: &str,
+    tool: api::message::tool_call::Tool,
+) -> api::Message {
+    api::Message {
+        id: id.to_string(),
+        task_id: "root-task".to_string(),
+        server_message_data: String::new(),
+        citations: vec![],
+        message: Some(api::message::Message::ToolCall(api::message::ToolCall {
+            tool_call_id: call_id.to_string(),
+            tool: Some(tool),
+        })),
+        request_id: "request-1".to_string(),
+        timestamp: None,
+    }
+}
+
+fn tool_call_result_message_with_result_for_test(
+    id: &str,
+    call_id: &str,
+    result: api::message::tool_call_result::Result,
+) -> api::Message {
+    api::Message {
+        id: id.to_string(),
+        task_id: "root-task".to_string(),
+        server_message_data: String::new(),
+        citations: vec![],
+        message: Some(api::message::Message::ToolCallResult(
+            api::message::ToolCallResult {
+                tool_call_id: call_id.to_string(),
+                result: Some(result),
+                context: None,
+            },
+        )),
+        request_id: "request-1".to_string(),
+        timestamp: None,
+    }
+}
+
+fn run_shell_command_tool_for_test(command: &str) -> api::message::tool_call::Tool {
+    use api::message::tool_call::run_shell_command::WaitUntilCompleteValue;
+
+    // CLI subagent 会挂在这条 shell command block 上；字段只保留序列化所需的最小值。
+    api::message::tool_call::Tool::RunShellCommand(api::message::tool_call::RunShellCommand {
+        command: command.to_string(),
+        is_read_only: true,
+        uses_pager: false,
+        is_risky: false,
+        citations: vec![],
+        wait_until_complete_value: Some(WaitUntilCompleteValue::WaitUntilComplete(true)),
+        risk_category: 0,
+    })
+}
+
+#[allow(deprecated)]
+fn build_restored_conversation_with_cli_subagent_for_test(
+    block_id: BlockId,
+    task_id: TaskId,
+) -> AIConversation {
+    // 构造包含 CLI subagent tool call 的历史 conversation，模拟普通 /agent 历史恢复数据。
+    let root_task_id = "root-task";
+    let block_id_string = String::from(block_id);
+    let task_id_string = String::from(task_id);
+    let root_task = create_api_task(
+        root_task_id,
+        vec![
+            tool_call_message_with_tool_for_test(
+                "run-shell-call",
+                "run-shell-call-1",
+                run_shell_command_tool_for_test("ssh jump"),
+            ),
+            tool_call_result_message_with_result_for_test(
+                "run-shell-result",
+                "run-shell-call-1",
+                api::message::tool_call_result::Result::RunShellCommand(
+                    api::RunShellCommandResult {
+                        command: "ssh jump".to_string(),
+                        output: String::new(),
+                        exit_code: 0,
+                        result: Some(api::run_shell_command_result::Result::CommandFinished(
+                            api::ShellCommandFinished {
+                                command_id: block_id_string.clone(),
+                                output: "jump output".to_string(),
+                                exit_code: 0,
+                            },
+                        )),
+                    },
+                ),
+            ),
+            create_subagent_tool_call_message(
+                "cli-subagent-call",
+                root_task_id,
+                &task_id_string,
+                Some(api::message::tool_call::subagent::Metadata::Cli(
+                    api::message::tool_call::subagent::CliSubagent {
+                        command_id: block_id_string,
+                    },
+                )),
+            ),
+        ],
+    );
+    let subtask = create_api_subtask(
+        &task_id_string,
+        root_task_id,
+        vec![create_message("cli-subagent-output", &task_id_string)],
+    );
+
+    AIConversation::new_restored(AIConversationId::new(), vec![root_task, subtask], None)
+        .expect("restored CLI subagent conversation should build")
+}
+
+fn empty_agent_conversation_data_for_test() -> AgentConversationData {
+    AgentConversationData {
+        server_conversation_token: None,
+        conversation_usage_metadata: None,
+        reverted_action_ids: None,
+        forked_from_server_conversation_token: None,
+        artifacts_json: None,
+        parent_agent_id: None,
+        agent_name: None,
+        parent_conversation_id: None,
+        run_id: None,
+        autoexecute_override: None,
+        last_event_sequence: None,
+        compaction_state_json: None,
+        byop_repair_state_json: None,
+        cli_subagent_block_snapshots_json: None,
+    }
+}
+
+fn cli_subagent_snapshot_json_for_test(
+    conversation_id: AIConversationId,
+    task_id: &TaskId,
+    block_id: &BlockId,
+    output: &[u8],
+) -> String {
+    // 模拟关闭标签后随 conversation_data 留存的完整终端 block 快照。
+    let mut block = SerializedBlock::new_for_test(b"ssh jump".to_vec(), output.to_vec());
+    block.id = block_id.clone();
+    block.ai_metadata = serde_json::to_string(&Some(Into::<SerializedAIMetadata>::into(
+        AgentInteractionMetadata::new(
+            None,
+            conversation_id,
+            Some(task_id.clone()),
+            Some(LongRunningCommandControlState::Agent {
+                is_blocked: false,
+                should_hide_responses: false,
+            }),
+            false,
+            false,
+        ),
+    )))
+    .ok();
+    block.agent_view_visibility =
+        Some(AgentViewVisibility::new_from_conversation(conversation_id).into());
+
+    serde_json::to_string(&vec![serde_json::json!({
+        "task_id": String::from(task_id.clone()),
+        "block_id": block_id.as_str(),
+        "block": block,
+    })])
+    .expect("CLI subagent snapshot JSON should serialize")
+}
+
+#[allow(deprecated)]
+fn build_restored_conversation_with_cli_subagent_snapshot_for_test(
+    conversation_id: AIConversationId,
+    block_id: BlockId,
+    task_id: TaskId,
+    snapshot_output: &[u8],
+) -> AIConversation {
+    let mut conversation_data = empty_agent_conversation_data_for_test();
+    conversation_data.cli_subagent_block_snapshots_json = Some(
+        cli_subagent_snapshot_json_for_test(conversation_id, &task_id, &block_id, snapshot_output),
+    );
+
+    // task result 故意保留短输出，确保测试验证的是 snapshot 恢复而不是 task fallback。
+    let root_task_id = "root-task";
+    let block_id_string = String::from(block_id);
+    let task_id_string = String::from(task_id);
+    let root_task = create_api_task(
+        root_task_id,
+        vec![
+            tool_call_message_with_tool_for_test(
+                "run-shell-call",
+                "run-shell-call-1",
+                run_shell_command_tool_for_test("ssh jump"),
+            ),
+            tool_call_result_message_with_result_for_test(
+                "run-shell-result",
+                "run-shell-call-1",
+                api::message::tool_call_result::Result::RunShellCommand(
+                    api::RunShellCommandResult {
+                        command: "ssh jump".to_string(),
+                        output: String::new(),
+                        exit_code: 0,
+                        result: Some(api::run_shell_command_result::Result::CommandFinished(
+                            api::ShellCommandFinished {
+                                command_id: block_id_string.clone(),
+                                output: "short task output".to_string(),
+                                exit_code: 0,
+                            },
+                        )),
+                    },
+                ),
+            ),
+            create_subagent_tool_call_message(
+                "cli-subagent-call",
+                root_task_id,
+                &task_id_string,
+                Some(api::message::tool_call::subagent::Metadata::Cli(
+                    api::message::tool_call::subagent::CliSubagent {
+                        command_id: block_id_string,
+                    },
+                )),
+            ),
+        ],
+    );
+    let subtask = create_api_subtask(
+        &task_id_string,
+        root_task_id,
+        vec![create_message("cli-subagent-output", &task_id_string)],
+    );
+
+    AIConversation::new_restored(
+        conversation_id,
+        vec![root_task, subtask],
+        Some(conversation_data),
+    )
+    .expect("restored CLI subagent conversation with snapshot should build")
+}
+
+fn build_restored_conversation_without_cli_subagent_for_test() -> AIConversation {
+    // 构造普通 /agent 历史 conversation，用于确认没有 CLI subagent 时不会误建浮窗。
+    let root_task_id = "root-task";
+    let root_task = create_api_task(
+        root_task_id,
+        vec![create_message("ordinary-agent-output", root_task_id)],
+    );
+
+    AIConversation::new_restored(AIConversationId::new(), vec![root_task], None)
+        .expect("ordinary restored conversation should build")
+}
+
+fn serialized_blocks_for_restored_cli_subagent_for_test(
+    conversation: &AIConversation,
+) -> Vec<SerializedBlockListItem> {
+    // 走真实持久化序列化路径，避免测试只验证内存中的临时 view 状态。
+    let serialized_blocks = conversation.to_serialized_blocklist_items();
+    assert_eq!(
+        serialized_blocks.len(),
+        1,
+        "CLI subagent conversation should serialize one command block"
+    );
+    serialized_blocks
+}
+
+fn clear_ai_metadata_for_serialized_blocks_for_test(blocks: &mut [SerializedBlockListItem]) {
+    // 模拟旧历史记录或损坏记录缺少 ai_metadata 的情况，恢复逻辑应安全跳过。
+    for item in blocks {
+        match item {
+            SerializedBlockListItem::Command { block } => block.ai_metadata = None,
+        }
+    }
+}
+
+#[test]
+fn restores_cli_subagent_view_from_serialized_history_blocks() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+
+        let block_id = BlockId::from("cli-block-1".to_string());
+        let task_id = TaskId::new("cli-task-1".to_string());
+        let conversation = build_restored_conversation_with_cli_subagent_for_test(
+            block_id.clone(),
+            task_id.clone(),
+        );
+        let serialized_blocks = serialized_blocks_for_restored_cli_subagent_for_test(&conversation);
+
+        let terminal = add_window_with_terminal(&mut app, Some(&serialized_blocks));
+        terminal.update(&mut app, |view, ctx| {
+            view.restore_conversation_after_view_creation(
+                RestoredAIConversation::new(conversation),
+                true,
+                ctx,
+            );
+        });
+
+        terminal.read(&app, |view, _| {
+            assert!(
+                view.cli_subagent_views.contains_key(&block_id),
+                "restored CLI subagent view should be keyed by its command block id"
+            );
+        });
+    });
+}
+
+#[test]
+fn restores_cli_subagent_terminal_output_from_persisted_snapshot() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+
+        let conversation_id = AIConversationId::new();
+        let block_id = BlockId::from("cli-block-snapshot".to_string());
+        let task_id = TaskId::new("cli-task-snapshot".to_string());
+        let snapshot_output =
+            b"* Documentation: https://help.ubuntu.com\r\nCONTAINER ID   IMAGE\r\nanalyzer-runtime\r\n";
+        let conversation = build_restored_conversation_with_cli_subagent_snapshot_for_test(
+            conversation_id,
+            block_id.clone(),
+            task_id,
+            snapshot_output,
+        );
+        let serialized_blocks = serialized_blocks_for_restored_cli_subagent_for_test(&conversation);
+
+        let terminal = add_window_with_terminal(&mut app, Some(&serialized_blocks));
+        terminal.update(&mut app, |view, ctx| {
+            view.restore_conversation_after_view_creation(
+                RestoredAIConversation::new(conversation),
+                true,
+                ctx,
+            );
+        });
+
+        terminal.read(&app, |view, _| {
+            assert!(
+                view.cli_subagent_views.contains_key(&block_id),
+                "snapshot-restored CLI subagent view should still be expandable"
+            );
+            let model = view.model.lock();
+            let block = model
+                .block_list()
+                .block_with_id(&block_id)
+                .expect("snapshot-restored command block should exist");
+            let serialized_block = SerializedBlock::from(block);
+            let output = String::from_utf8_lossy(&serialized_block.stylized_output);
+            assert!(
+                output.contains("analyzer-runtime"),
+                "restored terminal block should contain persisted SSH output: {output}"
+            );
+            assert!(
+                !output.contains("short task output"),
+                "task fallback output should not replace persisted terminal snapshot"
+            );
+        });
+    });
+}
+
+#[test]
+fn restores_cli_subagent_snapshot_when_history_blocks_are_not_preloaded() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+
+        let conversation_id = AIConversationId::new();
+        let block_id = BlockId::from("cli-block-missing-preload".to_string());
+        let task_id = TaskId::new("cli-task-missing-preload".to_string());
+        let conversation = build_restored_conversation_with_cli_subagent_snapshot_for_test(
+            conversation_id,
+            block_id.clone(),
+            task_id,
+            b"ssh jump\r\ndocker ps -a\r\nanalyzer-runtime\r\n",
+        );
+
+        let terminal = add_window_with_terminal(&mut app, None);
+        terminal.update(&mut app, |view, ctx| {
+            // 历史列表进入已有 terminal 时不会像新 pane 初始化那样预置 restored blocks；
+            // restore_conversation_after_view_creation 必须自己补回 CLI subagent 的终端快照。
+            view.restore_conversation_after_view_creation(
+                RestoredAIConversation::new(conversation),
+                true,
+                ctx,
+            );
+        });
+
+        terminal.read(&app, |view, _| {
+            assert!(
+                view.cli_subagent_views.contains_key(&block_id),
+                "未预置 restored blocks 时也应恢复 CLI subagent 只读卡片"
+            );
+            let model = view.model.lock();
+            let block = model
+                .block_list()
+                .block_with_id(&block_id)
+                .expect("CLI subagent snapshot block should be restored into the terminal model");
+            let serialized_block = SerializedBlock::from(block);
+            let output = String::from_utf8_lossy(&serialized_block.stylized_output);
+            assert!(
+                output.contains("analyzer-runtime"),
+                "历史入口恢复时应显示持久化的 SSH 终端输出: {output}"
+            );
+        });
+    });
+}
+
+#[test]
+fn exiting_restored_cli_subagent_agent_view_inserts_entry_card() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        FeatureFlag::AgentView.set_enabled(true);
+
+        let conversation_id = AIConversationId::new();
+        let block_id = BlockId::from("cli-block-agent-view-exit".to_string());
+        let task_id = TaskId::new("cli-task-agent-view-exit".to_string());
+        let conversation = build_restored_conversation_with_cli_subagent_snapshot_for_test(
+            conversation_id,
+            block_id.clone(),
+            task_id,
+            b"ssh jump\r\ndocker ps -a\r\nanalyzer-runtime\r\n",
+        );
+        let serialized_blocks = serialized_blocks_for_restored_cli_subagent_for_test(&conversation);
+
+        let terminal = add_window_with_terminal(&mut app, Some(&serialized_blocks));
+        terminal.update(&mut app, |view, ctx| {
+            view.restore_conversation_after_view_creation(
+                RestoredAIConversation::new(conversation),
+                true,
+                ctx,
+            );
+            view.enter_agent_view_for_conversation(
+                None,
+                AgentViewEntryOrigin::AgentViewBlock,
+                conversation_id,
+                ctx,
+            );
+            view.handle_action(&TerminalAction::ExitAgentView, ctx);
+        });
+
+        terminal.read(&app, |view, _| {
+            assert!(
+                view.last_visible_item_is_agent_view_block_for_conversation(conversation_id),
+                "ESC 返回终端后应保留 restored CLI subagent 的折叠入口卡片"
+            );
+            assert!(
+                view.cli_subagent_views.contains_key(&block_id),
+                "CLI subagent 只读卡片仍应可展开"
+            );
+            let model = view.model.lock();
+            let block = model
+                .block_list()
+                .block_with_id(&block_id)
+                .expect("snapshot-restored command block should exist after exiting agent view");
+            let serialized_block = SerializedBlock::from(block);
+            let output = String::from_utf8_lossy(&serialized_block.stylized_output);
+            assert!(
+                output.contains("analyzer-runtime"),
+                "退出 AgentView 后仍应保留 SSH snapshot 输出: {output}"
+            );
+        });
+    });
+}
+
+fn assert_exiting_restored_ordinary_agent_view_inserts_entry_card(
+    origin: AgentViewEntryOrigin,
+) {
+    App::test((), move |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        FeatureFlag::AgentView.set_enabled(true);
+
+        let conversation = build_restored_conversation_without_cli_subagent_for_test();
+        let conversation_id = conversation.id();
+        let terminal = add_window_with_terminal(&mut app, None);
+        terminal.update(&mut app, |view, ctx| {
+            // 普通 restored 会话只是在 AgentView 中查看，没有新增 exchange；
+            // ESC 回到 terminal 后仍需要保留一个可再次进入的折叠入口。
+            view.restore_conversation_after_view_creation(
+                RestoredAIConversation::new(conversation),
+                true,
+                ctx,
+            );
+            view.enter_agent_view_for_conversation(None, origin, conversation_id, ctx);
+            view.handle_action(&TerminalAction::ExitAgentView, ctx);
+        });
+
+        terminal.read(&app, |view, _| {
+            assert!(
+                view.last_visible_item_is_agent_view_block_for_conversation(conversation_id),
+                "ESC 返回 terminal 后应保留普通 restored /agent 会话的折叠入口卡片"
+            );
+            assert!(
+                view.cli_subagent_views.is_empty(),
+                "普通 restored /agent 会话不应创建 CLI subagent view"
+            );
+        });
+    });
+}
+
+#[test]
+fn exiting_restored_ordinary_agent_view_inserts_entry_card_from_history() {
+    assert_exiting_restored_ordinary_agent_view_inserts_entry_card(
+        AgentViewEntryOrigin::ConversationListView,
+    );
+}
+
+#[test]
+fn exiting_restored_ordinary_agent_view_inserts_entry_card_from_entry_block() {
+    assert_exiting_restored_ordinary_agent_view_inserts_entry_card(
+        AgentViewEntryOrigin::AgentViewBlock,
+    );
+}
+
+#[test]
+fn skips_cli_subagent_view_restore_without_matching_ai_metadata() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+
+        let block_id = BlockId::from("cli-block-1".to_string());
+        let task_id = TaskId::new("cli-task-1".to_string());
+        let conversation = build_restored_conversation_with_cli_subagent_for_test(
+            block_id.clone(),
+            task_id,
+        );
+        let mut serialized_blocks =
+            serialized_blocks_for_restored_cli_subagent_for_test(&conversation);
+        clear_ai_metadata_for_serialized_blocks_for_test(&mut serialized_blocks);
+
+        let terminal = add_window_with_terminal(&mut app, Some(&serialized_blocks));
+        terminal.update(&mut app, |view, ctx| {
+            view.restore_conversation_after_view_creation(
+                RestoredAIConversation::new(conversation),
+                true,
+                ctx,
+            );
+        });
+
+        terminal.read(&app, |view, _| {
+            assert!(
+                !view.cli_subagent_views.contains_key(&block_id),
+                "missing metadata should not restore a CLI subagent view"
+            );
+            assert!(
+                !view.rich_content_views.is_empty(),
+                "normal /agent blocks should still restore without CLI metadata"
+            );
+        });
+    });
+}
+
+#[test]
+fn ordinary_agent_restore_does_not_create_cli_subagent_views() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+
+        let conversation = build_restored_conversation_without_cli_subagent_for_test();
+        let terminal = add_window_with_terminal(&mut app, None);
+        terminal.update(&mut app, |view, ctx| {
+            view.restore_conversation_after_view_creation(
+                RestoredAIConversation::new(conversation),
+                true,
+                ctx,
+            );
+        });
+
+        terminal.read(&app, |view, _| {
+            assert!(
+                view.cli_subagent_views.is_empty(),
+                "ordinary /agent restore should not create CLI subagent views"
+            );
+            assert!(
+                !view.rich_content_views.is_empty(),
+                "ordinary /agent block should still restore"
+            );
+        });
+    });
+}
+
+#[test]
+fn finished_cli_subagent_keeps_read_only_card_when_metadata_matches() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        // FinishedSubagent 会触发 sidecar 持久化，需要 GlobalResourceHandlesProvider。
+        let global_resource_handles = crate::GlobalResourceHandles::mock(&mut app);
+        app.add_singleton_model(|_| crate::GlobalResourceHandlesProvider::new(global_resource_handles));
+
+        // 先恢复一个带 CLI subagent 的历史会话，建立带匹配 metadata 的 command block
+        // 和一个 RestoredReadOnly 视图，模拟 SSH 会话在 agent view 里展开后的状态。
+        // 用带 snapshot 的构造函数，确保 conversation_id 可控且与 block metadata 一致。
+        let block_id = BlockId::from("cli-block-finished".to_string());
+        let task_id = TaskId::new("cli-task-finished".to_string());
+        let conversation_id = AIConversationId::new();
+        let conversation = build_restored_conversation_with_cli_subagent_snapshot_for_test(
+            conversation_id,
+            block_id.clone(),
+            task_id.clone(),
+            b"ssh session output",
+        );
+        let serialized_blocks = serialized_blocks_for_restored_cli_subagent_for_test(&conversation);
+
+        let terminal = add_window_with_terminal(&mut app, Some(&serialized_blocks));
+        terminal.update(&mut app, |view, ctx| {
+            view.restore_conversation_after_view_creation(
+                RestoredAIConversation::new(conversation),
+                true,
+                ctx,
+            );
+        });
+
+        // 恢复后应存在 CLI subagent 视图。
+        terminal.read(&app, |view, _| {
+            assert!(
+                view.cli_subagent_views.contains_key(&block_id),
+                "restored CLI subagent view should exist before FinishedSubagent"
+            );
+        });
+
+        // 模拟 SSH 会话结束触发的 FinishedSubagent 事件。
+        // 修复前：live 视图被 remove 后不再重建，卡片消失；
+        // 修复后：在 block 仍持有匹配 metadata 时以 RestoredReadOnly 重建折叠卡片。
+        terminal.update(&mut app, |view, ctx| {
+            view.handle_cli_subagent_controller_event(
+                view.cli_subagent_controller.clone(),
+                &CLISubagentEvent::FinishedSubagent {
+                    block_id: block_id.clone(),
+                    task_id: task_id.clone(),
+                    conversation_id: Some(conversation_id),
+                    initial_requested_command_action_id: None,
+                },
+                ctx,
+            );
+        });
+
+        terminal.read(&app, |view, _| {
+            assert!(
+                view.cli_subagent_views.contains_key(&block_id),
+                "FinishedSubagent should keep a read-only CLI subagent card when metadata matches"
+            );
+        });
+    });
+}
+
+#[test]
+fn finished_cli_subagent_skips_rebuild_when_block_missing() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+
+        // 用一个不存在于 block_list 的 block_id 触发 FinishedSubagent，
+        // 模拟 block 已被回收 / metadata 无法匹配的情况，重建前置检查应不通过。
+        let block_id = BlockId::from("cli-block-gone".to_string());
+        let task_id = TaskId::new("cli-task-gone".to_string());
+        let conversation_id = AIConversationId::new();
+
+        let terminal = add_window_with_terminal(&mut app, None);
+        terminal.update(&mut app, |view, ctx| {
+            view.handle_cli_subagent_controller_event(
+                view.cli_subagent_controller.clone(),
+                &CLISubagentEvent::FinishedSubagent {
+                    block_id: block_id.clone(),
+                    task_id: task_id.clone(),
+                    conversation_id: Some(conversation_id),
+                    initial_requested_command_action_id: None,
+                },
+                ctx,
+            );
+        });
+
+        terminal.read(&app, |view, _| {
+            assert!(
+                !view.cli_subagent_views.contains_key(&block_id),
+                "FinishedSubagent should not rebuild a card when the block no longer exists"
+            );
+        });
+    });
+}
+
+#[cfg(windows)]
+#[test]
+fn restored_cli_subagent_windows_ctrl_c_does_not_write_to_pty() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+
+        let terminal = add_window_with_terminal(&mut app, None);
+        let pty_writes: Rc<RefCell<Vec<Vec<u8>>>> = Rc::new(RefCell::new(Vec::new()));
+        let writes = pty_writes.clone();
+        app.update(|ctx| {
+            ctx.subscribe_to_view(&terminal, move |_, event, _| {
+                if let Event::WriteBytesToPty { bytes } = event {
+                    writes.borrow_mut().push(bytes.to_vec());
+                }
+            });
+        });
+
+        terminal.update(&mut app, |view, ctx| {
+            // 让 Ctrl-C 的 live 路径具备可观察副作用：如果被转发，会写 ETX 到 PTY。
+            view.model
+                .lock()
+                .simulate_long_running_block("sleep 10", "running");
+
+            view.handle_cli_subagent_view_event(
+                view.view_id,
+                &CLISubagentViewEvent::WindowsCtrlC,
+                false,
+                ctx,
+            );
+        });
+        assert!(
+            pty_writes.borrow().is_empty(),
+            "restored CLI subagent Ctrl-C should not reach the live terminal"
+        );
+
+        terminal.update(&mut app, |view, ctx| {
+            view.handle_cli_subagent_view_event(
+                view.view_id,
+                &CLISubagentViewEvent::WindowsCtrlC,
+                true,
+                ctx,
+            );
+        });
+        assert_eq!(
+            pty_writes.borrow().as_slice(),
+            &[vec![warp_terminal::model::escape_sequences::C0::ETX]],
+            "live CLI subagent Ctrl-C should still forward to the active terminal"
+        );
+    });
 }
 
 /// Test to verify that blocks created through normal execution
@@ -386,13 +1117,12 @@ fn escape_does_not_exit_local_agent_view_with_long_running_command() {
 }
 
 #[test]
-fn root_cloud_mode_pane_sets_root_cloud_mode_context_key() {
+fn root_ambient_agent_pane_sets_root_ambient_agent_context_key() {
     use crate::settings::import::model::ImportedConfigModel;
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
         app.add_singleton_model(ImportedConfigModel::new);
         FeatureFlag::AgentView.set_enabled(true);
-        FeatureFlag::CloudMode.set_enabled(true);
 
         let terminal = add_window_with_terminal(&mut app, None);
 
@@ -400,7 +1130,7 @@ fn root_cloud_mode_pane_sets_root_cloud_mode_context_key() {
             assert!(!view
                 .keymap_context(ctx)
                 .set
-                .contains(init::ROOT_CLOUD_MODE_PANE_KEY));
+                .contains(init::ROOT_AMBIENT_AGENT_PANE_KEY));
         });
 
         terminal.update(&mut app, |view, ctx| {
@@ -413,7 +1143,7 @@ fn root_cloud_mode_pane_sets_root_cloud_mode_context_key() {
             assert!(view
                 .keymap_context(ctx)
                 .set
-                .contains(init::ROOT_CLOUD_MODE_PANE_KEY));
+                .contains(init::ROOT_AMBIENT_AGENT_PANE_KEY));
         });
 
         terminal.update(&mut app, |view, ctx| {
@@ -426,19 +1156,18 @@ fn root_cloud_mode_pane_sets_root_cloud_mode_context_key() {
             assert!(!view
                 .keymap_context(ctx)
                 .set
-                .contains(init::ROOT_CLOUD_MODE_PANE_KEY));
+                .contains(init::ROOT_AMBIENT_AGENT_PANE_KEY));
         });
     });
 }
 
 #[test]
-fn set_input_mode_agent_does_not_enter_local_agent_from_root_cloud_mode_pane() {
+fn set_input_mode_agent_does_not_enter_local_agent_from_root_ambient_agent_pane() {
     use crate::terminal::shared_session::SharedSessionStatus;
 
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
         FeatureFlag::AgentView.set_enabled(true);
-        FeatureFlag::CloudMode.set_enabled(true);
 
         let terminal = add_window_with_terminal(&mut app, None);
 
@@ -2402,7 +3131,7 @@ fn test_bash_vim_banner_already_shown() {
                 .set_value(BannerState::Dismissed, ctx);
         });
 
-        // Ensure Warp's vim keybindings are off.
+        // Ensure Zap's vim keybindings are off.
         AppEditorSettings::handle(&app).update(&mut app, |editor_settings, ctx| {
             let _ = editor_settings.vim_mode.set_value(false, ctx);
         });
@@ -2459,7 +3188,7 @@ fn test_bash_vim_banner_on() {
                 .set_value(BannerState::NotDismissed, ctx);
         });
 
-        // Ensure Warp's vim keybindings are off.
+        // Ensure Zap's vim keybindings are off.
         AppEditorSettings::handle(&app).update(&mut app, |editor_settings, ctx| {
             let _ = editor_settings.vim_mode.set_value(false, ctx);
         });
@@ -2515,7 +3244,7 @@ fn test_bash_vim_banner_off() {
                 .set_value(BannerState::NotDismissed, ctx);
         });
 
-        // Ensure Warp's vim keybindings are on.
+        // Ensure Zap's vim keybindings are on.
         AppEditorSettings::handle(&app).update(&mut app, |editor_settings, ctx| {
             let _ = editor_settings.vim_mode.set_value(true, ctx);
         });
@@ -2572,7 +3301,7 @@ fn test_zsh_vim_banner_on() {
                 .set_value(BannerState::NotDismissed, ctx);
         });
 
-        // Ensure Warp's vim keybindings are off.
+        // Ensure Zap's vim keybindings are off.
         AppEditorSettings::handle(&app).update(&mut app, |editor_settings, ctx| {
             let _ = editor_settings.vim_mode.set_value(false, ctx);
         });
@@ -2628,7 +3357,7 @@ fn test_zsh_vim_banner_off() {
                 .set_value(BannerState::NotDismissed, ctx);
         });
 
-        // Ensure Warp's vim keybindings are on.
+        // Ensure Zap's vim keybindings are on.
         AppEditorSettings::handle(&app).update(&mut app, |editor_settings, ctx| {
             let _ = editor_settings.vim_mode.set_value(true, ctx);
         });
@@ -2678,7 +3407,7 @@ fn test_fish_vim_banner_on() {
             view.set_focus_handle(focus_handle, ctx);
         });
 
-        // Ensure Warp's vim keybindings are off.
+        // Ensure Zap's vim keybindings are off.
         AppEditorSettings::handle(&app).update(&mut app, |editor_settings, ctx| {
             let _ = editor_settings.vim_mode.set_value(false, ctx);
         });
@@ -2727,7 +3456,7 @@ fn test_fish_vim_banner_off() {
             view.set_focus_handle(focus_handle, ctx);
         });
 
-        // Ensure Warp's vim keybindings are on.
+        // Ensure Zap's vim keybindings are on.
         AppEditorSettings::handle(&app).update(&mut app, |editor_settings, ctx| {
             let _ = editor_settings.vim_mode.set_value(true, ctx);
         });
@@ -3257,6 +3986,72 @@ fn inline_agent_view_persists_across_transfer_takeover_for_monitored_long_runnin
 }
 
 #[test]
+fn exiting_lrc_user_takeover_does_not_insert_agent_view_entry_card() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        FeatureFlag::AgentView.set_enabled(true);
+
+        let terminal = add_window_with_terminal(&mut app, None);
+
+        terminal.update(&mut app, |view, ctx| {
+            {
+                let mut model = view.model.lock();
+                model.init_shell(InitShellValue {
+                    session_id: 0.into(),
+                    shell: "zsh".to_owned(),
+                    ..Default::default()
+                });
+                model.bootstrapped(BootstrappedValue {
+                    shell: "zsh".to_owned(),
+                    ..Default::default()
+                });
+                model.simulate_long_running_block("ssh localhost", "Password:");
+            }
+
+            let conversation_id = view.agent_view_controller().update(ctx, |controller, ctx| {
+                controller
+                    .try_enter_inline_agent_view(
+                        None,
+                        AgentViewEntryOrigin::LongRunningCommand,
+                        ctx,
+                    )
+                    .expect("inline agent view should create a conversation")
+            });
+            view.model
+                .lock()
+                .block_list_mut()
+                .active_block_mut()
+                .set_is_agent_tagged_in(true);
+
+            let task_id = TaskId::new("test-task".to_owned());
+            view.model
+                .lock()
+                .block_list_mut()
+                .active_block_mut()
+                .set_agent_interaction_mode_for_agent_monitored_command(&task_id, conversation_id)
+                .expect("tagged-in command should transition to agent-monitored");
+
+            view.cli_subagent_controller.update(ctx, |controller, ctx| {
+                controller.switch_control_to_user(
+                    UserTakeOverReason::TransferFromAgent {
+                        reason: "Enter your password".to_owned(),
+                    },
+                    ctx,
+                );
+            });
+
+            view.agent_view_controller()
+                .update(ctx, |controller, ctx| controller.exit_agent_view(ctx));
+
+            assert!(
+                !view.has_agent_view_entry_block_for_conversation(conversation_id),
+                "LRC 用户接管退出时不应重复插入 AgentView 入口卡片"
+            );
+        });
+    })
+}
+
+#[test]
 fn use_agent_footer_renders_for_transfer_handoff_even_when_user_command_footer_setting_disabled() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
@@ -3406,6 +4201,13 @@ fn exiting_agent_view_removes_empty_conversations() {
             history.conversation(&conversation_id).is_some()
         });
         assert!(!exists_after_exit);
+        let has_entry_card_after_exit = terminal.read(&app, |view, _| {
+            view.has_agent_view_entry_block_for_conversation(conversation_id)
+        });
+        assert!(
+            !has_entry_card_after_exit,
+            "新建但未修改的空会话退出后不应留下 restored 入口卡片"
+        );
     })
 }
 
@@ -3650,6 +4452,57 @@ fn cli_agent_rich_input_hint_text_mentions_active_cli_agent() {
                 assert_eq!(placeholder_text, Some(expected_hint_text));
             });
         }
+    })
+}
+
+#[test]
+fn cli_agent_rich_input_open_sets_terminal_keymap_context() {
+    use crate::settings::import::model::ImportedConfigModel;
+
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        app.add_singleton_model(ImportedConfigModel::new);
+        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
+        let _cli_rich = FeatureFlag::CLIAgentRichInput.override_enabled(true);
+
+        let terminal = open_cli_agent_rich_input_for_agent(&mut app, CLIAgent::Claude);
+        terminal.read(&app, |view, ctx| {
+            let keymap_context = <TerminalView as warpui::View>::keymap_context(view, ctx);
+            assert!(
+                keymap_context
+                    .set
+                    .contains(crate::settings_view::flags::CLI_AGENT_RICH_INPUT_OPEN),
+                "terminal keymap context should expose open CLI agent rich input"
+            );
+        });
+    })
+}
+
+// 行为测试：当 rich input 已打开时，再次触发 OpenCLIAgentRichInput action
+// （即 Ctrl-G 实际命中绑定后被 dispatch 的 handler）应当关闭 rich input。
+// 这覆盖了本次修复的核心 toggle 路径。
+#[test]
+fn ctrl_g_action_closes_open_cli_agent_rich_input() {
+    use crate::settings::import::model::ImportedConfigModel;
+
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        app.add_singleton_model(ImportedConfigModel::new);
+        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
+        let _cli_rich = FeatureFlag::CLIAgentRichInput.override_enabled(true);
+
+        let terminal = open_cli_agent_rich_input_for_agent(&mut app, CLIAgent::Claude);
+        terminal.update(&mut app, |view, ctx| {
+            assert!(
+                view.is_cli_agent_rich_input_open(ctx),
+                "rich input should be open before toggling"
+            );
+            view.handle_action(&TerminalAction::OpenCLIAgentRichInput, ctx);
+            assert!(
+                !view.is_cli_agent_rich_input_open(ctx),
+                "OpenCLIAgentRichInput should close rich input when already open"
+            );
+        });
     })
 }
 
@@ -4662,4 +5515,114 @@ fn linear_deeplink_via_default_entrypoint_does_not_auto_submit_in_fullscreen() {
             );
         });
     })
+}
+
+// ---- OneKey 搜索过滤 pure 函数测试 ----
+//
+// 这些测试只针对 `filter_and_sort_onekey_candidates` 这条 pure 路径,
+// 不需要构造 TerminalView / ctx。skim 算法的 Unicode 处理由 fuzzy_match
+// crate 负责,这里只验证我们在 view.rs 中对它的使用是否符合预期。
+
+use super::filter_and_sort_onekey_candidates;
+use super::OnekeyMenuRows;
+
+fn rows_indices(rows: OnekeyMenuRows) -> Vec<usize> {
+    match rows {
+        OnekeyMenuRows::Ordered(v) => v,
+        OnekeyMenuRows::NoMatches => panic!("expected Ordered, got NoMatches"),
+    }
+}
+
+#[test]
+fn onekey_empty_query_returns_full_set_in_original_order() {
+    let candidates = vec![
+        ("prod-db", "deploy@10.0.0.5:22"),
+        ("staging-web", "ubuntu@stage.foo.com:22"),
+        ("生产数据库", "ops@db.example.com:22"),
+    ];
+    let result = filter_and_sort_onekey_candidates(candidates.iter().copied(), "");
+    assert_eq!(rows_indices(result), vec![0, 1, 2]);
+}
+
+#[test]
+fn onekey_empty_query_after_trim_returns_full_set() {
+    let candidates = vec![("a", "1"), ("b", "2")];
+    let result = filter_and_sort_onekey_candidates(candidates.iter().copied(), "   ");
+    assert_eq!(rows_indices(result), vec![0, 1]);
+}
+
+#[test]
+fn onekey_query_filters_out_non_matches() {
+    let candidates = vec![("apple", "x"), ("banana", "x"), ("apricot", "x")];
+    // "ap" 应该命中 apple / apricot,banana 不命中。
+    // 这里不断言 apple / apricot 之间的相对顺序——具体打分由 skim 决定,
+    // 我们只保证 banana 被过滤掉。
+    let result = filter_and_sort_onekey_candidates(candidates.iter().copied(), "ap");
+    let indices = rows_indices(result);
+    assert!(indices.contains(&0)); // apple
+    assert!(indices.contains(&2)); // apricot
+    assert!(!indices.contains(&1)); // banana
+}
+
+#[test]
+fn onekey_query_matches_subtitle() {
+    let candidates = vec![
+        ("server-1", "alice@prod.example.com:22"),
+        ("server-2", "bob@stage.example.com:22"),
+    ];
+    let result = filter_and_sort_onekey_candidates(candidates.iter().copied(), "prod");
+    let indices = rows_indices(result);
+    // 只有 server-1 的 subtitle 含 prod。
+    assert_eq!(indices, vec![0]);
+}
+
+#[test]
+fn onekey_query_no_match_returns_no_matches() {
+    let candidates = vec![("a", "1"), ("b", "2")];
+    let result = filter_and_sort_onekey_candidates(candidates.iter().copied(), "zzz-not-present");
+    assert_eq!(result, OnekeyMenuRows::NoMatches);
+}
+
+#[test]
+fn onekey_query_matches_chinese_characters() {
+    // 中文字符序列匹配:skim 算法按 Unicode char 处理。
+    let candidates = vec![
+        ("生产数据库", "ops@db.example.com:22"),
+        ("测试服务器", "qa@test.example.com:22"),
+    ];
+    let result = filter_and_sort_onekey_candidates(candidates.iter().copied(), "生产");
+    let indices = rows_indices(result);
+    assert_eq!(indices, vec![0]);
+}
+
+#[test]
+fn onekey_query_matches_japanese_characters() {
+    let candidates = vec![
+        ("本番データベース", "ops@db.example.com:22"),
+        ("ステージング", "stage@example.com:22"),
+    ];
+    let result = filter_and_sort_onekey_candidates(candidates.iter().copied(), "データ");
+    let indices = rows_indices(result);
+    assert_eq!(indices, vec![0]);
+}
+
+#[test]
+fn onekey_query_case_insensitive() {
+    let candidates = vec![("ProductionDB", "ops@example.com:22")];
+    let result = filter_and_sort_onekey_candidates(candidates.iter().copied(), "production");
+    assert_eq!(rows_indices(result), vec![0]);
+}
+
+#[test]
+fn onekey_empty_candidates_with_query_returns_no_matches() {
+    let candidates: Vec<(&str, &str)> = vec![];
+    let result = filter_and_sort_onekey_candidates(candidates.iter().copied(), "anything");
+    assert_eq!(result, OnekeyMenuRows::NoMatches);
+}
+
+#[test]
+fn onekey_empty_candidates_with_empty_query_returns_empty_ordered() {
+    let candidates: Vec<(&str, &str)> = vec![];
+    let result = filter_and_sort_onekey_candidates(candidates.iter().copied(), "");
+    assert_eq!(rows_indices(result), Vec::<usize>::new());
 }

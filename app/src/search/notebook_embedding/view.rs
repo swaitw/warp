@@ -4,8 +4,8 @@ use crate::{
     appearance::Appearance,
     cloud_object::Space,
     search::{
-        notebook_embedding::notebooks::CloudNotebooksDataSource,
-        notebook_embedding::workflows::CloudWorkflowsDataSource,
+        notebook_embedding::notebooks::EmbeddedNotebooksDataSource,
+        notebook_embedding::workflows::EmbeddedWorkflowsDataSource,
         result_renderer::{QueryResultRenderer, QueryResultRendererStyles},
         search_bar::{SearchBar, SearchBarEvent, SearchBarState, SearchResultOrdering},
     },
@@ -129,11 +129,11 @@ impl EmbeddingSearchMenu {
             mixer.reset(ctx);
 
             mixer.add_sync_source(
-                CloudWorkflowsDataSource::new(self.embedding_space, ctx),
+                EmbeddedWorkflowsDataSource::new(self.embedding_space, ctx),
                 HashSet::new(),
             );
             mixer.add_sync_source(
-                CloudNotebooksDataSource::new(self.embedding_space, ctx),
+                EmbeddedNotebooksDataSource::new(self.embedding_space, ctx),
                 HashSet::new(),
             );
             ctx.notify();
@@ -415,6 +415,6 @@ pub mod styles {
 
     /// The font size for the object name in search results.
     pub fn name_font_size(appearance: &Appearance) -> f32 {
-        appearance.ui_font_size() + 2.
+        appearance.ui_font_subheading()
     }
 }

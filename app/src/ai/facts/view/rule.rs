@@ -1,18 +1,16 @@
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
-use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent};
+use crate::cloud_object::model::persistence::{ObjectStoreEvent, ObjectStoreModel};
+use crate::cloud_object::update_manager::UpdateManager;
 use crate::cloud_object::{
-    CloudObject, GenericStringObjectFormat, JsonObjectType, Owner, Revision,
+    GenericStringObjectFormat, JsonObjectType, Owner, Revision, StoredObject,
 };
-use crate::drive::CloudObjectTypeAndId;
+use crate::drive::ObjectTypeAndId;
 use crate::editor::{
     EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys, SingleLineEditorOptions,
     TextOptions,
 };
-use crate::network::NetworkStatus;
 use crate::search_bar::SearchBar;
-use crate::server::cloud_objects::update_manager::{UpdateManager, UpdateManagerEvent};
 use crate::server::ids::{ClientId, SyncId};
-use crate::server::sync_queue::SyncQueue;
 use crate::settings::{AISettings, AISettingsChangedEvent};
 use crate::ui_components::icons::Icon;
 use crate::view_components::{
@@ -46,8 +44,8 @@ use warpui::{
     ViewHandle,
 };
 
-use super::{is_edit_allowed, is_syncing, style, AIFact, CloudAIFact, CloudAIFactModel};
-use crate::ai::facts::AIMemory;
+use super::style;
+use crate::ai::facts::{AIFact, AIFactObject, AIFactObjectModel, AIMemory};
 
 // 顶部标题保留英文 "Rules"(用户偏好,不译为知识库)。
 pub const HEADER_TEXT: &str = "Rules";
@@ -80,13 +78,11 @@ pub enum RuleViewAction {
 #[derive(Default, Debug, Clone)]
 pub struct MouseStateHandles {
     pub hover: MouseStateHandle,
-    pub sync_status_hover: MouseStateHandle,
-    pub sync_status_icon: MouseStateHandle,
 }
 
 #[derive(Debug, Clone)]
-struct CloudRuleRow {
-    fact: CloudAIFact,
+struct GlobalRuleRow {
+    fact: AIFactObject,
     mouse_states: MouseStateHandles,
 }
 
@@ -98,7 +94,7 @@ struct ProjectScopedRow {
 
 #[derive(Debug, Clone)]
 enum RuleRow {
-    Global(Box<CloudRuleRow>),
+    Global(Box<GlobalRuleRow>),
     ProjectScoped(ProjectScopedRow),
 }
 
@@ -136,7 +132,7 @@ impl RuleRow {
 
 pub struct RuleView {
     owner: Option<Owner>,
-    global_rules: Vec<CloudRuleRow>,
+    global_rules: Vec<GlobalRuleRow>,
     project_rules: Vec<ProjectScopedRow>,
     search_editor: ViewHandle<EditorView>,
     search_bar: ViewHandle<SearchBar>,
@@ -150,19 +146,13 @@ pub struct RuleView {
 
 impl RuleView {
     pub fn new(ctx: &mut ViewContext<Self>) -> Self {
-        let update_manager = UpdateManager::handle(ctx);
-        ctx.subscribe_to_model(&update_manager, |me, _, event, ctx| {
-            me.handle_update_manager_event(event, ctx);
-        });
-
-        let cloud_model = CloudModel::handle(ctx);
-        ctx.subscribe_to_model(&cloud_model, |me, _, event, ctx| {
-            me.handle_cloud_model_event(event, ctx);
-        });
-
-        let network_status = NetworkStatus::handle(ctx);
-        ctx.subscribe_to_model(&network_status, |_me, _, _event, ctx| {
-            ctx.notify();
+        // Zap(本地化,Phase 2d-1):原 UpdateManager 订阅用来接收云端创建/更新的 ack
+        // 事件、以及网络状态驱动的面板重绘。本地化后 ObjectStoreEvent 已覆盖本地写入后的
+        // UI 刷新需求(2c-2/2c-3 在 update_object/create_object 里发送),UpdateManager 与
+        // NetworkStatus 订阅为死代码,一并移除。
+        let object_store_model = ObjectStoreModel::handle(ctx);
+        ctx.subscribe_to_model(&object_store_model, |me, _, event, ctx| {
+            me.handle_object_store_event(event, ctx);
         });
 
         let owner = UserWorkspaces::as_ref(ctx).personal_drive(ctx);
@@ -177,17 +167,17 @@ impl RuleView {
             }
         });
 
-        let ai_rules: Vec<CloudAIFact> = {
-            let cloud_model = CloudModel::handle(ctx);
-            cloud_model
+        let ai_rules: Vec<AIFactObject> = {
+            let object_store_model = ObjectStoreModel::handle(ctx);
+            object_store_model
                 .as_ref(ctx)
-                .get_all_objects_of_type::<GenericStringObjectId, CloudAIFactModel>()
+                .get_all_objects_of_type::<GenericStringObjectId, AIFactObjectModel>()
                 .cloned()
                 .collect()
         };
-        let ai_rules: Vec<CloudRuleRow> = ai_rules
+        let ai_rules: Vec<GlobalRuleRow> = ai_rules
             .into_iter()
-            .map(|fact| CloudRuleRow {
+            .map(|fact| GlobalRuleRow {
                 fact,
                 mouse_states: Default::default(),
             })
@@ -276,23 +266,13 @@ impl RuleView {
         }
     }
 
-    fn handle_update_manager_event(
-        &mut self,
-        event: &UpdateManagerEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if let UpdateManagerEvent::ObjectOperationComplete { .. } = event {
-            self.fetch_ai_rules(ctx);
-        }
-    }
-
-    fn handle_cloud_model_event(&mut self, event: &CloudModelEvent, ctx: &mut ViewContext<Self>) {
+    fn handle_object_store_event(&mut self, event: &ObjectStoreEvent, ctx: &mut ViewContext<Self>) {
         match event {
-            CloudModelEvent::ObjectUpdated { .. }
-            | CloudModelEvent::ObjectTrashed { .. }
-            | CloudModelEvent::ObjectUntrashed { .. }
-            | CloudModelEvent::ObjectCreated { .. }
-            | CloudModelEvent::ObjectDeleted { .. } => {
+            ObjectStoreEvent::ObjectUpdated { .. }
+            | ObjectStoreEvent::ObjectTrashed { .. }
+            | ObjectStoreEvent::ObjectUntrashed { .. }
+            | ObjectStoreEvent::ObjectCreated { .. }
+            | ObjectStoreEvent::ObjectDeleted { .. } => {
                 self.fetch_ai_rules(ctx);
             }
             _ => {}
@@ -304,17 +284,17 @@ impl RuleView {
     }
 
     fn fetch_ai_rules(&mut self, ctx: &mut ViewContext<Self>) {
-        let ai_rules: Vec<CloudAIFact> = {
-            let cloud_model = CloudModel::handle(ctx);
-            cloud_model
+        let ai_rules: Vec<AIFactObject> = {
+            let object_store_model = ObjectStoreModel::handle(ctx);
+            object_store_model
                 .as_ref(ctx)
-                .get_all_objects_of_type::<GenericStringObjectId, CloudAIFactModel>()
+                .get_all_objects_of_type::<GenericStringObjectId, AIFactObjectModel>()
                 .cloned()
                 .collect()
         };
         self.global_rules = ai_rules
             .into_iter()
-            .map(|ai_fact| CloudRuleRow {
+            .map(|ai_fact| GlobalRuleRow {
                 fact: ai_fact,
                 mouse_states: Default::default(),
             })
@@ -373,8 +353,8 @@ impl RuleView {
         ctx: &mut ViewContext<Self>,
     ) {
         let update_manager = UpdateManager::handle(ctx);
-        let (is_autogenerated, suggested_logging_id) = CloudModel::as_ref(ctx)
-            .get_object_of_type::<GenericStringObjectId, CloudAIFactModel>(&sync_id)
+        let (is_autogenerated, suggested_logging_id) = ObjectStoreModel::as_ref(ctx)
+            .get_object_of_type::<GenericStringObjectId, AIFactObjectModel>(&sync_id)
             .map(|ai_fact| {
                 let AIFact::Memory(AIMemory {
                     is_autogenerated,
@@ -399,7 +379,7 @@ impl RuleView {
         let update_manager = UpdateManager::handle(ctx);
         update_manager.update(ctx, |update_manager, ctx| {
             update_manager.delete_object_by_user(
-                CloudObjectTypeAndId::GenericStringObject {
+                ObjectTypeAndId::GenericStringObject {
                     object_type: GenericStringObjectFormat::Json(JsonObjectType::AIFact),
                     id,
                 },
@@ -574,6 +554,7 @@ impl RuleView {
                 .into(),
             self.disabled_banner_highlight_index.clone(),
         )
+        .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
         .with_hyperlink_font_color(internal_colors::accent_fg_strong(appearance.theme()).into())
         .register_default_click_handlers(|_, ctx, _| {
             ctx.dispatch_typed_action(RuleViewAction::OpenSettings);
@@ -623,41 +604,8 @@ impl RuleView {
             .finish()
     }
 
-    fn render_sync_status_icon(
-        &self,
-        ai_row: CloudRuleRow,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Option<Box<dyn Element>> {
-        // Don't show icon if the syncing is in progress.
-        if is_syncing(ai_row.fact.clone(), app) {
-            return None;
-        }
-
-        let item = ai_row.fact.to_warp_drive_item(appearance)?;
-        let icon = item.sync_status_icon(
-            SyncQueue::as_ref(app).is_dequeueing(),
-            ai_row.mouse_states.sync_status_icon.clone(),
-            appearance,
-        )?;
-
-        Some(
-            Hoverable::new(ai_row.mouse_states.sync_status_hover.clone(), |state| {
-                let mut container = Container::new(icon)
-                    .with_border(Border::all(1.))
-                    .with_uniform_padding(4.);
-                if state.is_hovered() {
-                    container = container
-                        .with_background(appearance.theme().surface_2())
-                        .with_border(
-                            Border::all(1.).with_border_fill(appearance.theme().surface_3()),
-                        );
-                }
-                container.with_margin_right(style::ROW_ICON_MARGIN).finish()
-            })
-            .finish(),
-        )
-    }
+    // Zap(本地化,Phase 2d-1):原 `render_sync_status_icon` 依赖 `SyncQueue::is_dequeueing()`
+    // 与 `is_syncing` 谓词,本地化后永不会出现 "同步中" 状态,整体移除。
 
     fn render_project_based_row(
         &self,
@@ -713,9 +661,9 @@ impl RuleView {
 
     fn render_global_rule_row(
         &self,
-        ai_row: CloudRuleRow,
+        ai_row: GlobalRuleRow,
         appearance: &Appearance,
-        app: &AppContext,
+        _app: &AppContext,
     ) -> Box<dyn Element> {
         let AIFact::Memory(AIMemory { name, content, .. }) =
             ai_row.fact.model().string_model.clone();
@@ -760,19 +708,12 @@ impl RuleView {
             )
             .finish();
 
-        let mut row = Flex::row()
+        let row = Flex::row()
             .with_main_axis_size(MainAxisSize::Max)
-            .with_main_axis_alignment(MainAxisAlignment::SpaceBetween);
+            .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
+            .with_child(Expanded::new(1., fact_text).finish());
 
-        if let Some(sync_status_icon) =
-            self.render_sync_status_icon(ai_row.clone(), appearance, app)
-        {
-            row.add_child(sync_status_icon);
-        }
-
-        row.add_child(Expanded::new(1., fact_text).finish());
-
-        let mut hoverable = Hoverable::new(ai_row.mouse_states.hover.clone(), |state| {
+        let hoverable = Hoverable::new(ai_row.mouse_states.hover.clone(), |state| {
             let mut bg_color = internal_colors::neutral_1(appearance.theme());
             if state.is_hovered() {
                 bg_color = internal_colors::neutral_4(appearance.theme());
@@ -791,15 +732,14 @@ impl RuleView {
                 .finish()
         });
 
-        if is_edit_allowed(ai_row.fact.clone(), app) {
-            hoverable = hoverable
-                .with_cursor(Cursor::PointingHand)
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(RuleViewAction::Edit(ai_row.fact.sync_id()));
-                });
-        }
-
-        hoverable.finish()
+        // Zap(本地化,Phase 2d-1):原 `is_edit_allowed` 依赖网络在线+server_id 两个纬度,
+        // 本地化后规则永远可编辑,点击动作无条件挂载。
+        hoverable
+            .with_cursor(Cursor::PointingHand)
+            .on_click(move |ctx, _, _| {
+                ctx.dispatch_typed_action(RuleViewAction::Edit(ai_row.fact.sync_id()));
+            })
+            .finish()
     }
 
     fn render_items(

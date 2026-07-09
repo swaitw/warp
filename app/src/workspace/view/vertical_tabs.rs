@@ -57,7 +57,6 @@ use pathfinder_geometry::vector::{vec2f, Vector2F};
 use settings::Setting as _;
 use std::path::{Path, PathBuf};
 use warp_core::context_flag::ContextFlag;
-use warp_core::telemetry::TelemetryEvent as _;
 use warp_core::ui::color::blend::Blend;
 use warp_core::ui::color::coloru_with_opacity;
 use warp_core::ui::theme::color::internal_colors;
@@ -758,7 +757,7 @@ enum SummaryPaneKind {
     Workflow { is_ai_prompt: bool },
     Settings,
     EnvVarCollection,
-    EnvironmentManagement,
+    // Zap Wave 7-3:`EnvironmentManagement` variant 随 ambient-agent UI 子系统物理删。
     AIFact,
     AIDocument,
     ExecutionProfileEditor,
@@ -2022,7 +2021,7 @@ fn render_tab_group_internal(
         };
 
         // Show the action buttons when the group OR the buttons themselves
-        // are hovered, following the pattern from AgentManagementView.
+        // are hovered.
         // This prevents flickering when the mouse moves from the group
         // to the overlay buttons (which may sit outside the group bounds).
         let should_show_action_buttons = !drag_state.is_any_pane_dragging
@@ -2391,11 +2390,12 @@ fn resolve_icon_with_status_variant(
             }
         }
         // Settings and environment management use the foreground color per design spec
-        TypedPane::Settings | TypedPane::EnvironmentManagement => IconWithStatusVariant::Neutral {
+        // Zap Wave 7-3:`TypedPane::EnvironmentManagement` 随 ambient-agent UI 子系统物理删。
+        TypedPane::Settings => IconWithStatusVariant::Neutral {
             icon: typed.icon(),
             icon_color: main_text,
         },
-        // Warp Drive object types use their established index colors
+        // Zap Drive object types use their established index colors
         TypedPane::Notebook { is_plan } => IconWithStatusVariant::Neutral {
             icon: typed.icon(),
             icon_color: drive_color(DriveObjectType::Notebook {
@@ -2550,7 +2550,7 @@ enum TypedPane<'a> {
     Workflow { is_ai_prompt: bool },
     Settings,
     EnvVarCollection,
-    EnvironmentManagement,
+    // Zap Wave 7-3:`EnvironmentManagement` variant 随 ambient-agent UI 子系统物理删。
     AIFact,
     AIDocument,
     ExecutionProfileEditor,
@@ -2592,7 +2592,7 @@ impl TypedPane<'_> {
             },
             TypedPane::Settings => SummaryPaneKind::Settings,
             TypedPane::EnvVarCollection => SummaryPaneKind::EnvVarCollection,
-            TypedPane::EnvironmentManagement => SummaryPaneKind::EnvironmentManagement,
+            // Zap Wave 7-3:`TypedPane::EnvironmentManagement` arm 随 variant 物理删。
             TypedPane::AIFact => SummaryPaneKind::AIFact,
             TypedPane::AIDocument => SummaryPaneKind::AIDocument,
             TypedPane::ExecutionProfileEditor => SummaryPaneKind::ExecutionProfileEditor,
@@ -2620,7 +2620,8 @@ impl TypedPane<'_> {
             TypedPane::EnvVarCollection => {
                 crate::t!("vertical-tabs-pane-kind-environment-variables")
             }
-            TypedPane::EnvironmentManagement => crate::t!("vertical-tabs-pane-kind-environments"),
+            // Zap Wave 7-3:`TypedPane::EnvironmentManagement` kind_label arm 随 variant
+            // 物理删。
             TypedPane::AIFact => crate::t!("vertical-tabs-pane-kind-rules"),
             TypedPane::AIDocument => crate::t!("vertical-tabs-pane-kind-plan"),
             TypedPane::ExecutionProfileEditor => {
@@ -2644,7 +2645,7 @@ impl TypedPane<'_> {
             | TypedPane::Workflow { .. }
             | TypedPane::Settings
             | TypedPane::EnvVarCollection
-            | TypedPane::EnvironmentManagement
+            // Zap Wave 7-3:`TypedPane::EnvironmentManagement` arm 随 variant 物理删。
             | TypedPane::AIFact
             | TypedPane::AIDocument
             | TypedPane::ExecutionProfileEditor
@@ -2664,7 +2665,8 @@ impl TypedPane<'_> {
             TypedPane::Workflow {
                 is_ai_prompt: false,
             } => WarpIcon::Workflow,
-            TypedPane::Settings | TypedPane::EnvironmentManagement => WarpIcon::Gear,
+            TypedPane::Settings => WarpIcon::Gear,
+            // Zap Wave 7-3:`TypedPane::EnvironmentManagement` icon arm 随 variant 物理删。
             TypedPane::EnvVarCollection => WarpIcon::EnvVarCollection,
             TypedPane::AIFact => WarpIcon::BookOpen,
             TypedPane::AIDocument => WarpIcon::Compass,
@@ -2802,7 +2804,7 @@ fn build_vertical_tabs_summary_data(
             | TypedPane::Workflow { .. }
             | TypedPane::Settings
             | TypedPane::EnvVarCollection
-            | TypedPane::EnvironmentManagement
+            // Zap Wave 7-3:`TypedPane::EnvironmentManagement` arm 随 variant 物理删。
             | TypedPane::AIFact
             | TypedPane::AIDocument
             | TypedPane::ExecutionProfileEditor
@@ -2925,7 +2927,7 @@ impl<'a> PaneProps<'a> {
             | TypedPane::Workflow { .. }
             | TypedPane::Settings
             | TypedPane::EnvVarCollection
-            | TypedPane::EnvironmentManagement
+            // Zap Wave 7-3:`TypedPane::EnvironmentManagement` arm 随 variant 物理删。
             | TypedPane::AIFact
             | TypedPane::AIDocument
             | TypedPane::ExecutionProfileEditor
@@ -3238,13 +3240,14 @@ impl PaneGroup {
             }
             IPaneType::Settings => TypedPane::Settings,
             IPaneType::EnvVarCollection => TypedPane::EnvVarCollection,
-            IPaneType::EnvironmentManagement => TypedPane::EnvironmentManagement,
+            // Zap Wave 7-3:`EnvironmentManagement` arm 随 variant 一同物理删。
             IPaneType::AIFact => TypedPane::AIFact,
             IPaneType::AIDocument => TypedPane::AIDocument,
             IPaneType::ExecutionProfileEditor => TypedPane::ExecutionProfileEditor,
-            IPaneType::GetStarted
-            | IPaneType::NetworkLog
+            IPaneType::ImageViewer
+            | IPaneType::GetStarted
             | IPaneType::SshServer
+            | IPaneType::Sftp
             | IPaneType::Welcome
             | IPaneType::DeferredPlaceholder => TypedPane::Other,
             #[cfg(test)]
@@ -3772,7 +3775,7 @@ fn render_summary_pane_kind_icon_circle(
         | SummaryPaneKind::Workflow { .. }
         | SummaryPaneKind::Settings
         | SummaryPaneKind::EnvVarCollection
-        | SummaryPaneKind::EnvironmentManagement
+        // Zap Wave 7-3:`SummaryPaneKind::EnvironmentManagement` arm 随 variant 物理删。
         | SummaryPaneKind::AIFact
         | SummaryPaneKind::AIDocument
         | SummaryPaneKind::ExecutionProfileEditor
@@ -3848,9 +3851,8 @@ fn summary_pane_kind_icon(
                 drive_color(DriveObjectType::Workflow)
             },
         ),
-        SummaryPaneKind::Settings | SummaryPaneKind::EnvironmentManagement => {
-            (WarpIcon::Gear, main_text)
-        }
+        SummaryPaneKind::Settings => (WarpIcon::Gear, main_text),
+        // Zap Wave 7-3:`SummaryPaneKind::EnvironmentManagement` arm 随 variant 物理删。
         SummaryPaneKind::EnvVarCollection => (
             WarpIcon::EnvVarCollection,
             drive_color(DriveObjectType::EnvVarCollection),
@@ -5670,7 +5672,7 @@ fn typed_pane_warp_drive_object_type(typed: &TypedPane<'_>) -> Option<DriveObjec
         | TypedPane::CodeDiff
         | TypedPane::File
         | TypedPane::Settings
-        | TypedPane::EnvironmentManagement
+        // Zap Wave 7-3:`TypedPane::EnvironmentManagement` arm 随 variant 物理删。
         | TypedPane::ExecutionProfileEditor
         | TypedPane::Other => None,
     }
@@ -5697,7 +5699,7 @@ fn render_detail_section(
         TypedPane::CodeDiff
         | TypedPane::File
         | TypedPane::Settings
-        | TypedPane::EnvironmentManagement
+        // Zap Wave 7-3:`TypedPane::EnvironmentManagement` arm 随 variant 物理删。
         | TypedPane::ExecutionProfileEditor
         | TypedPane::Other => Empty::new().finish(),
     }

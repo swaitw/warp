@@ -1,7 +1,7 @@
 use settings::Setting as _;
 use warpui::{
     fonts::FamilyId, AddSingletonModel, AppContext, AssetProvider, Entity, ModelContext,
-    SingletonEntity,
+    SingletonEntity, WindowId,
 };
 
 #[cfg(target_os = "macos")]
@@ -22,8 +22,9 @@ use macos_app_icon::*;
 
 use crate::{
     settings::{
-        active_theme_kind, FontSettings, FontSettingsChangedEvent, MonospaceFontSize, Settings,
-        ThemeSettings,
+        active_theme_kind, font::heading_font_size_multipliers_from_settings, FontSettings,
+        FontSettingsChangedEvent, MonospaceFontSize, Settings, ThemeSettings, UI_FONT_SIZE_MIN,
+        UI_FONT_SIZE_MAX,
     },
     themes::theme::{ThemeKind, WarpTheme},
     ASSETS,
@@ -84,6 +85,16 @@ impl AppearanceManager {
                         });
                     }
                 }
+                FontSettingsChangedEvent::MonospaceFallbackFontName { .. } => {
+                    let font_name = FontSettings::as_ref(ctx)
+                        .monospace_fallback_font_name
+                        .value()
+                        .clone();
+                    let new_family = get_or_load_optional_font_family(&font_name, ctx);
+                    Appearance::handle(ctx).update(ctx, |appearance, ctx| {
+                        appearance.set_terminal_fallback_font_family(new_family, ctx);
+                    });
+                }
                 FontSettingsChangedEvent::MonospaceFontSize { .. } => {
                     let new_font_size = *FontSettings::as_ref(ctx).monospace_font_size.value();
                     Appearance::handle(ctx).update(ctx, |appearance, ctx| {
@@ -127,6 +138,38 @@ impl AppearanceManager {
                         }
                     }
                 }
+                FontSettingsChangedEvent::UiFontName { .. } => {
+                    let font_name = FontSettings::as_ref(ctx).ui_font_name.value().clone();
+                    let new_family = if font_name.is_empty() {
+                        load_default_ui_font_family(ctx).ok()
+                    } else {
+                        get_or_load_font_family(&font_name, ctx)
+                    };
+                    if let Some(new_family) = new_family {
+                        Appearance::handle(ctx).update(ctx, |appearance, ctx| {
+                            appearance.set_ui_font_family(new_family, ctx);
+                        });
+                    }
+                }
+                FontSettingsChangedEvent::UiFontSize { .. } => {
+                    let new_font_size = *FontSettings::as_ref(ctx).ui_font_size.value();
+                    let clamped = new_font_size.clamp(UI_FONT_SIZE_MIN, UI_FONT_SIZE_MAX);
+                    Appearance::handle(ctx).update(ctx, |appearance, ctx| {
+                        appearance.set_ui_font_size(clamped, ctx);
+                    });
+                }
+                FontSettingsChangedEvent::MarkdownHeadingH1Scale { .. }
+                | FontSettingsChangedEvent::MarkdownHeadingH2Scale { .. }
+                | FontSettingsChangedEvent::MarkdownHeadingH3Scale { .. }
+                | FontSettingsChangedEvent::MarkdownHeadingH4Scale { .. }
+                | FontSettingsChangedEvent::MarkdownHeadingH5Scale { .. }
+                | FontSettingsChangedEvent::MarkdownHeadingH6Scale { .. } => {
+                    let new_multipliers =
+                        heading_font_size_multipliers_from_settings(FontSettings::as_ref(ctx));
+                    Appearance::handle(ctx).update(ctx, |appearance, ctx| {
+                        appearance.set_heading_font_size_multipliers(new_multipliers, ctx);
+                    });
+                }
                 _ => {}
             },
         );
@@ -157,6 +200,29 @@ impl AppearanceManager {
     pub fn set_transient_theme(&mut self, theme: ThemeKind, ctx: &mut ModelContext<Self>) {
         self.transient_theme = Some(Settings::theme_for_theme_kind(&theme, ctx));
         self.refresh_theme_state(ctx);
+    }
+
+    /// Applies a per-window theme override, affecting only `window_id`. Windows
+    /// without an override continue to follow the global theme (including
+    /// system-theme follow via `refresh_theme_state`).
+    pub fn set_window_theme(
+        &mut self,
+        window_id: WindowId,
+        theme_kind: ThemeKind,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let theme = Settings::theme_for_theme_kind(&theme_kind, ctx);
+        Appearance::handle(ctx).update(ctx, |appearance, ctx| {
+            appearance.set_window_theme(window_id, theme, ctx);
+        });
+    }
+
+    /// Clears a per-window theme override, returning `window_id` to the global
+    /// theme. No-op if the window has no override.
+    pub fn clear_window_theme(&mut self, window_id: WindowId, ctx: &mut ModelContext<Self>) {
+        Appearance::handle(ctx).update(ctx, |appearance, ctx| {
+            appearance.clear_window_theme(window_id, ctx);
+        });
     }
 
     #[cfg(target_os = "macos")]
@@ -225,7 +291,7 @@ impl AppearanceManager {
             log::debug!("Setting app icon in memory to: {icon_name}");
             // Locate the plugin bundle.
             let plugins_path: id = msg_send![bundle, builtInPlugInsPath];
-            let plugin_name = make_nsstring("WarpDockTilePlugin.docktileplugin");
+            let plugin_name = make_nsstring("ZapDockTilePlugin.docktileplugin");
             let plugin_path: id =
                 msg_send![plugins_path, stringByAppendingPathComponent: plugin_name];
             let plugin_bundle: id = msg_send![class!(NSBundle), bundleWithPath: plugin_path];
@@ -388,6 +454,14 @@ fn get_or_load_font_family(font_name: &str, ctx: &mut AppContext) -> Option<Fami
     })
 }
 
+fn get_or_load_optional_font_family(font_name: &str, ctx: &mut AppContext) -> Option<FamilyId> {
+    if font_name.is_empty() {
+        None
+    } else {
+        get_or_load_font_family(font_name, ctx)
+    }
+}
+
 fn build_appearance(ctx: &mut AppContext) -> Appearance {
     let default_monospace_font_family = load_default_monospace_font_family(ctx)
         .expect("unable to load default monospace font family");
@@ -396,11 +470,24 @@ fn build_appearance(ctx: &mut AppContext) -> Appearance {
         .value()
         .clone();
     let am_font_name = FontSettings::as_ref(ctx).ai_font_name.value().clone();
+    let monospace_fallback_font_name = FontSettings::as_ref(ctx)
+        .monospace_fallback_font_name
+        .value()
+        .clone();
 
     let monospace_font_family_from_settings = get_or_load_font_family(&monospace_font_name, ctx);
+    let monospace_fallback_font_family_from_settings =
+        get_or_load_optional_font_family(&monospace_fallback_font_name, ctx);
 
-    let ui_font_family =
-        load_default_ui_font_family(ctx).expect("unable to load default ui font family");
+    let ui_font_name = FontSettings::as_ref(ctx).ui_font_name.value().clone();
+    let ui_font_size = *FontSettings::as_ref(ctx).ui_font_size.value();
+
+    let ui_font_family = if ui_font_name.is_empty() {
+        load_default_ui_font_family(ctx).expect("unable to load default ui font family")
+    } else {
+        get_or_load_font_family(&ui_font_name, ctx)
+            .unwrap_or_else(|| load_default_ui_font_family(ctx).expect("unable to load default ui font family"))
+    };
 
     let am_font_family_from_settings = get_or_load_font_family(&am_font_name, ctx);
 
@@ -412,6 +499,9 @@ fn build_appearance(ctx: &mut AppContext) -> Appearance {
     let monospace_font_weight = *FontSettings::as_ref(ctx).monospace_font_weight.value();
 
     let line_height_ratio = *FontSettings::as_ref(ctx).line_height_ratio.value();
+
+    let heading_multipliers =
+        heading_font_size_multipliers_from_settings(FontSettings::as_ref(ctx));
 
     let theme_kind = active_theme_kind(ThemeSettings::as_ref(ctx), ctx);
     let theme = Settings::theme_for_theme_kind(&theme_kind, ctx);
@@ -426,7 +516,10 @@ fn build_appearance(ctx: &mut AppContext) -> Appearance {
         ui_font_family,
         line_height_ratio,
         am_font_family_from_settings.unwrap_or(default_monospace_font_family),
+        monospace_fallback_font_family_from_settings,
         password_font_family,
+        ui_font_size.clamp(UI_FONT_SIZE_MIN, UI_FONT_SIZE_MAX),
+        heading_multipliers,
     )
 }
 

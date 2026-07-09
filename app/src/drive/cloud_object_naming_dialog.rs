@@ -28,7 +28,6 @@ const INPUT_PADDING_VERTICAL: f32 = 10.;
 const BORDER_RADIUS_SMALL: f32 = 4.;
 const BORDER_RADIUS_LARGE: f32 = 8.;
 const BORDER_WIDTH: f32 = 1.;
-const BUTTON_FONT_SIZE: f32 = 14.;
 const BUTTON_PADDING: f32 = 12.;
 const BUTTON_MARGIN_BETWEEN: f32 = 8.;
 
@@ -38,7 +37,7 @@ const BUTTON_MARGIN_BETWEEN: f32 = 8.;
 /// This dialog can be opened for a folder or a space. If open_for_folder_id = None, it's a space.
 /// If open_for_folder_id = Some, it's a specific folder.
 #[derive(Clone)]
-pub struct CloudObjectNamingDialog {
+pub struct ObjectNamingDialog {
     pub title_editor: ViewHandle<EditorView>,
     cancel_mouse_state: MouseStateHandle,
     primary_action_mouse_state: MouseStateHandle,
@@ -49,7 +48,7 @@ pub struct CloudObjectNamingDialog {
     pub open_for_folder_id: Option<SyncId>,
 }
 
-impl CloudObjectNamingDialog {
+impl ObjectNamingDialog {
     pub fn new(title_editor: ViewHandle<EditorView>) -> Self {
         Self {
             title_editor,
@@ -177,7 +176,7 @@ impl CloudObjectNamingDialog {
 
     fn render_action_buttons(&self, appearance: &Appearance, app: &AppContext) -> Box<dyn Element> {
         let default_button_styles = UiComponentStyles {
-            font_size: Some(BUTTON_FONT_SIZE),
+            font_size: Some(appearance.ui_font_subheading()),
             font_family_id: Some(appearance.ui_font_family()),
             font_color: Some(
                 appearance
@@ -235,7 +234,7 @@ impl CloudObjectNamingDialog {
                 Some(primary_hovered_and_clicked_styles),
                 Some(primary_disabled_styles),
             )
-            .with_text_label(primary_button_text.into());
+            .with_text_label(primary_button_text);
 
         if let Some(title) = self.title(app) {
             if title.is_empty() || !self.title_editor.as_ref(app).is_dirty(app) {
@@ -252,7 +251,7 @@ impl CloudObjectNamingDialog {
                             .ui_builder()
                             .button(ButtonVariant::Secondary, self.cancel_mouse_state.clone())
                             .with_style(UiComponentStyles {
-                                font_size: Some(BUTTON_FONT_SIZE),
+                                font_size: Some(appearance.ui_font_subheading()),
                                 font_weight: Some(Weight::Bold),
                                 padding: Some(Coords::uniform(BUTTON_PADDING)),
                                 ..Default::default()
@@ -261,9 +260,7 @@ impl CloudObjectNamingDialog {
                             .build()
                             .with_cursor(Cursor::PointingHand)
                             .on_click(move |ctx, _, _| {
-                                ctx.dispatch_typed_action(
-                                    DriveIndexAction::CloseCloudObjectNamingDialog,
-                                )
+                                ctx.dispatch_typed_action(DriveIndexAction::CloseObjectNamingDialog)
                             })
                             .finish(),
                     )
@@ -319,7 +316,7 @@ impl CloudObjectNamingDialog {
         )
         .prevent_interaction_with_other_elements()
         .on_dismiss(|ctx, _app| {
-            ctx.dispatch_typed_action(DriveIndexAction::CloseCloudObjectNamingDialog)
+            ctx.dispatch_typed_action(DriveIndexAction::CloseObjectNamingDialog)
         })
         .finish()
     }

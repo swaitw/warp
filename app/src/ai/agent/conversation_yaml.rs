@@ -172,6 +172,7 @@ fn write_task_messages(
                             write_task_messages(subtask, &subdir, &mut sub_index, task_map)?;
                         }
                     }
+                    Some(Tool::UploadFileArtifact(_)) => {}
                     Some(tool) => {
                         let name = tool.name();
                         let filename = format!(
@@ -209,6 +210,7 @@ fn write_task_messages(
                         write_yaml_file(dir, &filename, &content)?;
                         *index += 1;
                     }
+                    Some(ToolCallResultType::UploadFileArtifact(_)) => {}
                     Some(result) => {
                         let name = tool_call_names
                             .get(tool_call_id.as_str())
@@ -284,18 +286,6 @@ fn write_tool_call_args(out: &mut String, tool: &Tool) {
             out.push_str("command: |\n");
             write_block_scalar(out, &cmd.command);
         }
-        Tool::SearchCodebase(sc) => {
-            out.push_str(&format!("query: \"{}\"\n", escape_yaml_string(&sc.query)));
-            if !sc.codebase_path.is_empty() {
-                out.push_str(&format!("codebase_path: {}\n", sc.codebase_path));
-            }
-            if !sc.path_filters.is_empty() {
-                out.push_str("path_filters:\n");
-                for p in &sc.path_filters {
-                    out.push_str(&format!("  - \"{}\"\n", escape_yaml_string(p)));
-                }
-            }
-        }
         Tool::ReadFiles(rf) => {
             out.push_str("files:\n");
             for f in &rf.files {
@@ -308,18 +298,7 @@ fn write_tool_call_args(out: &mut String, tool: &Tool) {
                 }
             }
         }
-        Tool::UploadFileArtifact(upload) => {
-            if let Some(file) = &upload.file {
-                out.push_str("file:\n");
-                out.push_str(&format!("  file_path: {}\n", file.file_path));
-            }
-            if !upload.description.is_empty() {
-                out.push_str(&format!(
-                    "description: \"{}\"\n",
-                    escape_yaml_string(&upload.description)
-                ));
-            }
-        }
+        Tool::UploadFileArtifact(_) => {}
         Tool::Grep(g) => {
             out.push_str("queries:\n");
             for q in &g.queries {
@@ -555,31 +534,6 @@ fn write_tool_call_result_content(out: &mut String, result: &ToolCallResultType)
                 }
             }
         }
-        ToolCallResultType::SearchCodebase(r) => {
-            if let Some(res) = &r.result {
-                use api::search_codebase_result::Result;
-                match res {
-                    Result::Success(s) => {
-                        out.push_str("files:\n");
-                        for f in &s.files {
-                            out.push_str(&format!("  - name: {}\n", f.file_path));
-                            let preview = truncate_content(&f.content, 2048);
-                            if !preview.is_empty() {
-                                out.push_str("    content: |\n");
-                                for line in preview.lines() {
-                                    out.push_str("      ");
-                                    out.push_str(line);
-                                    out.push('\n');
-                                }
-                            }
-                        }
-                    }
-                    Result::Error(e) => {
-                        out.push_str(&format!("error: {}\n", e.message));
-                    }
-                }
-            }
-        }
         ToolCallResultType::ReadFiles(r) => {
             if let Some(res) = &r.result {
                 use api::read_files_result::Result;
@@ -620,21 +574,7 @@ fn write_tool_call_result_content(out: &mut String, result: &ToolCallResultType)
                 }
             }
         }
-        ToolCallResultType::UploadFileArtifact(r) => {
-            if let Some(res) = &r.result {
-                use api::upload_file_artifact_result::Result;
-                match res {
-                    Result::Success(s) => {
-                        out.push_str(&format!("artifact_uid: {}\n", s.artifact_uid));
-                        out.push_str(&format!("mime_type: {}\n", s.mime_type));
-                        out.push_str(&format!("size_bytes: {}\n", s.size_bytes));
-                    }
-                    Result::Error(e) => {
-                        out.push_str(&format!("error: {}\n", e.message));
-                    }
-                }
-            }
-        }
+        ToolCallResultType::UploadFileArtifact(_) => {}
         ToolCallResultType::Grep(r) => {
             if let Some(res) = &r.result {
                 use api::grep_result::Result;

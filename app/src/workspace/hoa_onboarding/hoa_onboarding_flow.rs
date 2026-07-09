@@ -468,11 +468,11 @@ impl HoaOnboardingFlow {
 
         // Build the description with an inline "Learn more" hyperlink.
         let learn_more_fragment = FormattedTextFragment {
-            text: crate::t!("common-learn-more").into(),
+            text: crate::t!("common-learn-more"),
             styles: FormattedTextStyles {
                 underline: true,
                 hyperlink: Some(Hyperlink::Url(
-                    "https://docs.warp.dev/agent-platform/warp-agents/agent-notifications".into(),
+                    "".into(),
                 )),
                 ..Default::default()
             },
@@ -480,7 +480,7 @@ impl HoaOnboardingFlow {
 
         let formatted = FormattedText::new([FormattedTextLine::Line(vec![
             FormattedTextFragment::plain_text(
-                "Warp pipes through notifications from any CLI coding agent into a unified notification center that works across all coding agents and harnesses. ",
+                "Zap pipes through notifications from any CLI coding agent into a unified notification center that works across all coding agents and harnesses. ",
             ),
             learn_more_fragment,
         ])]);
@@ -493,6 +493,7 @@ impl HoaOnboardingFlow {
             callout_body_color(appearance),
             Default::default(),
         )
+        .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
         .with_line_height_ratio(1.2)
         .register_default_click_handlers(|link, _ctx, app| {
             app.open_url(&link.url);

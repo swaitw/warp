@@ -2,45 +2,33 @@ pub mod active_notebook_data;
 mod context_menu;
 pub mod editor;
 pub mod file;
+pub mod image;
 pub mod link;
 pub mod manager;
 pub mod notebook;
 mod styles;
 pub mod telemetry;
 
-use std::sync::Arc;
-
-use async_trait::async_trait;
-
-use anyhow::Result;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use warpui::AppContext;
 
-use crate::server::cloud_objects::update_manager::InitiatedBy;
 use crate::{
     ai::document::ai_document_model::AIDocumentId,
     appearance::Appearance,
-    cloud_object::{
-        CloudModelType, CloudObjectEventEntrypoint, CreateCloudObjectResult, CreateObjectRequest,
-        GenericCloudObject, GenericServerObject, ObjectType, Owner, Revision, ServerCloudObject,
-        UpdateCloudObjectResult,
-    },
+    cloud_object::{GenericStoredObject, ObjectType, Owner, StoredObjectModel},
     drive::{
         items::{notebook::WarpDriveNotebook, WarpDriveItem},
-        CloudObjectTypeAndId,
+        ObjectTypeAndId,
     },
     persistence::ModelEvent,
-    server::{
-        ids::{ServerId, SyncId},
-        server_api::object::ObjectClient,
-        sync_queue::{QueueItem, SerializedModel},
-    },
+    server::ids::{ServerId, SyncId},
 };
 
-/// Serialized representation of a notebook for sync queue
-/// The AIDocumentID and ConversationID are stored here to avoid polluting the
-/// generic CreateObjectRequest type.
+use crate::cloud_object::SerializedModel;
+
+/// Serialized representation of a notebook stored in local object persistence.
+/// The AIDocumentID and ConversationID stay grouped with notebook content.
 #[derive(Serialize, Deserialize)]
 pub(crate) struct SerializedNotebook {
     pub(crate) data: String,
@@ -48,9 +36,9 @@ pub(crate) struct SerializedNotebook {
     pub(crate) conversation_id: Option<String>,
 }
 
-/// `CloudNotebook` is a notebook retrieved from the server.
+/// `NotebookObject` is an object-store backed notebook.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct CloudNotebookModel {
+pub struct NotebookObjectModel {
     pub title: String,
     pub data: String,
     pub ai_document_id: Option<AIDocumentId>,
@@ -58,12 +46,10 @@ pub struct CloudNotebookModel {
     pub conversation_id: Option<String>,
 }
 
-pub type CloudNotebook = GenericCloudObject<NotebookId, CloudNotebookModel>;
+pub type NotebookObject = GenericStoredObject<NotebookId, NotebookObjectModel>;
 
-#[cfg_attr(not(target_family = "wasm"), async_trait)]
-#[cfg_attr(target_family = "wasm", async_trait(?Send))]
-impl CloudModelType for CloudNotebookModel {
-    type CloudObjectType = CloudNotebook;
+impl StoredObjectModel for NotebookObjectModel {
+    type StoredObjectType = NotebookObject;
     type IdType = NotebookId;
 
     fn model_type_name(&self) -> &'static str {
@@ -78,8 +64,8 @@ impl CloudModelType for CloudNotebookModel {
         ObjectType::Notebook
     }
 
-    fn cloud_object_type_and_id(&self, id: SyncId) -> CloudObjectTypeAndId {
-        CloudObjectTypeAndId::Notebook(id)
+    fn object_type_and_id(&self, id: SyncId) -> ObjectTypeAndId {
+        ObjectTypeAndId::Notebook(id)
     }
 
     fn display_name(&self) -> String {
@@ -90,66 +76,18 @@ impl CloudModelType for CloudNotebookModel {
         name.clone_into(&mut self.title);
     }
 
-    fn upsert_event(&self, notebook: &CloudNotebook) -> ModelEvent {
+    fn upsert_event(&self, notebook: &NotebookObject) -> ModelEvent {
         ModelEvent::UpsertNotebook {
             notebook: notebook.clone(),
         }
     }
 
-    fn bulk_upsert_event(objects: &[CloudNotebook]) -> ModelEvent {
+    fn bulk_upsert_event(objects: &[NotebookObject]) -> ModelEvent {
         ModelEvent::UpsertNotebooks(objects.to_vec())
-    }
-
-    fn create_object_queue_item(
-        &self,
-        notebook: &CloudNotebook,
-        entrypoint: CloudObjectEventEntrypoint,
-        initiated_by: InitiatedBy,
-    ) -> Option<QueueItem> {
-        if let SyncId::ClientId(client_id) = notebook.id {
-            let title = Some(notebook.model().display_name())
-                .filter(|name| !name.is_empty())
-                .map(Arc::new);
-
-            let serialized_model = Some(Arc::new(notebook.model().serialized()));
-
-            return Some(QueueItem::CreateObject {
-                object_type: self.object_type(),
-                owner: notebook.permissions.owner,
-                id: client_id,
-                title,
-                serialized_model,
-                initial_folder_id: notebook.metadata.folder_id,
-                entrypoint,
-                initiated_by,
-            });
-        }
-        None
-    }
-
-    fn update_object_queue_item(
-        &self,
-        _revision_ts: Option<Revision>,
-        _notebook: &CloudNotebook,
-    ) -> Option<QueueItem> {
-        // OpenWarp: notebooks are local-only, never enqueued to the cloud sync queue.
-        None
     }
 
     fn should_update_after_server_conflict(&self) -> bool {
         true
-    }
-
-    fn new_from_server_update(&self, server_cloud_object: &ServerCloudObject) -> Option<Self> {
-        if let ServerCloudObject::Notebook(server_notebook) = server_cloud_object {
-            return Some(CloudNotebookModel {
-                title: server_notebook.model.title.clone(),
-                data: server_notebook.model.data.clone(),
-                ai_document_id: server_notebook.model.ai_document_id,
-                conversation_id: None, // conversation_id is not returned from server, just used for initial plan artifact creation
-            });
-        }
-        None
     }
 
     fn serialized(&self) -> SerializedModel {
@@ -160,29 +98,6 @@ impl CloudModelType for CloudNotebookModel {
         };
         let json = serde_json::to_string(&serialized).expect("Failed to serialize notebook");
         SerializedModel::new(json)
-    }
-
-    async fn send_create_request(
-        object_client: Arc<dyn ObjectClient>,
-        request: CreateObjectRequest,
-    ) -> Result<CreateCloudObjectResult> {
-        object_client.create_notebook(request).await
-    }
-
-    async fn send_update_request(
-        &self,
-        object_client: Arc<dyn ObjectClient>,
-        server_id: ServerId,
-        revision: Option<Revision>,
-    ) -> Result<UpdateCloudObjectResult<GenericServerObject<NotebookId, Self>>> {
-        object_client
-            .update_notebook(
-                server_id.into(),
-                Some(self.title.clone()),
-                Some(self.data.clone().into()),
-                revision,
-            )
-            .await
     }
 
     fn renders_in_warp_drive(&self) -> bool {
@@ -197,10 +112,10 @@ impl CloudModelType for CloudNotebookModel {
         &self,
         id: SyncId,
         _appearance: &Appearance,
-        notebook: &CloudNotebook,
+        notebook: &NotebookObject,
     ) -> Option<Box<dyn WarpDriveItem>> {
         Some(Box::new(WarpDriveNotebook::new(
-            self.cloud_object_type_and_id(id),
+            self.object_type_and_id(id),
             notebook.clone(),
             notebook.model().ai_document_id.is_some(),
         )))
@@ -218,12 +133,12 @@ impl From<NotebookId> for SyncId {
     }
 }
 
-/// A notebook location. Mainly, this lets us distinguish between cloud and file-based notebooks.
+/// A notebook location. Mainly, this lets us distinguish between object-backed and file-based notebooks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum NotebookLocation {
-    /// A cloud notebook in the user's personal space.
+    /// An object-backed notebook in the user's personal space.
     PersonalCloud,
-    /// A cloud notebook in a team space.
+    /// An object-backed notebook in a team space.
     Team,
     /// A notebook backed by a local file.
     LocalFile,

@@ -5,7 +5,6 @@ use crate::ai::ambient_agents::{
 use crate::ai::artifacts::{Artifact, ArtifactButtonsRow, ArtifactButtonsRowEvent};
 use crate::ai::blocklist::{format_credits, BlocklistAIHistoryModel};
 use crate::appearance::Appearance;
-use crate::server::ids::SyncId;
 use crate::settings::ai::{AISettings, AISettingsChangedEvent};
 use crate::ui_components::blended_colors;
 use crate::util::time_format::human_readable_precise_duration;
@@ -31,9 +30,6 @@ use warpui::{
     ViewHandle,
 };
 
-#[cfg(not(target_family = "wasm"))]
-use crate::server::server_api::ServerApiProvider;
-
 /// Metadata collected for display in the tombstone.
 #[derive(Default)]
 struct TombstoneDisplayData {
@@ -53,7 +49,7 @@ struct TombstoneDisplayData {
     working_directory: Option<String>,
     /// Artifacts from the conversation
     artifacts: Vec<Artifact>,
-    /// Execution harness for the task. None until the task is loaded.
+    /// 在可从本地数据获得时记录任务执行 harness。
     #[cfg(not(target_family = "wasm"))]
     harness: Option<Harness>,
 }
@@ -116,7 +112,7 @@ impl TombstoneDisplayData {
         }
     }
 
-    /// Update with data from an AmbientAgentTask fetch
+    /// 用 AmbientAgentTask 的数据补充展示信息。
     #[cfg(not(target_family = "wasm"))]
     fn enrich_from_task(&mut self, task: AmbientAgentTask) {
         // Use task title if we don't have a conversation title.
@@ -243,9 +239,17 @@ impl ConversationEndedTombstoneView {
         ctx.subscribe_to_view(
             &view.artifact_buttons_view,
             |_, _, event, ctx| match event {
-                ArtifactButtonsRowEvent::OpenPlan { notebook_uid } => {
-                    ctx.dispatch_typed_action(&WorkspaceAction::OpenNotebook {
-                        id: SyncId::ServerId((*notebook_uid).into()),
+                ArtifactButtonsRowEvent::OpenPlan { document_uid } => {
+                    // openWarp 本地化:在 shared session tombstone 中同样走本地
+                    // AIDocument pane,不再依赖云 notebook_uid。
+                    let document_version =
+                        crate::ai::document::ai_document_model::AIDocumentModel::as_ref(ctx)
+                            .get_current_document(document_uid)
+                            .map(|doc| doc.version)
+                            .unwrap_or_default();
+                    ctx.dispatch_typed_action(&WorkspaceAction::OpenAIDocumentPane {
+                        document_id: *document_uid,
+                        document_version,
                     });
                 }
                 ArtifactButtonsRowEvent::CopyBranch { branch } => {
@@ -257,12 +261,6 @@ impl ConversationEndedTombstoneView {
                 ArtifactButtonsRowEvent::OpenPullRequest { url } => {
                     ctx.open_url(url);
                 }
-                ArtifactButtonsRowEvent::ViewScreenshots { artifact_uids } => {
-                    crate::ai::artifacts::open_screenshot_lightbox(artifact_uids, ctx);
-                }
-                ArtifactButtonsRowEvent::DownloadFile { artifact_uid } => {
-                    crate::ai::artifacts::download_file_artifact(artifact_uid, ctx);
-                }
             },
         );
 
@@ -272,29 +270,6 @@ impl ConversationEndedTombstoneView {
                 ctx.notify();
             }
         });
-
-        // Fetch AmbientAgentTask for additional metadata (source, skill, artifacts, etc.)
-        #[cfg(not(target_family = "wasm"))]
-        if let Some(task_id) = task_id {
-            let ai_client = ServerApiProvider::handle(ctx).as_ref(ctx).get_ai_client();
-            ctx.spawn(
-                async move { ai_client.get_ambient_agent_task(&task_id).await },
-                |me, result, ctx| match result {
-                    Ok(task) => {
-                        me.display_data.enrich_from_task(task);
-                        me.artifact_buttons_view.update(ctx, |row, ctx| {
-                            row.update_artifacts(&me.display_data.artifacts, ctx);
-                        });
-                        ctx.notify();
-                    }
-                    Err(err) => {
-                        log::warn!(
-                            "Failed to fetch AmbientAgentTask for tombstone metadata: {err}"
-                        );
-                    }
-                },
-            );
-        }
 
         view
     }
@@ -454,7 +429,7 @@ impl ConversationEndedTombstoneView {
         #[cfg(not(target_family = "wasm"))]
         {
             // Hide for non-Oz harnesses (e.g. Claude, Gemini): they can't be
-            // forked into a local Warp conversation. Unknown harness (None) is
+            // forked into a local Zap conversation. Unknown harness (None) is
             // treated as allowed so plain conversations and pre-load tasks still
             // show the button.
             let harness_allows_continue =

@@ -1,7 +1,7 @@
 use crate::{
     appearance::Appearance,
-    cloud_object::{model::persistence::CloudModel, CloudObject, Owner},
-    server::{ids::SyncId, sync_queue::SyncQueue},
+    cloud_object::{model::persistence::ObjectStoreModel, Owner, StoredObject},
+    server::ids::SyncId,
     themes::theme::WarpTheme,
     workspaces::user_workspaces::UserWorkspaces,
 };
@@ -26,7 +26,6 @@ use warpui::{
 use super::modal_body::{ImportModalBody, ImportModalBodyAction, ImportModalBodyEvent};
 
 const CLOSE_BUTTON_SIZE: f32 = 24.;
-const HEADER_FONT_SIZE: f32 = 16.;
 const MODAL_CORNER_RADIUS: f32 = 8.;
 pub const BODY_HEIGHT: f32 = 244.;
 
@@ -90,7 +89,7 @@ impl ImportModal {
         let window_id = ctx.window_id();
         let import_body_id = self.import_modal.id();
 
-        let sync_queue_is_dequeueing = SyncQueue::as_ref(ctx).is_dequeueing();
+        let sync_queue_is_dequeueing = false;
 
         let allowed_file_types = vec![FileType::Yaml, FileType::Markdown];
 
@@ -154,7 +153,7 @@ impl ImportModal {
         let (text, highlight_start) = match self
             .folder_id
             .as_ref()
-            .and_then(|folder_id| CloudModel::as_ref(app).get_folder(folder_id))
+            .and_then(|folder_id| ObjectStoreModel::as_ref(app).get_folder(folder_id))
         {
             Some(folder) => {
                 let breadcrumbs = folder.breadcrumbs(app);
@@ -233,7 +232,7 @@ impl ImportModal {
                         Text::new_inline(
                             crate::t!("drive-import-title"),
                             appearance.ui_font_family(),
-                            HEADER_FONT_SIZE,
+                            appearance.ui_font_heading_3(),
                         )
                         .with_color(appearance.theme().active_ui_text_color().into())
                         .finish(),

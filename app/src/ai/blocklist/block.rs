@@ -77,7 +77,6 @@ use crate::ai::agent::AIAgentTextSection;
 use crate::ai::agent::AIIdentifiers;
 use crate::ai::agent::MessageId;
 use crate::ai::agent::RequestFileEditsResult;
-use crate::ai::agent::SearchCodebaseResult;
 use crate::ai::blocklist::action_model::NewConversationDecision;
 use crate::ai::blocklist::block::keyboard_navigable_buttons::KeyboardNavigableButtonBuilder;
 use crate::ai::blocklist::block::keyboard_navigable_buttons::KeyboardNavigableButtons;
@@ -87,20 +86,15 @@ use crate::ai::blocklist::inline_action::ask_user_question_view::{
 use crate::ai::blocklist::inline_action::aws_bedrock_credentials_error::{
     AwsBedrockCredentialsErrorEvent, AwsBedrockCredentialsErrorView,
 };
-use crate::ai::blocklist::inline_action::search_codebase::{
-    SearchCodebaseView, SearchCodebaseViewEvent,
-};
 use crate::ai::blocklist::inline_action::web_fetch::WebFetchView;
 use crate::ai::blocklist::inline_action::web_search::WebSearchView;
-use crate::ai::facts::{AIFact, AIMemory, CloudAIFactModel};
-use crate::ai::AIRequestUsageModel;
-use crate::ai::AIRequestUsageModelEvent;
+use crate::ai::facts::{AIFact, AIFactObjectModel, AIMemory};
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
-use crate::cloud_object::model::persistence::CloudModel;
+use crate::cloud_object::model::persistence::ObjectStoreModel;
 use crate::code_review::telemetry_event::CodeReviewPaneEntrypoint;
 use crate::server::ids::SyncId;
 use crate::server::telemetry::AgentModeRewindEntrypoint;
-use crate::settings::InputSettings;
+use crate::settings::{InputSettings, SelectionSettings};
 use crate::terminal::view::{CodeDiffAction, TerminalAction};
 use crate::ui_components::icons::Icon;
 #[cfg(feature = "local_fs")]
@@ -166,9 +160,6 @@ use crate::ai::blocklist::permissions::{
 };
 use crate::ai::blocklist::suggestion_chip_view::{SuggestedChipViewEvent, SuggestionChipView};
 use crate::ai::document::ai_document_model::{AIDocumentId, AIDocumentModel, AIDocumentVersion};
-use crate::ai::get_relevant_files::controller::{
-    GetRelevantFilesController, GetRelevantFilesControllerEvent,
-};
 use crate::auth::AuthStateProvider;
 use crate::code::editor::view::{CodeEditorEvent, CodeEditorView};
 use crate::notebooks::editor::model::FileLinkResolutionContext;
@@ -378,8 +369,6 @@ pub(super) struct AIBlockStateHandles {
     /// Mouse state handles per citation.
     /// A given citation should only appear once per block.
     footer_citation_chip_handles: HashMap<AIAgentCitation, MouseStateHandle>,
-    orchestration_navigation_card_handles: HashMap<AIAgentActionId, MouseStateHandle>,
-
     references_section_collapsible_handle: MouseStateHandle,
 
     autoread_files_speedbump_checkbox_handle: MouseStateHandle,
@@ -454,19 +443,6 @@ pub enum AutonomySettingSpeedbump {
         action_id: AIAgentActionId,
         /// Whether the setting in the speedbump is checked or not.
         checked: bool,
-        /// Whether or not the speedbump is actually shown.
-        ///
-        /// Set at render-time.
-        shown: Arc<Mutex<bool>>,
-    },
-    /// Show a radio-button-based speedbump for file access during codebase search.
-    ShouldShowForCodebaseSearchFileAccess {
-        /// Which action this corresponds to.
-        action_id: AIAgentActionId,
-        /// Which radio option is selected.
-        /// 0 => Always allow file access.
-        /// 1 => Allowlist this repo for file access.
-        selected_option: Option<usize>,
         /// Whether or not the speedbump is actually shown.
         ///
         /// Set at render-time.
@@ -799,9 +775,6 @@ pub struct AIBlock {
     /// Uses IndexMap to preserve insertion order for correct revert ordering.
     requested_edits: IndexMap<AIAgentActionId, RequestedEdit>,
 
-    /// Map from a search codebase action ID to its view handle and status.
-    search_codebase_view: HashMap<AIAgentActionId, ViewHandle<SearchCodebaseView>>,
-
     /// Map from web search message IDs to their view handles.
     web_search_views: HashMap<MessageId, ViewHandle<WebSearchView>>,
 
@@ -936,7 +909,6 @@ impl AIBlock {
         terminal_model: Arc<FairMutex<TerminalModel>>,
         client_ids: ClientIdentifiers,
         controller: ModelHandle<BlocklistAIController>,
-        get_relevant_files_controller: ModelHandle<GetRelevantFilesController>,
         current_working_directory: Option<String>,
         shell_launch_data: Option<ShellLaunchData>,
         action_model: ModelHandle<BlocklistAIActionModel>,
@@ -997,27 +969,13 @@ impl AIBlock {
                     ctx.notify();
                 }
                 AISettingsChangedEvent::AgentModeCodingPermissions { .. } => {
-                    match &mut me.autonomy_setting_speedbump {
-                        AutonomySettingSpeedbump::ShouldShowForFileAccess { checked, .. } => {
-                            *checked = matches!(
-                                *settings_model.as_ref(ctx).agent_mode_coding_permissions,
-                                AgentModeCodingPermissionsType::AlwaysAllowReading
-                            );
-                        }
-                        AutonomySettingSpeedbump::ShouldShowForCodebaseSearchFileAccess {
-                            selected_option,
-                            ..
-                        } => {
-                            *selected_option =
-                                match *settings_model.as_ref(ctx).agent_mode_coding_permissions {
-                                    AgentModeCodingPermissionsType::AlwaysAllowReading => Some(0),
-                                    AgentModeCodingPermissionsType::AllowReadingSpecificFiles => {
-                                        Some(1)
-                                    }
-                                    AgentModeCodingPermissionsType::AlwaysAskBeforeReading => None,
-                                };
-                        }
-                        _ => {}
+                    if let AutonomySettingSpeedbump::ShouldShowForFileAccess { checked, .. } =
+                        &mut me.autonomy_setting_speedbump
+                    {
+                        *checked = matches!(
+                            *settings_model.as_ref(ctx).agent_mode_coding_permissions,
+                            AgentModeCodingPermissionsType::AlwaysAllowReading
+                        );
                     }
                     ctx.notify();
                 }
@@ -1060,45 +1018,19 @@ impl AIBlock {
             ActiveSessionEvent::Bootstrapped => {}
         });
 
-        ctx.subscribe_to_model(&get_relevant_files_controller, |me, _, event, ctx| {
-            if let GetRelevantFilesControllerEvent::Success { action_id, .. } = event {
-                if me.requested_action_ids.contains(action_id) {
-                    ctx.notify();
-                }
-            }
-        });
+        // Zap:原这里订阅 GetRelevantFilesController 的 Success 事件以在 RAG
+        // 完成后走个 `ctx.notify` 刷新 UI。该 controller 已随 outline 推退下线,
+        // 订阅点一并删除。
 
         let manage_rules_button = ctx.add_typed_action_view(|_| {
             ActionButton::new(crate::t!("ai-block-manage-rules"), NakedTheme)
                 .on_click(|ctx| ctx.dispatch_typed_action(AIBlockAction::OpenAIFactCollection))
         });
 
-        ctx.subscribe_to_model(&AIRequestUsageModel::handle(ctx), |me, _, event, ctx| {
-            if let AIRequestUsageModelEvent::RequestBonusRefunded {
-                requests_refunded,
-                server_conversation_id,
-                request_id,
-            } = event
-            {
-                let server_conversation_token = BlocklistAIHistoryModel::as_ref(ctx)
-                    .conversation(&me.client_ids.conversation_id)
-                    .and_then(|conversation| conversation.server_conversation_token())
-                    .cloned();
-
-                let server_output_id = me.model.server_output_id(ctx);
-
-                if let (Some(server_conversation_token), Some(server_output_id)) =
-                    (server_conversation_token, server_output_id)
-                {
-                    if request_id.eq(server_output_id.to_string().as_str())
-                        && server_conversation_id.eq(server_conversation_token.as_str())
-                    {
-                        me.request_refunded_count = Some(*requests_refunded);
-                        ctx.notify();
-                    }
-                }
-            }
-        });
+        // Zap(Phase 3c A1):删除对 `AIRequestUsageModelEvent::RequestBonusRefunded`
+        // 的订阅。本地化后该事件永远不会被 emit(没有 `provide_negative_feedback_response`
+        // RPC 调用),订阅本身已成为永久空转的死代码。`request_refunded_count` 字段保留
+        // 但永远是初始值 None。
 
         // Note: UpdatedStreamingExchange is handled by the dedicated on_updated_output()
         // callback in model_impl.rs, so we don't need to respond to it here.
@@ -1257,11 +1189,12 @@ impl AIBlock {
         for (id, content) in comment_data {
             let state = CommentElementState::new(id, &content, ctx);
             ctx.subscribe_to_view(&state.rich_text_editor, |me, view, event, ctx| {
-                if matches!(event, EditorViewEvent::TextSelectionChanged)
-                    && view.as_ref(ctx).selected_text(ctx).is_some()
-                {
-                    me.clear_other_selections(Some(view.id()), ctx.window_id(), ctx);
-                    ctx.emit(AIBlockEvent::ChildViewTextSelected);
+                if matches!(event, EditorViewEvent::TextSelectionChanged) {
+                    if let Some(selected_text) = view.as_ref(ctx).selected_text(ctx) {
+                        me.maybe_copy_on_select(selected_text, ctx);
+                        me.clear_other_selections(Some(view.id()), ctx.window_id(), ctx);
+                        ctx.emit(AIBlockEvent::ChildViewTextSelected);
+                    }
                 }
             });
             comment_states.insert(id, state);
@@ -1313,7 +1246,6 @@ impl AIBlock {
             terminal_view_id,
             request_refunded_count: None,
             action_buttons: Default::default(),
-            search_codebase_view: Default::default(),
             web_search_views: Default::default(),
             web_fetch_views: Default::default(),
             requested_commands_to_auto_collapse: Default::default(),
@@ -1985,13 +1917,10 @@ impl AIBlock {
                     });
             }
 
-            // Register collapsible state for orchestration action messages.
-            if FeatureFlag::Orchestration.is_enabled()
-                && matches!(
-                    &message.message,
-                    AIAgentOutputMessageType::MessagesReceivedFromAgents { .. }
-                )
-            {
+            if matches!(
+                &message.message,
+                AIAgentOutputMessageType::MessagesReceivedFromAgents { .. }
+            ) {
                 self.collapsible_block_states
                     .entry(message.id.clone())
                     .or_default();
@@ -2127,8 +2056,8 @@ impl AIBlock {
                 .collect_vec();
 
             let existing_rules: HashSet<SuggestedLoggingId> = {
-                CloudModel::as_ref(ctx)
-                    .get_all_objects_of_type::<GenericStringObjectId, CloudAIFactModel>()
+                ObjectStoreModel::as_ref(ctx)
+                    .get_all_objects_of_type::<GenericStringObjectId, AIFactObjectModel>()
                     .filter_map(|fact| {
                         let AIFact::Memory(AIMemory {
                             suggested_logging_id,
@@ -2201,19 +2130,6 @@ impl AIBlock {
                         id,
                         title,
                         file_edits.clone(),
-                        output.server_output_id.clone(),
-                        ctx,
-                    );
-                }
-                AIAgentAction {
-                    id,
-                    action: AIAgentActionType::SearchCodebase(request),
-                    ..
-                } => {
-                    self.handle_search_codebase_complete(
-                        id,
-                        &request.query,
-                        request.codebase_path.clone(),
                         output.server_output_id.clone(),
                         ctx,
                     );
@@ -2403,37 +2319,6 @@ impl AIBlock {
                         });
                     }
                 }
-            }
-        }
-
-        for action_id in output
-            .actions()
-            .filter_map(|action| (action.is_get_relevant_files()).then_some(&action.id))
-        {
-            if is_agent_mode_autonomy_allowed(ctx)
-                && *AISettings::as_ref(ctx).should_show_agent_mode_autoread_files_speedbump
-            {
-                // Try to show the speedbump for codebase search.
-                self.state_handles.codebase_search_speedbump_option_handles =
-                    vec![Default::default(), Default::default()];
-                self.state_handles
-                    .codebase_search_speedbump_radio_button_handle
-                    .set_selected_idx(0);
-                self.autonomy_setting_speedbump =
-                    AutonomySettingSpeedbump::ShouldShowForCodebaseSearchFileAccess {
-                        action_id: action_id.clone(),
-                        selected_option: Some(0),
-                        shown: Arc::new(Mutex::new(false)),
-                    };
-                // Mark the speedbump as shown in settings so that we do not render it again.
-                AISettings::handle(ctx).update(ctx, |ai_settings, ctx| {
-                    if let Err(err) = ai_settings
-                        .should_show_agent_mode_autoread_files_speedbump
-                        .set_value(false, ctx)
-                    {
-                        log::warn!("Could not mark autoread files speedbump as shown {err}");
-                    }
-                })
             }
         }
 
@@ -2645,7 +2530,8 @@ impl AIBlock {
                         // The `is_some` check is necessary because `CodeEditorEvent::SelectionChanged` is
                         // also emitted when the editor's selection is cleared via external means
                         // (i.e. when a text selection is made outside the `CodeEditorView`).
-                        if view.as_ref(ctx).selected_text(ctx).is_some() {
+                        if let Some(selected_text) = view.as_ref(ctx).selected_text(ctx) {
+                            me.maybe_copy_on_select(selected_text, ctx);
                             me.clear_other_selections(Some(view.id()), ctx.window_id(), ctx);
                             ctx.emit(AIBlockEvent::ChildViewTextSelected);
                         }
@@ -2812,6 +2698,9 @@ impl AIBlock {
                 CodeDiffViewEvent::TextSelected => {
                     // If there's an ongoing text selection, clear all other selections within the
                     // `AIBlock`'s view sub-hierarchy to ensure only one component has a selection at a time.
+                    if let Some(selected_text) = view.as_ref(ctx).selected_text(ctx) {
+                        me.maybe_copy_on_select(selected_text, ctx);
+                    }
                     me.clear_other_selections(Some(view.id()), ctx.window_id(), ctx);
                     ctx.emit(AIBlockEvent::ChildViewTextSelected);
                 }
@@ -3104,6 +2993,9 @@ impl AIBlock {
             RequestedCommandViewEvent::TextSelected => {
                 // If there's an ongoing text selection, clear all other selections within the
                 // `AIBlock`'s view sub-hierarchy to ensure only one component has a selection at a time.
+                if let Some(selected_text) = view.as_ref(ctx).selected_text(ctx) {
+                    self.maybe_copy_on_select(selected_text, ctx);
+                }
                 self.clear_other_selections(Some(view.id()), ctx.window_id(), ctx);
                 ctx.emit(AIBlockEvent::ChildViewTextSelected);
             }
@@ -3207,6 +3099,9 @@ impl AIBlock {
             RequestedCommandViewEvent::TextSelected => {
                 // If there's an ongoing text selection, clear all other selections within the
                 // `AIBlock`'s view sub-hierarchy to ensure only one component has a selection at a time.
+                if let Some(selected_text) = view.as_ref(ctx).selected_text(ctx) {
+                    self.maybe_copy_on_select(selected_text, ctx);
+                }
                 self.clear_other_selections(Some(view.id()), ctx.window_id(), ctx);
                 ctx.emit(AIBlockEvent::ChildViewTextSelected);
             }
@@ -3429,121 +3324,6 @@ impl AIBlock {
                 ctx.notify();
             }
         }
-    }
-
-    /// Note this is called when the search codebase tool call definition finishes streaming, not when the search actually completes.
-    fn handle_search_codebase_complete(
-        &mut self,
-        action_id: &AIAgentActionId,
-        query: &str,
-        repo_path: Option<String>,
-        _server_output_id: Option<ServerOutputId>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if !FeatureFlag::SearchCodebaseUI.is_enabled() {
-            return;
-        }
-
-        let Some(action_index) = self.calculate_renderable_action_index(action_id, ctx) else {
-            return;
-        };
-
-        let view = ctx.add_typed_action_view(|_ctx| {
-            SearchCodebaseView::new(
-                self.find_model.clone(),
-                vec![],
-                query.to_string(),
-                repo_path,
-                &self.shell_launch_data,
-                &self.current_working_directory,
-                action_index,
-            )
-        });
-
-        // Subscribe to events from SearchCodebaseView and convert them to AIBlockActions
-        ctx.subscribe_to_view(&view, |me, view, event, ctx| match event {
-            #[cfg(feature = "local_fs")]
-            SearchCodebaseViewEvent::OpenLinkTooltip { rich_content_link } => {
-                let rich_content_link = match rich_content_link {
-                    RichContentLink::FilePath {
-                        absolute_path,
-                        line_and_column_num,
-                        ..
-                    } => RichContentLink::FilePath {
-                        absolute_path: absolute_path.clone(),
-                        line_and_column_num: *line_and_column_num,
-                        target_override: me.detected_file_path_target_override(absolute_path),
-                    },
-                    RichContentLink::Url(url) => RichContentLink::Url(url.clone()),
-                };
-                ctx.emit(AIBlockEvent::ShowLinkTooltip(RichContentLinkTooltipInfo {
-                    link: rich_content_link,
-                    position_id: RICH_CONTENT_LINK_FIRST_CHAR_POSITION_ID.to_owned(),
-                }));
-                ctx.notify();
-            }
-            #[cfg(not(feature = "local_fs"))]
-            SearchCodebaseViewEvent::OpenLinkTooltip { rich_content_link } => {
-                ctx.emit(AIBlockEvent::ShowLinkTooltip(RichContentLinkTooltipInfo {
-                    link: rich_content_link.clone(),
-                    position_id: RICH_CONTENT_LINK_FIRST_CHAR_POSITION_ID.to_owned(),
-                }));
-                ctx.notify();
-            }
-            #[cfg(feature = "local_fs")]
-            SearchCodebaseViewEvent::OpenDetectedFilePath {
-                absolute_path,
-                line_and_column_num,
-            } => {
-                ctx.emit(AIBlockEvent::OpenDetectedFilePath {
-                    absolute_path: absolute_path.clone(),
-                    line_and_column_num: *line_and_column_num,
-                    target_override: me.detected_file_path_target_override(absolute_path),
-                });
-            }
-            SearchCodebaseViewEvent::TextSelected => {
-                me.clear_other_selections(Some(view.id()), ctx.window_id(), ctx);
-                ctx.emit(AIBlockEvent::ChildViewTextSelected);
-            }
-        });
-
-        self.search_codebase_view.insert(action_id.clone(), view);
-
-        // Initialize the view with the action status and file contexts from the action model, if populated.
-        // The action is not expected to exist already in live conversations since search is just beginning,
-        // but it's not incorrect to populate if it is, and we rely on this for
-        // for restored conversations because action model events don't re-fire
-        // after the view is created.
-        let action_status = self.action_model.as_ref(ctx).get_action_status(action_id);
-        if let Some(view) = self.search_codebase_view.get(action_id) {
-            let files = if let Some(AIActionStatus::Finished(ref result)) = action_status {
-                if let AIAgentActionResultType::SearchCodebase(SearchCodebaseResult::Success {
-                    files,
-                }) = &result.result
-                {
-                    Some(files.clone())
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-
-            if let Some(files) = files {
-                let find_state = self.find_state.clone();
-                view.update(ctx, |view, ctx| {
-                    view.update_render_read_file_args(&find_state, files, action_status);
-                    ctx.notify();
-                });
-            } else if action_status.is_some() {
-                view.update(ctx, |view, ctx| {
-                    view.update_status(action_status);
-                    ctx.notify();
-                });
-            }
-        }
-
-        ctx.notify();
     }
 
     /// Creates the AWS Bedrock credentials error view if the error is `AwsBedrockCredentialsExpiredOrInvalid`
@@ -4015,43 +3795,6 @@ impl AIBlock {
                                 );
                             });
                         }
-                        AutonomySettingSpeedbump::ShouldShowForCodebaseSearchFileAccess {
-                            action_id: speedbump_action_id,
-                            shown,
-                            selected_option,
-                            ..
-                        } if speedbump_action_id == action_id && *shown.lock() => {
-                            let Some(root_repo_path) = me
-                                .action_model
-                                .as_ref(ctx)
-                                .search_codebase_executor(ctx)
-                                .as_ref(ctx)
-                                .root_repo_for_action(action_id)
-                                .map(Path::to_owned)
-                            else {
-                                return;
-                            };
-
-                            let permission = match selected_option {
-                                Some(0) => AgentModeCodingPermissionsType::AlwaysAllowReading,
-                                Some(1) => {
-                                    AgentModeCodingPermissionsType::AllowReadingSpecificFiles
-                                }
-                                _ => AgentModeCodingPermissionsType::AlwaysAskBeforeReading,
-                            };
-                            BlocklistAIPermissions::handle(ctx).update(ctx, |permissions, ctx| {
-                                report_if_error!(
-                                    permissions.set_coding_permissions(permission, ctx)
-                                );
-                                if matches!(
-                                    permission,
-                                    AgentModeCodingPermissionsType::AllowReadingSpecificFiles
-                                ) {
-                                    report_if_error!(permissions
-                                        .add_filepath_to_code_read_allowlist(root_repo_path, ctx));
-                                }
-                            });
-                        }
                         _ => {}
                     }
                 }
@@ -4085,57 +3828,11 @@ impl AIBlock {
                         me.requested_commands_to_auto_collapse.remove(action_id);
                     }
 
-                    if let Some(view) = me.search_codebase_view.get(action_id) {
-                        let new_status = action_model.as_ref(ctx).get_action_status(action_id);
-                        view.update(ctx, |view, ctx| {
-                            view.update_status(new_status);
-                            ctx.notify();
-                        });
-                    }
-
                     let action_statuses = me
                         .requested_action_ids
                         .iter()
                         .filter_map(|id| action_model.as_ref(ctx).get_action_status(id))
                         .collect_vec();
-
-                    // Detecting links on SearchCodebase tool call outputs
-                    for (action_index, status) in action_statuses.iter().enumerate() {
-                        let AIActionStatus::Finished(result) = status else {
-                            continue;
-                        };
-                        if let AIAgentActionResultType::SearchCodebase(
-                            SearchCodebaseResult::Success { files },
-                        ) = &result.result
-                        {
-                            if !FeatureFlag::SearchCodebaseUI.is_enabled() {
-                                for (line_index, file) in files.iter().enumerate() {
-                                    let text_location = TextLocation::Action {
-                                        action_index,
-                                        line_index,
-                                    };
-                                    detect_links(
-                                        &mut me.detected_links_state,
-                                        &file.to_string(),
-                                        text_location,
-                                        me.current_working_directory.as_ref(),
-                                        me.shell_launch_data.as_ref(),
-                                    );
-                                }
-                            }
-
-                            if let Some(view) = me.search_codebase_view.get(action_id) {
-                                view.update(ctx, |view, ctx| {
-                                    view.update_render_read_file_args(
-                                        &me.find_state,
-                                        files.clone(),
-                                        action_model.as_ref(ctx).get_action_status(action_id),
-                                    );
-                                    ctx.notify();
-                                })
-                            }
-                        }
-                    }
 
                     // Open the AI document pane when documents are created or edited
                     if let Some(action_result) =
@@ -4191,14 +3888,7 @@ impl AIBlock {
                     }
                     ctx.notify();
                 }
-                BlocklistAIActionEvent::QueuedAction(action_id) => {
-                    // Update search codebase view status when action is queued
-                    if let Some(view) = me.search_codebase_view.get(action_id) {
-                        view.update(ctx, |view, ctx| {
-                            view.update_status(Some(AIActionStatus::Queued));
-                            ctx.notify();
-                        });
-                    }
+                BlocklistAIActionEvent::QueuedAction(_) => {
                     ctx.notify();
                 }
                 BlocklistAIActionEvent::InsertCodeReviewComments {
@@ -4428,16 +4118,17 @@ impl AIBlock {
                     .find_map(|edit| edit.view.as_ref(ctx).selected_text(ctx))
             })
             .or_else(|| {
-                self.search_codebase_view
-                    .values()
-                    .find_map(|search_view| search_view.as_ref(ctx).selected_text(ctx))
-            })
-            .or_else(|| {
                 self.comment_states
                     .values()
                     .find_map(|comment| comment.rich_text_editor.as_ref(ctx).selected_text(ctx))
             })
             .or_else(|| self.selected_text.read().clone())
+    }
+
+    fn maybe_copy_on_select(&self, selection: String, ctx: &mut ViewContext<Self>) {
+        SelectionSettings::handle(ctx).update(ctx, |selection_settings, ctx| {
+            selection_settings.maybe_copy_on_select(ClipboardContent::plain_text(selection), ctx);
+        });
     }
 
     /// Start a selection at the top left corner of the block's SelectableArea.
@@ -4538,16 +4229,6 @@ impl AIBlock {
                 .update(ctx, |view, ctx| view.clear_all_selections(ctx));
         }
 
-        for search_view in self.search_codebase_view.values() {
-            // Don't clear selections for the search codebase view that triggered this change.
-            if source_view_id.is_some_and(|entity_id| search_view.id() == entity_id)
-                && search_view.window_id(ctx) == source_window_id
-            {
-                continue;
-            }
-            search_view.update(ctx, |view, ctx| view.clear_selection(ctx));
-        }
-
         for comment in self.comment_states.values() {
             if source_view_id.is_some_and(|entity_id| comment.rich_text_editor.id() == entity_id)
                 && comment.rich_text_editor.window_id(ctx) == source_window_id
@@ -4572,11 +4253,6 @@ impl AIBlock {
         ctx.emit(AIBlockEvent::DismissLinkTooltip);
         self.secret_redaction_state.dismiss_tooltip();
         ctx.emit(AIBlockEvent::DismissSecretTooltip);
-        for search_view in self.search_codebase_view.values() {
-            search_view.update(ctx, |view, ctx| {
-                view.clear_link_tooltip(ctx);
-            });
-        }
 
         // The hover state for the "open" button in linked code blocks should be reset on a focus change.
         for button_handles in self
@@ -5437,7 +5113,7 @@ pub enum AIBlockEvent {
     },
     ToggleCodeDiffVisibility,
 
-    /// Open a Warp Text instance with the requested code diff.
+    /// Open a Zap Text instance with the requested code diff.
     OpenCodeWithDiff {
         view: ViewHandle<CodeDiffView>,
     },
@@ -5548,6 +5224,8 @@ pub enum AIBlockAction {
     /// are responsible for managing their own text selection states.
     SelectText,
 
+    CopyOnSelect(String),
+
     CopyAIBlockCodeSnippet(String),
 
     /// Continue the conversation using this response
@@ -5603,7 +5281,6 @@ pub enum AIBlockAction {
     ToggleAutoexecuteReadonlyCommandsSpeedbumpCheckbox,
     ToggleAutoreadFilesSpeedbumpCheckbox,
     ToggleAwsBedrockAutoLogin,
-    ToggleCodebaseSearchSpeedbump(Option<usize>),
     StartNewConversationButtonClicked {
         action_id: AIAgentActionId,
         server_output_id: Option<ServerOutputId>,
@@ -5650,7 +5327,7 @@ pub enum AIBlockAction {
     DisableRuleSuggestions,
     /// Copy the debug ID to clipboard
     CopyDebugId(String),
-    /// Open Warp feedback documentation
+    /// Open Zap feedback documentation
     OpenFeedbackDocs,
     /// Toggle the usage summary footer expansion state
     ToggleIsUsageFooterExpanded,
@@ -5751,6 +5428,9 @@ impl TypedActionView for AIBlock {
                 ctx.reset_cursor();
                 self.dismiss_ai_tooltips(ctx);
             }
+            AIBlockAction::CopyOnSelect(selection) => {
+                self.maybe_copy_on_select(selection.clone(), ctx);
+            }
             AIBlockAction::CopyAIBlockCodeSnippet(text) => {
                 ctx.clipboard()
                     .write(ClipboardContent::plain_text(text.clone()));
@@ -5768,7 +5448,7 @@ impl TypedActionView for AIBlock {
                     .write(ClipboardContent::plain_text(debug_id.clone()));
             }
             AIBlockAction::OpenFeedbackDocs => {
-                ctx.open_url("https://docs.warp.dev/support-and-community/troubleshooting-and-support/sending-us-feedback");
+                ctx.open_url("");
             }
             AIBlockAction::CancelRequestedAction { action_id } => {
                 self.cancel_action(action_id, ctx);
@@ -5932,34 +5612,6 @@ impl TypedActionView for AIBlock {
                         AgentModeCodingPermissionsType::AlwaysAllowReading
                     } else {
                         AgentModeCodingPermissionsType::AlwaysAskBeforeReading
-                    };
-                    BlocklistAIPermissions::handle(ctx).update(ctx, |model, ctx| {
-                        match model.set_coding_permissions(permission, ctx) {
-                            Ok(_) => {
-                                send_telemetry_from_ctx!(
-                                    TelemetryEvent::ChangedAgentModeCodingPermissions {
-                                        src: AutonomySettingToggleSource::Speedbump,
-                                        new: permission,
-                                    },
-                                    ctx
-                                );
-                            }
-                            Err(e) => report_error!(e),
-                        }
-                    });
-                }
-            }
-            AIBlockAction::ToggleCodebaseSearchSpeedbump(new) => {
-                if let AutonomySettingSpeedbump::ShouldShowForCodebaseSearchFileAccess {
-                    selected_option,
-                    ..
-                } = &mut self.autonomy_setting_speedbump
-                {
-                    *selected_option = *new;
-                    let permission = match new {
-                        Some(0) => AgentModeCodingPermissionsType::AlwaysAllowReading,
-                        Some(1) => AgentModeCodingPermissionsType::AllowReadingSpecificFiles,
-                        _ => AgentModeCodingPermissionsType::AlwaysAskBeforeReading,
                     };
                     BlocklistAIPermissions::handle(ctx).update(ctx, |model, ctx| {
                         match model.set_coding_permissions(permission, ctx) {

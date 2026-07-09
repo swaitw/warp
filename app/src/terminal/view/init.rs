@@ -57,7 +57,7 @@ pub const CAN_FORK_FROM_LAST_KNOWN_GOOD_STATE_KEY: &str = "CanForkFromLastKnownG
 pub const INPUT_BOX_VISIBLE_KEY: &str = "InputVisible";
 pub const KEYBOARD_PROTOCOL_ENABLED_KEY: &str = "KeyboardProtocolEnabled";
 pub const CLI_AGENT_SESSION_ACTIVE_KEY: &str = "CLIAgentSessionActive";
-pub const ROOT_CLOUD_MODE_PANE_KEY: &str = "RootCloudModePane";
+pub const ROOT_AMBIENT_AGENT_PANE_KEY: &str = "RootAmbientAgentPane";
 
 /// Some keybindings will do different things in different contexts. We break
 /// these into their own function to ensure we pay special attention to
@@ -160,6 +160,18 @@ pub fn init(app: &mut AppContext) {
             TerminalAction::ControlSequence("\x1b[3~".as_bytes().to_vec()),
             id!("Terminal") & !id!("IMEOpen"),
         ),
+        FixedBinding::new(
+            "pageup",
+            TerminalAction::PageUp,
+            id!("Terminal") & !id!("IMEOpen") & !id!("EditorFocused"),
+        )
+        .with_command_description(crate::t!("keybinding-desc-terminal-scroll-up-one-page")),
+        FixedBinding::new(
+            "pagedown",
+            TerminalAction::PageDown,
+            id!("Terminal") & !id!("IMEOpen") & !id!("EditorFocused"),
+        )
+        .with_command_description(crate::t!("keybinding-desc-terminal-scroll-down-one-page")),
         // Resume conversation keybinding
         FixedBinding::new_per_platform(
             PerPlatformKeystroke {
@@ -313,7 +325,7 @@ pub fn init(app: &mut AppContext) {
     ]);
 
     app.register_editable_bindings([
-        // Ctrl-G: open rich input for CLI agents before the keystroke reaches the PTY.
+        // Ctrl-G: toggle CLI agent rich input.
         EditableBinding::new(
             OPEN_CLI_AGENT_RICH_INPUT_KEYBINDING,
             crate::t!("keybinding-desc-terminal-toggle-cli-agent-rich-input"),
@@ -321,11 +333,13 @@ pub fn init(app: &mut AppContext) {
         )
         .with_key_binding("ctrl-g")
         .with_context_predicate(
-            id!("Terminal")
+            (id!("Terminal")
                 & !id!("IMEOpen")
                 & (id!("LongRunningCommand") | id!("AltScreen"))
                 & id!(flags::CLI_AGENT_FOOTER_ENABLED)
-                & id!(flags::CLI_AGENT_RICH_INPUT_CHIP_ENABLED),
+                & id!(flags::CLI_AGENT_RICH_INPUT_CHIP_ENABLED))
+                | (id!("EditorView") & !id!("IMEOpen") & id!(flags::CLI_AGENT_RICH_INPUT_OPEN))
+                | (id!("Terminal") & !id!("IMEOpen") & id!(flags::CLI_AGENT_RICH_INPUT_OPEN)),
         ),
         EditableBinding::new(
             "terminal:warpify_subshell",
@@ -450,8 +464,8 @@ pub fn init(app: &mut AppContext) {
             id!("Terminal") & ne!("TerminalView_BlockSelectionCardinality", "None"),
         ),
         EditableBinding::new(
-            "terminal:toggle_teams_modal",
-            crate::t!("keybinding-desc-terminal-toggle-team-workflows-modal"),
+            "terminal:toggle_workflows_modal",
+            crate::t!("keybinding-desc-terminal-toggle-workflows-modal"),
             TerminalAction::OpenWorkflowModal,
         )
         .with_key_binding(cmd_or_ctrl_shift("s"))
@@ -569,7 +583,7 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(
             id!("Terminal") & id!("TerminalView_NonEmptyBlockList") & !id!("AltScreen"),
         ),
-        // OpenWarp:删除 terminal:open_share_block_modal keybinding(云端 share block)
+        // Zap:删除 terminal:open_share_block_modal keybinding(云端 share block)
         EditableBinding::new(
             "terminal:bookmark_selected_block",
             crate::t!("keybinding-desc-terminal-bookmark-selected-block"),
@@ -639,7 +653,7 @@ pub fn init(app: &mut AppContext) {
     app.register_editable_bindings([
         EditableBinding::new(
             "terminal:scroll_up_one_page",
-            "Scroll terminal output up one page",
+            crate::t!("keybinding-desc-terminal-scroll-up-one-page"),
             TerminalAction::PageUp,
         )
         .with_key_binding("pageup")
@@ -651,7 +665,7 @@ pub fn init(app: &mut AppContext) {
         ),
         EditableBinding::new(
             "terminal:scroll_down_one_page",
-            "Scroll terminal output down one page",
+            crate::t!("keybinding-desc-terminal-scroll-down-one-page"),
             TerminalAction::PageDown,
         )
         .with_key_binding("pagedown")
@@ -949,7 +963,7 @@ pub fn init(app: &mut AppContext) {
     )
     .with_context_predicate(id!("Terminal") & id!(flags::HAS_SETTINGS_TO_IMPORT_FLAG))]);
 
-    // OpenWarp:删除 terminal:share_current_session / terminal:stop_sharing_current_session keybindings(云端 shared session)
+    // Zap:删除 terminal:share_current_session / terminal:stop_sharing_current_session keybindings(云端 shared session)
 
     app.register_editable_bindings([EditableBinding::new(
         TOGGLE_BLOCK_FILTER_KEYBINDING,
@@ -1041,7 +1055,7 @@ fn register_input_mode_bindings(app: &mut AppContext) {
 
     // A context predicate that matches when the input mode bindings are
     // available for use. Disabled when a CLI agent session is active — the
-    // Warp agent should not be tagged into a CLI agent's command, and the
+    // Zap agent should not be tagged into a CLI agent's command, and the
     // `!` prefix is the only way to toggle shell mode in the rich input.
     let base_context = id!(flags::IS_ANY_AI_ENABLED)
         & (id!("Input") | id!("Terminal"))
@@ -1081,7 +1095,7 @@ fn register_input_mode_bindings(app: &mut AppContext) {
         TerminalAction::SetInputModeAgent,
         agent_mode_predicate.clone()
             & !id!("Input")
-            & !id!(ROOT_CLOUD_MODE_PANE_KEY)
+            & !id!(ROOT_AMBIENT_AGENT_PANE_KEY)
             & !id!(flags::HAS_PENDING_PROMPT_SUGGESTION)
             & !id!(SSH_ERROR_BLOCK_VISIBLE_KEY),
     )

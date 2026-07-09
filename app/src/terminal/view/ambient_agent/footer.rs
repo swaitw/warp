@@ -36,7 +36,7 @@ fn build_centered_footer(
             Text::new(
                 header_text,
                 appearance.ui_font_family(),
-                appearance.ui_font_size() + 2.,
+                appearance.ui_font_subheading(),
             )
             .with_style(Properties::default().weight(Weight::Bold))
             .with_color(header_color)
@@ -83,8 +83,8 @@ pub fn render_loading_footer(appearance: &Appearance) -> Box<dyn Element> {
     let border_color = blended_colors::neutral_4(theme);
 
     build_centered_footer(
-        "Cloud agent starting up…".to_string(),
-        "You'll be able to interact with Oz soon".to_string(),
+        "Agent starting up…".to_string(),
+        "You'll be able to interact with the local agent soon".to_string(),
         header_color,
         body_color,
         background,

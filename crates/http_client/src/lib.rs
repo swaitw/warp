@@ -22,26 +22,29 @@ use warp_core::{
     report_error,
 };
 
-pub mod headers {
-    /// Custom Warp header indicating the version of the Warp app.
-    pub const CLIENT_RELEASE_VERSION_HEADER_KEY: &str = "X-Warp-Client-Version";
+pub mod proxy;
+pub use proxy::{ProxyConfig, ProxyMode, current_proxy_config, set_global_proxy_config};
 
-    /// Custom Warp header indicating the OS category the request was sent from.
-    pub(crate) const WARP_OS_CATEGORY: &str = "X-Warp-OS-Category";
-    /// Custom Warp header indicating the OS name the request was sent from. On Linux this is the
+pub mod headers {
+    /// Custom Zap header indicating the version of the Zap app.
+    pub const CLIENT_RELEASE_VERSION_HEADER_KEY: &str = "X-Zap-Client-Version";
+
+    /// Custom Zap header indicating the OS category the request was sent from.
+    pub(crate) const WARP_OS_CATEGORY: &str = "X-Zap-OS-Category";
+    /// Custom Zap header indicating the OS name the request was sent from. On Linux this is the
     /// name of the distribution. On all other platforms it should be equivalent to
     /// `WARP_OS_CATEGORY`.
-    pub(crate) const WARP_OS_NAME: &str = "X-Warp-OS-Name";
-    /// Custom Warp header indicating the version of the operating system. On Linux this is the
+    pub(crate) const WARP_OS_NAME: &str = "X-Zap-OS-Name";
+    /// Custom Zap header indicating the version of the operating system. On Linux this is the
     /// version of the distribution, not the Linux kernel version.
-    pub(crate) const WARP_OS_VERSION: &str = "X-Warp-OS-Version";
+    pub(crate) const WARP_OS_VERSION: &str = "X-Zap-OS-Version";
 
-    /// Custom Warp header indicating the linux kernel version. This is only sent from Linux.
-    pub(crate) const WARP_OS_LINUX_KERNEL_VERSION: &str = "X-Warp-OS-Linux-Kernel-Version";
+    /// Custom Zap header indicating the linux kernel version. This is only sent from Linux.
+    pub(crate) const WARP_OS_LINUX_KERNEL_VERSION: &str = "X-Zap-OS-Linux-Kernel-Version";
 
-    /// Custom Warp header indicating the client role. We don't use the User-Agent header
+    /// Custom Zap header indicating the client role. We don't use the User-Agent header
     /// because it can't be set from WASM.
-    pub(crate) const WARP_CLIENT_ID: &str = "X-Warp-Client-ID";
+    pub(crate) const WARP_CLIENT_ID: &str = "X-Zap-Client-ID";
 }
 
 /// The environment variable containing extra HTTP headers to attach to requests.
@@ -137,6 +140,13 @@ impl Client {
                 .http2_keep_alive_while_idle(true);
         }
 
+        // 应用全局 HTTP 代理配置(见 Issue #72)。
+        // WASM 目标上 reqwest::Proxy API 不可用,跳过。
+        #[cfg(not(target_family = "wasm"))]
+        {
+            builder = proxy::current_proxy_config().apply(builder);
+        }
+
         Self::from_client_builder(builder).expect("should not fail to create client")
     }
 
@@ -224,9 +234,7 @@ impl Client {
         )
     }
 
-    /// Helper method to determine if the request should include warp-specific headers. The only case
-    /// where we should include custom headers is if the request is same-origin and is targetted to our server.
-    /// For example, app.warp.dev --> app.warp.dev.
+    /// 判断 request 是否应携带 Zap-specific headers。只有 same-origin 请求才携带自定义 header。
     #[cfg(target_family = "wasm")]
     fn include_warp_http_headers<U: IntoUrl + Clone>(url: U) -> bool {
         url.into_url().is_ok_and(|url| {
@@ -236,10 +244,9 @@ impl Client {
                     .hostname()
                     .expect("Can't get window hostname");
 
-                // If the request is going to our server, the destination host should be "app.warp.dev" or
-                // "staging.warp.dev". The window hostname should also return the same.
-                // Note that reqwest's host_str() method is described here: https://docs.rs/reqwest/latest/reqwest/struct.Url.html#method.domain and
-                // gloo's hostname() method refers to this mozilla definition: https://developer.mozilla.org/en-US/docs/Web/API/Location/hostname.
+                // 如果 request 发往当前宿主,目标 host 应与 window host 完全一致。
+                // reqwest host_str() 见 https://docs.rs/reqwest/latest/reqwest/struct.Url.html#method.domain;
+                // gloo hostname() 见 https://developer.mozilla.org/en-US/docs/Web/API/Location/hostname.
                 window_hostname == dest_host
             })
         })
@@ -568,7 +575,7 @@ impl<'a> RequestBuilder<'a> {
 }
 
 /// An error returned from `Response::error_for_status` that includes response headers.
-/// This allows callers to inspect headers (like X-Warp-Error-Code) when handling errors.
+/// This allows callers to inspect headers (like X-Zap-Error-Code) when handling errors.
 #[derive(Debug)]
 pub struct ResponseError {
     pub source: reqwest::Error,

@@ -33,7 +33,7 @@ pub enum DismissalType {
     Temporary,
 
     /// The banner should not be shown again to the user, whether in a new or existing session.
-    /// Dismissal state should also persist across app sessions (e.g. when Warp is restarted).
+    /// Dismissal state should also persist across app sessions (e.g. when Zap is restarted).
     Permanent,
 }
 
@@ -83,6 +83,7 @@ impl<T: Action + Clone> BannerTextContent<T> {
             font_color,
             self.highlighted_link.clone(),
         )
+        .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
         .register_default_click_handlers_with_action_support(|hyperlink_lens, evt, _ctx| {
             match hyperlink_lens {
                 HyperlinkLens::Url(url) => {

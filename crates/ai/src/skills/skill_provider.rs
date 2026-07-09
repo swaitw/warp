@@ -1,6 +1,6 @@
 //! Skill provider definitions and utilities.
 //!
-//! This module defines the supported skill providers (i.e. Agents, Claude, Codex, Warp) and their
+//! This module defines the supported skill providers (i.e. Agents, Claude, Codex, Zap) and their
 //! associated skills directory paths. It provides utilities for looking up providers
 //! from paths and vice versa.
 use dirs::home_dir;
@@ -14,7 +14,7 @@ use warp_core::ui::color::CLAUDE_ORANGE;
 use warp_core::ui::icons::Icon;
 use warp_core::ui::theme::Fill;
 
-/// Represents a skill provider/origin (Agents, Claude, Codex, or Warp).
+/// Represents a skill provider/origin (Agents, Claude, Codex, or Zap).
 #[derive(
     Debug,
     Clone,
@@ -29,7 +29,7 @@ use warp_core::ui::theme::Fill;
     VariantNames,
 )]
 pub enum SkillProvider {
-    Warp,
+    Zap,
     Agents,
     Claude,
     Codex,
@@ -41,7 +41,7 @@ pub enum SkillProvider {
     OpenCode,
 }
 
-/// Represents the scope of a skill (home directory vs project directory).
+/// Represents the scope of a skill.
 #[derive(
     Debug,
     Clone,
@@ -57,12 +57,10 @@ pub enum SkillProvider {
     VariantNames,
 )]
 pub enum SkillScope {
-    /// Skills from the user's home directory (e.g., `~/.agents/skills`).
-    #[default]
-    Home,
     /// Skills from a project directory (e.g., `./repo/.agents/skills`).
+    #[default]
     Project,
-    /// Bundled skills distributed with Warp.
+    /// Bundled skills distributed with Zap.
     Bundled,
 }
 
@@ -82,7 +80,7 @@ impl SkillProvider {
             SkillProvider::Gemini => Icon::GeminiLogo,
             SkillProvider::Droid => Icon::DroidLogo,
             SkillProvider::OpenCode => Icon::OpenCodeLogo,
-            SkillProvider::Warp
+            SkillProvider::Zap
             | SkillProvider::Agents
             | SkillProvider::Cursor
             | SkillProvider::Copilot
@@ -109,7 +107,7 @@ pub static SKILL_PROVIDER_DEFINITIONS: LazyLock<Vec<SkillProviderDefinition>> =
                 skills_path: PathBuf::from(".agents").join("skills"),
             },
             SkillProviderDefinition {
-                provider: SkillProvider::Warp,
+                provider: SkillProvider::Zap,
                 skills_path: PathBuf::from(".warp").join("skills"),
             },
             SkillProviderDefinition {
@@ -158,7 +156,7 @@ pub fn provider_rank(provider: SkillProvider) -> usize {
 }
 
 pub fn home_skills_path(provider: SkillProvider) -> Option<PathBuf> {
-    if provider == SkillProvider::Warp {
+    if provider == SkillProvider::Zap {
         return warp_core::paths::warp_home_skills_dir();
     }
     let definition = SKILL_PROVIDER_DEFINITIONS
@@ -195,44 +193,26 @@ pub fn get_provider_for_path(path: &Path) -> Option<SkillProvider> {
     None
 }
 
-/// Returns the skill scope (Home or Project) for a given path.
-/// A skill is considered a "Home" skill if its path starts with the user's home directory.
-/// Otherwise, it's a "Project" skill.
-pub fn get_scope_for_path(path: &Path) -> SkillScope {
-    for def in SKILL_PROVIDER_DEFINITIONS.iter() {
-        if home_skills_path(def.provider)
-            .into_iter()
-            .any(|home_skills_path| path.starts_with(home_skills_path))
-        {
-            return SkillScope::Home;
-        }
-    }
-    SkillScope::Project
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        get_provider_for_path, get_scope_for_path, home_skills_path, SkillProvider, SkillScope,
-    };
+    use super::{get_provider_for_path, home_skills_path, SkillProvider};
 
     #[test]
     fn warp_home_skills_path_uses_warp_home_path() {
         assert_eq!(
-            home_skills_path(SkillProvider::Warp),
+            home_skills_path(SkillProvider::Zap),
             warp_core::paths::warp_home_skills_dir()
         );
     }
 
     #[test]
-    fn warp_home_skill_path_is_home_warp_skill() {
+    fn warp_home_skill_path_uses_warp_provider() {
         let Some(warp_home_skills_dir) = warp_core::paths::warp_home_skills_dir() else {
             eprintln!("Skipping test: home directory not available");
             return;
         };
         let path = warp_home_skills_dir.join("my-skill").join("SKILL.md");
 
-        assert_eq!(get_provider_for_path(&path), Some(SkillProvider::Warp));
-        assert_eq!(get_scope_for_path(&path), SkillScope::Home);
+        assert_eq!(get_provider_for_path(&path), Some(SkillProvider::Zap));
     }
 }

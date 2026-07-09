@@ -130,15 +130,6 @@ define_settings_group!(InputSettings,
             toml_path: "terminal.input.enable_slash_commands_in_terminal",
             description: "Whether slash commands are available in the terminal input.",
         },
-        outline_codebase_symbols_for_at_context_menu: OutlineCodebaseSymbolsForAtContextMenu {
-            type: bool,
-            default: true,
-            supported_platforms: SupportedPlatforms::ALL,
-            sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-            private: false,
-            toml_path: "terminal.input.outline_codebase_symbols_for_at_context_menu",
-            description: "Whether codebase symbols appear in the @ context menu.",
-        },
         completions_menu_width: CompletionsMenuWidth {
             type: f32,
             default: 330.,
@@ -161,6 +152,19 @@ define_settings_group!(InputSettings,
             private: false,
             toml_path: "agents.warp_agent.input.show_agent_tips",
             description: "Whether agent tips are displayed in the input.",
+        },
+        // 控制 Agent 视图零状态(zero-state)中的快捷键提示是否展示:
+        // 1) zero_state_block 中 "ctrl+shift+enter 开始新对话 / /model 切换模型 / esc 返回终端" 三行;
+        // 2) Agent message bar 底部 "? 查看帮助 / / 查看命令 / 打开对话 / 进入代码评审" 四项。
+        // 关闭后,用户可在「设置 → Zap 智能体 → AI 输入」中重新开启。
+        show_agent_zero_state_hints: ShowAgentZeroStateHints {
+            type: bool,
+            default: true,
+            supported_platforms: SupportedPlatforms::ALL,
+            sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
+            private: false,
+            toml_path: "agents.warp_agent.input.show_zero_state_hints",
+            description: "Whether Agent zero-state shortcut hints and message bar hints are shown.",
         },
         // Whether to show the terminal input message bar (contextual hints at the bottom of terminal input).
         // Only applicable when FeatureFlag::AgentView is enabled.
@@ -209,7 +213,7 @@ impl InputSettings {
         };
 
         // PS1 input is only valid when honor_ps1 is active. If the user has PS1 selected
-        // but the shell has not signalled PS1 support, fall back to Warp input.
+        // but the shell has not signalled PS1 support, fall back to Zap input.
         let is_ps1_enabled = *SessionSettings::as_ref(app).honor_ps1
             && computed_input_type_value == InputBoxType::Classic;
         if is_ps1_enabled {

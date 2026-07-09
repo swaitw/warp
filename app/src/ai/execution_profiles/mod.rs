@@ -1,17 +1,15 @@
 use std::path::PathBuf;
 
 use crate::cloud_object::UniquePer;
-use crate::server::sync_queue::QueueItem;
 use crate::settings::AISettings;
-use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::{
     cloud_object::{
         model::{
             generic_string_model::{GenericStringModel, GenericStringObjectId, StringModel},
             json_model::{JsonModel, JsonSerializer},
         },
-        GenericCloudObject, GenericStringObjectFormat, GenericStringObjectUniqueKey,
-        JsonObjectType, Revision, ServerCloudObject,
+        GenericStoredObject, GenericStringObjectFormat, GenericStringObjectUniqueKey,
+        JsonObjectType,
     },
     settings::{
         AgentModeCommandExecutionPredicate, DEFAULT_COMMAND_EXECUTION_ALLOWLIST,
@@ -105,15 +103,6 @@ pub enum ComputerUsePermission {
     Unknown,
 }
 
-/// Result of resolving the cloud agent computer use setting.
-/// Contains both the effective value and whether it's forced by organization policy.
-pub struct CloudAgentComputerUseState {
-    /// Whether computer use is enabled for cloud agents.
-    pub enabled: bool,
-    /// Whether this value is forced by organization settings (true = user cannot change it).
-    pub is_forced_by_org: bool,
-}
-
 impl ComputerUsePermission {
     pub fn description(&self) -> &'static str {
         match self {
@@ -136,45 +125,6 @@ impl ComputerUsePermission {
 
     pub fn is_always_allow(&self) -> bool {
         matches!(self, Self::AlwaysAllow)
-    }
-
-    /// Resolves the effective cloud agent computer use state by reading the workspace
-    /// autonomy setting and user's local preference from their respective singletons.
-    pub fn resolve_cloud_agent_state(ctx: &AppContext) -> CloudAgentComputerUseState {
-        if !FeatureFlag::AgentModeComputerUse.is_enabled() {
-            return CloudAgentComputerUseState {
-                enabled: false,
-                is_forced_by_org: false,
-            };
-        }
-
-        let autonomy_setting = UserWorkspaces::as_ref(ctx)
-            .ai_autonomy_settings()
-            .computer_use_setting;
-        let user_preference = *AISettings::as_ref(ctx).cloud_agent_computer_use_enabled;
-
-        match autonomy_setting {
-            Some(ComputerUsePermission::Never) => CloudAgentComputerUseState {
-                enabled: false,
-                is_forced_by_org: true,
-            },
-            Some(ComputerUsePermission::AlwaysAllow) => CloudAgentComputerUseState {
-                enabled: true,
-                is_forced_by_org: true,
-            },
-            // TODO(QUALITY-297): Currently this case should never be hit because the
-            // AlwaysAsk variant isn't accessible in the admin console. We need to figure
-            // out how to handle it when it eventually becomes available. For now, I'm
-            // treating this conservatively and marking computer use as disabled.
-            Some(ComputerUsePermission::AlwaysAsk) => CloudAgentComputerUseState {
-                enabled: false,
-                is_forced_by_org: true,
-            },
-            Some(ComputerUsePermission::Unknown) | None => CloudAgentComputerUseState {
-                enabled: user_preference,
-                is_forced_by_org: false,
-            },
-        }
     }
 }
 
@@ -259,7 +209,7 @@ pub struct AIExecutionProfile {
 
     pub context_window_limit: Option<u32>,
 
-    /// Whether plans created by the agent should be automatically synced to Warp Drive
+    /// Whether plans created by the agent should be automatically synced to Zap Drive
     pub autosync_plans_to_warp_drive: bool,
 
     /// Whether the agent may use web search when helpful for completing tasks
@@ -432,12 +382,12 @@ impl AIExecutionProfile {
     }
 }
 
-pub type CloudAIExecutionProfile =
-    GenericCloudObject<GenericStringObjectId, CloudAIExecutionProfileModel>;
-pub type CloudAIExecutionProfileModel = GenericStringModel<AIExecutionProfile, JsonSerializer>;
+pub type AIExecutionProfileObject =
+    GenericStoredObject<GenericStringObjectId, AIExecutionProfileObjectModel>;
+pub type AIExecutionProfileObjectModel = GenericStringModel<AIExecutionProfile, JsonSerializer>;
 
 impl StringModel for AIExecutionProfile {
-    type CloudObjectType = CloudAIExecutionProfile;
+    type StoredObjectType = AIExecutionProfileObject;
 
     fn model_type_name(&self) -> &'static str {
         "AIExecutionProfile"
@@ -468,27 +418,6 @@ impl StringModel for AIExecutionProfile {
         } else {
             self.name.clone()
         }
-    }
-
-    fn update_object_queue_item(
-        &self,
-        revision_ts: Option<Revision>,
-        object: &Self::CloudObjectType,
-    ) -> Option<QueueItem> {
-        Some(QueueItem::UpdateAIExecutionProfile {
-            model: object.model().clone().into(),
-            id: object.id,
-            revision: revision_ts.or_else(|| object.metadata.revision.clone()),
-        })
-    }
-
-    fn new_from_server_update(&self, server_cloud_object: &ServerCloudObject) -> Option<Self> {
-        if let ServerCloudObject::AIExecutionProfile(server_ai_execution_profile) =
-            server_cloud_object
-        {
-            return Some(server_ai_execution_profile.model.clone().string_model);
-        }
-        None
     }
 
     fn should_clear_on_unique_key_conflict(&self) -> bool {

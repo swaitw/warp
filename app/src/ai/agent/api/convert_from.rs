@@ -58,7 +58,7 @@ pub(crate) fn convert_user_query_mode(mode: Option<&api::UserQueryMode>) -> User
 
     match &mode.r#type {
         Some(api::user_query_mode::Type::Plan(_)) => UserQueryMode::Plan,
-        Some(api::user_query_mode::Type::Orchestrate(_)) => UserQueryMode::Orchestrate,
+        Some(api::user_query_mode::Type::Orchestrate(_)) => UserQueryMode::Normal,
         None => UserQueryMode::Normal,
     }
 }
@@ -540,7 +540,7 @@ impl ConvertAPIToolCallToAIAgentAction for api::message::ToolCall {
         params: ConversionParams,
     ) -> Result<MaybeAIAgentAction, ToolToAIAgentActionError> {
         let Some(tool) = self.tool else {
-            // OpenWarp BYOP:`make_tool_call_carrier_message` 在 from_args 解析失败时
+            // Zap BYOP:`make_tool_call_carrier_message` 在 from_args 解析失败时
             // 故意 emit `tool: None` 的 ToolCall,仅作为下一轮 build_chat_request 还原
             // 原 fn_name + args_str 给上游模型的载体(server_message_data 携带原始内容),
             // 紧随其后的 synthetic error ToolCallResult 才是要展示给用户看的内容。
@@ -569,9 +569,6 @@ impl ConvertAPIToolCallToAIAgentAction for api::message::ToolCall {
             ) => create_standard_action(write_to_long_running_shell_command.into()),
             api::message::tool_call::Tool::ReadFiles(read_files) => {
                 create_standard_action(read_files.into())
-            }
-            api::message::tool_call::Tool::SearchCodebase(search_codebase) => {
-                create_standard_action(search_codebase.into())
             }
             api::message::tool_call::Tool::Grep(grep) => create_standard_action(grep.into()),
             #[allow(deprecated)]
@@ -622,7 +619,7 @@ impl ConvertAPIToolCallToAIAgentAction for api::message::ToolCall {
             api::message::tool_call::Tool::UseComputer(_)
             | api::message::tool_call::Tool::RequestComputerUse(_) => {
                 // Computer Use 已被移除,模型即便发起这两类调用也不 dispatch。
-                return Err(ToolToAIAgentActionError::UnexpectedTool);
+                Err(ToolToAIAgentActionError::UnexpectedTool)
             }
             api::message::tool_call::Tool::Subagent(subagent) => {
                 use api::message::tool_call::subagent::Metadata;

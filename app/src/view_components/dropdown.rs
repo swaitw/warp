@@ -83,7 +83,7 @@ pub struct Dropdown<A: Action + Clone> {
     font_size: Option<f32>,
     padding: Option<Coords>,
     vertical_margin: f32,
-    top_bar_height: f32,
+    top_bar_height: Option<f32>,
 }
 
 #[derive(Clone)]
@@ -192,7 +192,7 @@ where
             font_size: None,
             padding: None,
             vertical_margin: DROPDOWN_PADDING,
-            top_bar_height: TOP_MENU_BAR_HEIGHT,
+            top_bar_height: None,
         }
     }
 
@@ -217,7 +217,7 @@ where
     }
 
     pub fn set_top_bar_height(&mut self, height: f32, ctx: &mut ViewContext<Self>) {
-        self.top_bar_height = height;
+        self.top_bar_height = Some(height);
         ctx.notify();
     }
 
@@ -391,8 +391,8 @@ where
     }
 
     fn select_action_and_close(&mut self, action: &A, ctx: &mut ViewContext<Self>) {
-        ctx.dispatch_typed_action(action);
         self.close(ctx);
+        ctx.dispatch_typed_action_deferred(action.clone());
     }
 
     fn close(&mut self, ctx: &mut ViewContext<Self>) {
@@ -475,11 +475,15 @@ where
             ctx.dispatch_typed_action(DropdownAction::<A>::ToggleExpanded);
         });
 
+        let effective_height = self.top_bar_height.unwrap_or_else(|| {
+            appearance.dropdown_top_bar_height()
+        });
+
         SavePosition::new(
             Container::new(
                 ConstrainedBox::new(top_bar_element.finish())
                     .with_max_width(self.top_bar_max_width)
-                    .with_height(self.top_bar_height)
+                    .with_height(effective_height)
                     .finish(),
             )
             .finish(),

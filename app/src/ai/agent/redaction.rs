@@ -61,9 +61,6 @@ pub(crate) fn redact_inputs(inputs: &mut [AIAgentInput]) {
                     redact_secrets(p);
                 }
             }
-            AIAgentInput::CreateEnvironment { context, .. } => {
-                redact_context(Arc::make_mut(context));
-            }
             AIAgentInput::TriggerPassiveSuggestion {
                 context,
                 attachments,
@@ -138,17 +135,6 @@ pub(crate) fn redact_inputs(inputs: &mut [AIAgentInput]) {
                     AIAgentActionResultType::ReadFiles(read_files_result) => {
                         if let crate::ai::agent::ReadFilesResult::Success { files } =
                             read_files_result
-                        {
-                            for file in files {
-                                if let AnyFileContent::StringContent(content) = &mut file.content {
-                                    redact_secrets(content);
-                                }
-                            }
-                        }
-                    }
-                    AIAgentActionResultType::SearchCodebase(search_codebase_result) => {
-                        if let crate::ai::agent::SearchCodebaseResult::Success { files } =
-                            search_codebase_result
                         {
                             for file in files {
                                 if let AnyFileContent::StringContent(content) = &mut file.content {

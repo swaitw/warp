@@ -9,7 +9,6 @@ use std::path::PathBuf;
 use indexmap::IndexMap;
 
 use crate::ai::request_usage_model::RequestLimitInfo;
-use crate::auth::AuthStateProvider;
 use crate::report_if_error;
 use crate::terminal::CLIAgent;
 use crate::workspaces::user_workspaces::UserWorkspaces;
@@ -298,7 +297,7 @@ pub enum DefaultSessionMode {
     /// New sessions start in agent view.
     Agent,
     /// New sessions start in cloud (ambient) agent mode.
-    CloudAgent,
+    AmbientAgent,
     /// New sessions open a user-defined tab config.
     /// The specific config is identified by the companion `default_tab_config_path` setting.
     TabConfig,
@@ -323,7 +322,7 @@ impl DefaultSessionMode {
         match self {
             DefaultSessionMode::Terminal => "Terminal",
             DefaultSessionMode::Agent => "Agent",
-            DefaultSessionMode::CloudAgent => "Cloud Oz",
+            DefaultSessionMode::AmbientAgent => "Ambient Agent",
             DefaultSessionMode::TabConfig => "Tab Config",
             DefaultSessionMode::DockerSandbox => "Local Docker Sandbox",
         }
@@ -628,7 +627,6 @@ cfg_if! {
     }
 }
 
-/// Maps custom toolbar command regex patterns to CLI agent names.
 // ---------------------------------------------------------------------------
 // 自定义 Agent 提供商配置(进程内 Provider)
 // ---------------------------------------------------------------------------
@@ -640,15 +638,11 @@ cfg_if! {
 /// 任何 OpenAI 兼容的本地服务等)。后续可在此扩展 Anthropic、Google、Bedrock。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum AgentProviderKind {
     /// OpenAI 兼容的 Chat Completions / `/v1/models` 协议。
+    #[default]
     OpenAiCompatible,
-}
-
-impl Default for AgentProviderKind {
-    fn default() -> Self {
-        Self::OpenAiCompatible
-    }
 }
 
 /// BYOP provider 实际使用的 API 协议类型 — 显式指定,
@@ -662,17 +656,19 @@ impl Default for AgentProviderKind {
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter, schemars::JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum AgentProviderApiType {
     /// OpenAI Chat Completions(`POST /v1/chat/completions`)。
     /// 适用于:OpenAI 官方、DeepSeek、SiliconFlow、OpenRouter、智谱 GLM、
     /// Moonshot、DashScope-OpenAI 兼容、本地 vLLM/llama.cpp 等。
+    #[default]
     OpenAi,
     /// OpenAI Responses API(`POST /v1/responses`)。
     /// 适用于:GPT-5 / Codex / Pro 等较新模型。
     OpenAiResp,
     /// Google Gemini 原生协议(generativelanguage.googleapis.com)。
     Gemini,
-    /// Anthropic Messages API 原生协议(api.anthropic.com)。
+    /// Anthropic Messages API 原生协议(`POST /v1/messages`,默认 `api.anthropic.com/v1/`)。
     Anthropic,
     /// Ollama 原生协议(本地或自建 Ollama)。
     Ollama,
@@ -682,12 +678,6 @@ pub enum AgentProviderApiType {
     /// thinking-mode 模型必须选这个类型,普通 chat 模型(`deepseek-chat`)
     /// 选 OpenAI 也可以工作。
     DeepSeek,
-}
-
-impl Default for AgentProviderApiType {
-    fn default() -> Self {
-        Self::OpenAi
-    }
 }
 
 /// Provider 级别的 reasoning effort(思考深度)偏好。
@@ -795,7 +785,7 @@ impl AgentProviderApiType {
             Self::OpenAiResp => "https://api.openai.com/v1/",
             Self::Gemini => "https://generativelanguage.googleapis.com/v1beta/",
             Self::Anthropic => "https://api.anthropic.com/v1/",
-            Self::Ollama => "http://localhost:11434/v1/",
+            Self::Ollama => "http://localhost:11434/",
             Self::DeepSeek => "https://api.deepseek.com/v1/",
         }
     }
@@ -824,7 +814,7 @@ pub struct AgentProvider {
     #[serde(default)]
     pub api_type: AgentProviderApiType,
 
-    /// API base URL,例如 `https://api.deepseek.com/v1`、`http://localhost:11434/v1`。
+    /// API base URL,例如 `https://api.deepseek.com/v1`、`http://localhost:11434`。
     /// 不要带尾随斜杠,但代码侧会做容错。
     pub base_url: String,
 
@@ -1138,8 +1128,54 @@ impl settings_value::SettingsValue for BYOPLastUsedReasoningMap {
     }
 }
 
+/// Per-agent 设置：控制单个 CLI agent 的工具栏、标签页菜单和标题栏可见性。
+/// key 是 CLIAgent 序列化名（例如 "Claude", "Gemini"）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PerAgentSettings {
+    /// 是否在终端输入底部展示编码智能体工具栏。
+    #[serde(default = "default_true_bool")]
+    pub toolbar: bool,
+    /// 是否在新建标签页菜单中展示该 agent 的快速启动入口。
+    #[serde(default = "default_true_bool", alias = "tab_menu")]
+    pub tabmenu: bool,
+    /// 是否在标题栏右侧展示该 agent 的快捷启动按钮。
+    #[serde(default)]
+    pub titlebar: bool,
+}
+
+fn default_true_bool() -> bool {
+    true
+}
+
+impl PerAgentSettings {
+    /// 返回指定 agent 的默认值。titlebar 对 Claude/Codex/Gemini/Antigravity 默认开启。
+    pub fn default_for(agent: CLIAgent) -> Self {
+        let titlebar = matches!(
+            agent,
+            CLIAgent::Claude | CLIAgent::Codex | CLIAgent::Gemini | CLIAgent::Antigravity
+        );
+        Self {
+            toolbar: true,
+            tabmenu: true,
+            titlebar,
+        }
+    }
+}
+
+impl Default for PerAgentSettings {
+    fn default() -> Self {
+        Self {
+            toolbar: true,
+            tabmenu: true,
+            titlebar: false,
+        }
+    }
+}
+
+impl settings_value::SettingsValue for PerAgentSettings {}
+
 define_settings_group!(AISettings, settings: [
-    // If `false`, all AI features are disabled.
+    // 历史遗留设置。Zap 的 Zap 智能体现在固定开启,不要用这个字段判断启用状态。
     is_any_ai_enabled: IsAnyAIEnabled {
         type: bool,
         default: true,
@@ -1247,18 +1283,6 @@ define_settings_group!(AISettings, settings: [
         toml_path: "agents.warp_agent.active_ai.natural_language_autosuggestions_enabled",
         description: "Controls whether ghosted text autosuggestions are shown for AI input queries.",
         feature_flag: FeatureFlag::PredictAMQueries,
-    }
-    // This field should not be referenced directly to lookup shared block title generations
-    // enablement -- use the `is_shared_block_title_generation_enabled()` getter.
-    // This feature refers to the auto title generation when the user opens the shared block dialog.
-    shared_block_title_generation_enabled_internal: SharedBlockTitleGenerationEnabled {
-        type: bool,
-        default: true,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        private: false,
-        toml_path: "agents.warp_agent.active_ai.shared_block_title_generation_enabled",
-        description: "Controls whether titles are auto-generated when sharing blocks.",
     }
     // This field should not be referenced directly to lookup git operations AI autogen
     // enablement -- use the `is_git_operations_autogen_enabled()` getter.
@@ -1450,7 +1474,7 @@ define_settings_group!(AISettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: false,
         toml_path: "cloud_platform.third_party_api_keys.aws_bedrock_credentials_enabled",
-        description: "Whether Warp should use your local AWS credentials for Bedrock-enabled requests.",
+        description: "Whether Zap should use your local AWS credentials for Bedrock-enabled requests.",
     }
     // Whether to automatically run the AWS login command when Bedrock credentials are expired.
     //
@@ -1505,7 +1529,7 @@ define_settings_group!(AISettings, settings: [
         toml_path: "agents.knowledge.rules_enabled",
         description: "Whether the agent uses your saved rules during requests.",
     }
-    // Whether warp drive context should be included in AI requests
+    // Whether zap drive context should be included in AI requests
     warp_drive_context_enabled: WarpDriveContextEnabled {
         type: bool,
         default: true,
@@ -1513,18 +1537,7 @@ define_settings_group!(AISettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: false,
         toml_path: "agents.knowledge.warp_drive_context_enabled",
-        description: "Whether Warp Drive context is included in AI requests.",
-    }
-
-    // Whether the codebase speedbump banner has been permanently dismissed for a given repo path.
-    //
-    // Not a user-visible settings - we model it as a setting so we can track state.
-    codebase_index_speedbump_banner_dismissed_for_repo_paths: CodebaseIndexSpeedbumpBannerDismissedForRepoPaths {
-        type: Vec<PathBuf>,
-        default: vec![],
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Never,
-        private: true,
+        description: "Whether Zap Drive context is included in AI requests.",
     }
 
     // Whether the agent mode setup banner has been shown for a given repo path.
@@ -1536,17 +1549,6 @@ define_settings_group!(AISettings, settings: [
         default: vec![],
         supported_platforms: SupportedPlatforms::ALL,
         sync_to_cloud: SyncToCloud::Never,
-        private: true,
-    }
-
-    // Whether the codebase speedbump banner has been globally dismissed ("Don't show again").
-    //
-    // Not a user-visible settings - we model it as a setting so we can track state.
-    codebase_index_speedbump_banner_globally_dismissed: CodebaseIndexSpeedbumpBannerGloballyDismissed {
-        type: bool,
-        default: false,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: true,
     }
 
@@ -1592,42 +1594,7 @@ define_settings_group!(AISettings, settings: [
         private: true,
     }
 
-    // This is not a user-visible setting - it's merely a one-time flag to track if the Oz launch modal
-    // has been shown to the user.
-    //
-    // We model it as a setting so it's only shown once to a given user regardless of the number of
-    // devices they use.
-    did_check_to_trigger_oz_launch_modal: DidShowOzLaunchModal {
-        type: bool,
-        default: false,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::No),
-        private: true,
-    }
-
-    // Used to determine whether the "What's new in Oz" section of the agent view
-    // zero state is expanded or collapsed by default.
-    should_expand_oz_updates: ShouldExpandOzUpdates {
-        type: bool,
-        default: false,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Never,
-        private: true,
-    }
-
-    // Used to determine whether the "What's new in Oz" section of the agent view
-    // zero state is shown or hidden.
-    should_show_oz_updates_in_zero_state: ShouldShowOzUpdatesInZeroState {
-        type: bool,
-        default: true,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        private: false,
-        toml_path: "agents.warp_agent.other.should_show_oz_updates_in_zero_state",
-        description: "Whether the \"What's new\" section is shown in the agent view.",
-    }
-
-    // Whether or not the user has enabled the ability to use Warp credits even when providing
+    // Whether or not the user has enabled the ability to use Zap credits even when providing
     // their own LLM provider API key.
     can_use_warp_credits_with_byok: CanUseWarpCreditsWithByok {
         type: bool,
@@ -1636,7 +1603,7 @@ define_settings_group!(AISettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: false,
         toml_path: "cloud_platform.third_party_api_keys.can_use_warp_credits_with_byok",
-        description: "Whether Warp credits can be used even when providing your own API key.",
+        description: "Whether Zap credits can be used even when providing your own API key.",
     }
 
     should_render_use_agent_footer_for_user_commands: ShouldRenderUseAgentToolbarForUserCommands {
@@ -1780,35 +1747,8 @@ define_settings_group!(AISettings, settings: [
         toml_path: "general.default_tab_config_path",
     }
 
-    // Whether computer use is enabled for cloud agent conversations started from the Warp app.
-    // This setting is only used when the AI autonomy setting is AlwaysAsk or not set.
-    cloud_agent_computer_use_enabled: CloudAgentComputerUseEnabled {
-        type: bool,
-        default: warp_core::channel::ChannelState::channel().is_dogfood(),
-        supported_platforms: SupportedPlatforms::DESKTOP,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        private: false,
-        toml_path: "agents.warp_agent.other.cloud_agent_computer_use_enabled",
-        description: "Whether computer use is enabled for cloud agent conversations.",
-    }
-
-    // Whether multi-agent orchestration is enabled. When enabled, the agent can
-    // spawn and coordinate parallel sub-agents via StartAgent / SendMessageToAgent
-    // tools. This setting is only effective when FeatureFlag::Orchestration is also
-    // enabled.
-    orchestration_enabled: OrchestrationEnabled {
-        type: bool,
-        default: true,
-        supported_platforms: SupportedPlatforms::DESKTOP,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        private: false,
-        toml_path: "agents.warp_agent.other.orchestration_enabled",
-        description: "Whether multi-agent orchestration is enabled.",
-        feature_flag: FeatureFlag::Orchestration,
-    }
-
     // Whether file-based MCP servers from third-party AI tools (e.g. Claude, Codex) should
-    // be automatically detected and spawned. Warp-native config files (.warp/.mcp.json) are
+    // be automatically detected and spawned. Zap-native config files (.warp/.mcp.json) are
     // always detected and spawned, regardless of this setting.
     file_based_mcp_enabled: FileBasedMcpEnabled {
         type: bool,
@@ -1859,9 +1799,9 @@ define_settings_group!(AISettings, settings: [
         description: "Whether agent notifications are shown.",
     }
 
-    // OpenWarp T1-2:已完成工具卡默认隐藏(对齐 opencode TUI showDetails 行为)。
-    // true → 默认隐藏 status.is_done() 的 RequestCommandOutput / SearchCodebase /
-    // ReadFiles / Grep / FileGlob / RequestFileEdits 等卡片,只保留 in-progress + error,
+    // Zap T1-2:已完成工具卡默认隐藏(对齐 opencode TUI showDetails 行为)。
+    // true → 默认隐藏 status.is_done() 的 RequestCommandOutput / ReadFiles /
+    // Grep / FileGlob / RequestFileEdits 等卡片,只保留 in-progress + error,
     // 长 session 不被历史卡片堆积淹没新内容。folded 状态可由外观设置面板切换。
     hide_completed_tool_cards: HideCompletedToolCards {
         type: bool,
@@ -1909,7 +1849,7 @@ define_settings_group!(AISettings, settings: [
         description: "User-configured custom Agent providers (OpenAI-compatible).",
     }
 
-    // OpenWarp BYOP 本地会话压缩 — 1:1 对齐 opencode `Config.compaction.auto`。
+    // Zap BYOP 本地会话压缩 — 1:1 对齐 opencode `Config.compaction.auto`。
     // true 时按 token-overflow 自动触发摘要;false 仅手动 /compact /compact-and 触发。
     byop_compaction_auto: ByopCompactionAuto {
         type: bool,
@@ -1921,7 +1861,7 @@ define_settings_group!(AISettings, settings: [
         description: "Enable BYOP automatic conversation compaction on context overflow.",
     }
 
-    // OpenWarp BYOP 本地会话压缩 — 1:1 对齐 opencode `Config.compaction.prune`。
+    // Zap BYOP 本地会话压缩 — 1:1 对齐 opencode `Config.compaction.prune`。
     // true 时每次 LLM 请求前清旧 tool output(替换为占位符)。
     byop_compaction_prune: ByopCompactionPrune {
         type: bool,
@@ -1933,7 +1873,7 @@ define_settings_group!(AISettings, settings: [
         description: "Auto-prune older tool outputs to free BYOP context.",
     }
 
-    // OpenWarp BYOP 本地会话压缩 — 1:1 对齐 opencode `Config.compaction.tail_turns`(默认 2)。
+    // Zap BYOP 本地会话压缩 — 1:1 对齐 opencode `Config.compaction.tail_turns`(默认 2)。
     // 保留最近 N 个 user turn 作 tail,前面的进入 head 给摘要 LLM。0 关闭压缩。
     byop_compaction_tail_turns: ByopCompactionTailTurns {
         type: u32,
@@ -1945,7 +1885,7 @@ define_settings_group!(AISettings, settings: [
         description: "Number of recent user turns to keep verbatim during compaction.",
     }
 
-    // OpenWarp BYOP 本地会话压缩 — 1:1 对齐 `Config.compaction.preserve_recent_tokens`。
+    // Zap BYOP 本地会话压缩 — 1:1 对齐 `Config.compaction.preserve_recent_tokens`。
     // 0 = 自动按公式算(min(MAX=8000, max(MIN=2000, usable * 0.25)));> 0 强制覆盖。
     byop_compaction_preserve_recent_tokens: ByopCompactionPreserveRecentTokens {
         type: u32,
@@ -1957,7 +1897,7 @@ define_settings_group!(AISettings, settings: [
         description: "Override the recent-tokens preservation budget (0 = auto).",
     }
 
-    // OpenWarp BYOP 本地会话压缩 — 1:1 对齐 `Config.compaction.reserved`。
+    // Zap BYOP 本地会话压缩 — 1:1 对齐 `Config.compaction.reserved`。
     // overflow 判定时 usable = input_limit - reserved。0 = 自动按 min(20_000, max_output) 算。
     byop_compaction_reserved: ByopCompactionReserved {
         type: u32,
@@ -1969,7 +1909,7 @@ define_settings_group!(AISettings, settings: [
         description: "Reserved buffer tokens for compaction overflow check (0 = auto).",
     }
 
-    // OpenWarp BYOP 本地会话压缩 — 摘要专用模型(可选)。
+    // Zap BYOP 本地会话压缩 — 摘要专用模型(可选)。
     // 设置后:摘要 LLM 调用走这个 provider+model 而非当前 conversation 模型。
     // 留空两个字段 = 用 conversation 当前模型。
     byop_compaction_model_provider_id: ByopCompactionModelProviderId {
@@ -1992,7 +1932,7 @@ define_settings_group!(AISettings, settings: [
         description: "Optional dedicated model id for compaction LLM calls.",
     }
 
-    // OpenWarp BYOP 模型 + 思考深度持久化(picker 切换后立即写入,新 tab/重启沿用)。
+    // Zap BYOP 模型 + 思考深度持久化(picker 切换后立即写入,新 tab/重启沿用)。
     // 模型用 LLMId 字符串形式;空串 = 没有 last_used,落回 profile 默认。
     byop_last_used_model_id: ByopLastUsedModelId {
         type: String,
@@ -2004,7 +1944,7 @@ define_settings_group!(AISettings, settings: [
         description: "Last selected BYOP model id (picker hydrates new tabs/sessions from this).",
     }
 
-    // OpenWarp BYOP per-(api_type, model) 思考深度记忆。
+    // Zap BYOP per-(api_type, model) 思考深度记忆。
     // key = `<api_type>:<model_id>`,value = ReasoningEffortSetting。picker 切换写入。
     byop_last_used_reasoning: ByopLastUsedReasoning {
         type: BYOPLastUsedReasoningMap,
@@ -2015,6 +1955,29 @@ define_settings_group!(AISettings, settings: [
         toml_path: "agents.byop.last_used_reasoning",
         max_table_depth: 1,
         description: "Per-(api_type, model) reasoning effort memory for BYOP picker.",
+    }
+
+    // Per-agent 设置：控制单个 CLI agent 的工具栏和标签页菜单可见性。
+    // key 是 CLIAgent::to_serialized_name() 的结果。
+    cli_agent_per_agent_settings: CLIAgentPerAgentSettings {
+        type: HashMap<String, PerAgentSettings>,
+        default: HashMap::new(),
+        supported_platforms: SupportedPlatforms::ALL,
+        sync_to_cloud: SyncToCloud::Never,
+        private: false,
+        toml_path: "agents.third_party.per_agent",
+        max_table_depth: 1,
+        description: "Per-agent visibility settings for toolbar and tab menu.",
+    }
+
+    // 是否已完成至少一次 CLI agent 安装扫描。
+    // 首次打开第三方智能体设置页时,若该标记为 false 则自动触发一次同步。
+    cli_agent_scan_completed: CLIAgentScanCompleted {
+        type: bool,
+        default: false,
+        supported_platforms: SupportedPlatforms::ALL,
+        sync_to_cloud: SyncToCloud::Never,
+        private: true,
     }
 ]);
 
@@ -2036,31 +1999,10 @@ impl AISettings {
         });
     }
 
-    pub fn is_ai_disabled_due_to_remote_session_org_policy(&self, app: &AppContext) -> bool {
-        let contains_remote_blocks = FocusedTerminalInfo::as_ref(app).contains_any_remote_blocks();
-
-        let contains_restored_remote_blocks =
-            FocusedTerminalInfo::as_ref(app).contains_any_restored_remote_blocks();
-
-        let is_ai_allowed_in_remote_sessions =
-            UserWorkspaces::as_ref(app).is_ai_allowed_in_remote_sessions();
-
-        if is_ai_allowed_in_remote_sessions {
-            return false;
-        }
-
-        contains_remote_blocks || contains_restored_remote_blocks
-    }
-
-    pub fn is_any_ai_enabled(&self, app: &AppContext) -> bool {
-        // Disable AI for anonymous and logged-out users.
-        let is_anonymous_or_logged_out = AuthStateProvider::as_ref(app)
-            .get()
-            .is_anonymous_or_logged_out();
-
-        *self.is_any_ai_enabled
-            && !is_anonymous_or_logged_out
-            && !self.is_ai_disabled_due_to_remote_session_org_policy(app)
+    pub fn is_any_ai_enabled(&self, _app: &AppContext) -> bool {
+        // Zap 不再允许通过设置关闭 Zap 智能体。旧配置文件里持久化的
+        // `agents.warp_agent.is_any_ai_enabled = false` 会被忽略。
+        true
     }
 
     pub fn default_session_mode(&self, app: &AppContext) -> DefaultSessionMode {
@@ -2068,8 +2010,8 @@ impl AISettings {
         match mode {
             // Terminal and TabConfig don't require AI.
             DefaultSessionMode::Terminal | DefaultSessionMode::TabConfig => mode,
-            // Agent and CloudAgent require AI to be enabled.
-            DefaultSessionMode::Agent | DefaultSessionMode::CloudAgent => {
+            // Agent and AmbientAgent require AI to be enabled.
+            DefaultSessionMode::Agent | DefaultSessionMode::AmbientAgent => {
                 if self.is_any_ai_enabled(app) {
                     mode
                 } else {
@@ -2133,10 +2075,6 @@ impl AISettings {
         self.is_active_ai_enabled(app) && *self.natural_language_autosuggestions_enabled_internal
     }
 
-    pub fn is_shared_block_title_generation_enabled(&self, app: &warpui::AppContext) -> bool {
-        self.is_active_ai_enabled(app) && *self.shared_block_title_generation_enabled_internal
-    }
-
     pub fn is_git_operations_autogen_enabled(&self, app: &warpui::AppContext) -> bool {
         self.is_active_ai_enabled(app) && *self.git_operations_autogen_enabled_internal
     }
@@ -2181,21 +2119,15 @@ impl AISettings {
         if !FeatureFlag::FileBasedMcp.is_enabled() || !self.is_any_ai_enabled(app) {
             return false;
         }
-        // NOTE: we intentionally do not force-enable this in Cloud Mode. Previously
+        // NOTE: we intentionally do not force-enable this in autonomous agent runs. Previously
         // we auto-spawned file-based MCPs in autonomous execution, but that bypassed
         // the user's explicit opt-in and let any MCP config checked into a repo run
-        // arbitrary commands as part of a cloud agent run. Respecting the toggle
-        // closes that attack surface; cloud agents that need project-scoped MCP
+        // arbitrary commands as part of an agent run. Respecting the toggle
+        // closes that attack surface; agents that need project-scoped MCP
         // servers should surface an explicit, auditable opt-in. A more robust
         // solution (e.g. per-environment allowlisting, signed configs) should be
         // explored in the future.
         *self.file_based_mcp_enabled
-    }
-
-    pub fn is_orchestration_enabled(&self, app: &warpui::AppContext) -> bool {
-        FeatureFlag::Orchestration.is_enabled()
-            && self.is_any_ai_enabled(app)
-            && *self.orchestration_enabled
     }
 
     /// Determines whether a quota reset banner should be displayed to the user.
@@ -2481,6 +2413,140 @@ impl AISettings {
         report_if_error!(self
             .plugin_update_chip_dismissed_for_version_map
             .set_value(map, ctx));
+    }
+
+    // ── Per-agent settings ──
+
+    /// 查询某个 CLI agent 的工具栏是否启用。未在 per-agent 设置中出现时取 agent 默认值。
+    pub fn is_cli_agent_toolbar_enabled(&self, agent: CLIAgent) -> bool {
+        if matches!(agent, CLIAgent::Unknown) {
+            return true;
+        }
+        self.cli_agent_per_agent_settings
+            .get(agent.to_serialized_name().as_str())
+            .map(|s| s.toolbar)
+            .unwrap_or_else(|| PerAgentSettings::default_for(agent).toolbar)
+    }
+
+    /// 查询某个 CLI agent 是否在新建标签页菜单中显示。未在 per-agent 设置中出现时取 agent 默认值。
+    pub fn is_cli_agent_tab_menu_enabled(&self, agent: CLIAgent) -> bool {
+        if matches!(agent, CLIAgent::Unknown) {
+            return false;
+        }
+        self.cli_agent_per_agent_settings
+            .get(agent.to_serialized_name().as_str())
+            .map(|s| s.tabmenu)
+            .unwrap_or_else(|| PerAgentSettings::default_for(agent).tabmenu)
+    }
+
+    /// 查询某个 CLI agent 的标题栏按钮是否启用。未在 per-agent 设置中出现时取 agent 默认值。
+    pub fn is_cli_agent_titlebar_enabled(&self, agent: CLIAgent) -> bool {
+        if matches!(agent, CLIAgent::Unknown) {
+            return false;
+        }
+        self.cli_agent_per_agent_settings
+            .get(agent.to_serialized_name().as_str())
+            .map(|s| s.titlebar)
+            .unwrap_or_else(|| PerAgentSettings::default_for(agent).titlebar)
+    }
+
+    /// 设置单个 agent 的工具栏启用状态。
+    pub fn set_cli_agent_toolbar(
+        &mut self,
+        agent: CLIAgent,
+        enabled: bool,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let key = agent.to_serialized_name();
+        let mut map = self.cli_agent_per_agent_settings.clone();
+        map.entry(key)
+            .and_modify(|s| s.toolbar = enabled)
+            .or_insert_with(|| PerAgentSettings {
+                toolbar: enabled,
+                ..PerAgentSettings::default_for(agent)
+            });
+        report_if_error!(self.cli_agent_per_agent_settings.set_value(map, ctx));
+    }
+
+    /// 设置单个 agent 的标签页菜单启用状态。
+    pub fn set_cli_agent_tab_menu(
+        &mut self,
+        agent: CLIAgent,
+        enabled: bool,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let key = agent.to_serialized_name();
+        let mut map = self.cli_agent_per_agent_settings.clone();
+        map.entry(key)
+            .and_modify(|s| s.tabmenu = enabled)
+            .or_insert_with(|| PerAgentSettings {
+                tabmenu: enabled,
+                ..PerAgentSettings::default_for(agent)
+            });
+        report_if_error!(self.cli_agent_per_agent_settings.set_value(map, ctx));
+    }
+
+    /// 设置单个 agent 的标题栏按钮启用状态。
+    pub fn set_cli_agent_titlebar(
+        &mut self,
+        agent: CLIAgent,
+        enabled: bool,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let key = agent.to_serialized_name();
+        let mut map = self.cli_agent_per_agent_settings.clone();
+        map.entry(key)
+            .and_modify(|s| s.titlebar = enabled)
+            .or_insert_with(|| PerAgentSettings {
+                titlebar: enabled,
+                ..PerAgentSettings::default_for(agent)
+            });
+        report_if_error!(self.cli_agent_per_agent_settings.set_value(map, ctx));
+    }
+
+    /// 根据安装扫描结果同步 per-agent 设置。
+    /// - 新检测到的 agent 写入默认值(toolbar=true, tabmenu=true)
+    /// - 已卸载的 agent 从设置中移除
+    /// - 标注扫描完成
+    pub fn sync_per_agent_from_scan(
+        &mut self,
+        installed: &HashMap<CLIAgent, bool>,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let installed_agents: Vec<CLIAgent> = installed
+            .iter()
+            .filter(|(a, v)| **v && !matches!(a, CLIAgent::Unknown))
+            .map(|(a, _)| *a)
+            .collect();
+        let installed_names: std::collections::HashSet<String> = installed_agents
+            .iter()
+            .map(|a| a.to_serialized_name())
+            .collect();
+
+        let mut per_agent = self.cli_agent_per_agent_settings.clone();
+
+        for agent in &installed_agents {
+            per_agent
+                .entry(agent.to_serialized_name())
+                .or_insert_with(|| PerAgentSettings::default_for(*agent));
+        }
+
+        // 已卸载的 agent → 移除
+        per_agent.retain(|name, _| installed_names.contains(name.as_str()));
+
+        let changed = &per_agent != self.cli_agent_per_agent_settings.value();
+        if changed {
+            report_if_error!(self.cli_agent_per_agent_settings.set_value(per_agent, ctx));
+        }
+
+        if !*self.cli_agent_scan_completed.value() {
+            report_if_error!(self.cli_agent_scan_completed.set_value(true, ctx));
+        }
+    }
+
+    /// 返回是否已完成至少一次 CLI agent 安装扫描。
+    pub fn is_cli_agent_scan_completed(&self) -> bool {
+        *self.cli_agent_scan_completed.value()
     }
 }
 

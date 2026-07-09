@@ -1,6 +1,10 @@
+use std::collections::HashMap;
+
 use warpui::{
+    current_render_window,
+    elements::HeadingFontSizeMultipliers,
     fonts::{FamilyId, Weight},
-    Entity, ModelContext, SingletonEntity,
+    Entity, ModelContext, SingletonEntity, WindowId,
 };
 
 use super::{builder::UiBuilder, theme::WarpTheme};
@@ -9,7 +13,13 @@ use super::{builder::UiBuilder, theme::WarpTheme};
 const HEADER_FONT_SIZE: f32 = 18.;
 const OVERLINE_FONT_SIZE: f32 = 10.;
 
+/// 默认 UI 字号(基准值)。其他语义化字号方法都以此为标尺按比例缩放。
 pub const DEFAULT_UI_FONT_SIZE: f32 = 12.0;
+/// UI 字号合法下界(设置 UI / `set_ui_font_size` 调用方应在此与 `UI_FONT_SIZE_MAX` 间 clamp)。
+pub const UI_FONT_SIZE_MIN: f32 = 8.0;
+/// UI 字号合法上界。
+pub const UI_FONT_SIZE_MAX: f32 = 20.0;
+
 pub const DEFAULT_COMMAND_PALETTE_FONT_SIZE: f32 = 14.0;
 
 /// Holds visual settings that are so widely used that it's best
@@ -28,8 +38,19 @@ pub struct Appearance {
     // isn't actually a changeable setting right now.
     ui_font_family: FamilyId,
     ai_font_family: FamilyId,
+    terminal_fallback_font_family: Option<FamilyId>,
     /// A font that is used for password fields.
     password_font_family: FamilyId,
+    ui_font_size: f32,
+    heading_font_size_multipliers: HeadingFontSizeMultipliers,
+
+    /// Per-window theme overrides. When a window has an entry here, its rendering
+    /// uses this theme instead of the global `theme`. Empty in the common case,
+    /// which keeps `theme()` on a zero-cost fast path.
+    theme_overrides: HashMap<WindowId, WarpTheme>,
+    /// Per-window `UiBuilder`s, kept in lockstep with `theme_overrides` (a
+    /// `UiBuilder` bakes the theme into its styles, so each override needs its own).
+    ui_builder_overrides: HashMap<WindowId, UiBuilder>,
 }
 
 /// Defines appearance change events.
@@ -58,6 +79,10 @@ pub enum AppearanceEvent {
         previous_family_id: FamilyId,
         current_family_id: FamilyId,
     },
+    TerminalFallbackFontFamilyChanged {
+        previous_family_id: Option<FamilyId>,
+        current_family_id: Option<FamilyId>,
+    },
     MonospaceFontWeightChanged {
         previous_font_weight: Weight,
         current_font_weight: Weight,
@@ -66,6 +91,11 @@ pub enum AppearanceEvent {
         previous_line_height_ratio: f32,
         current_line_height_ratio: f32,
     },
+    UiFontSizeChanged {
+        previous_font_size: f32,
+        current_font_size: f32,
+    },
+    HeadingFontSizeMultipliersChanged,
 }
 
 impl Appearance {
@@ -78,7 +108,10 @@ impl Appearance {
         ui_font_family: FamilyId,
         line_height_ratio: f32,
         ai_font_family: FamilyId,
+        terminal_fallback_font_family: Option<FamilyId>,
         password_font_family: FamilyId,
+        ui_font_size: f32,
+        heading_font_size_multipliers: HeadingFontSizeMultipliers,
     ) -> Self {
         Self {
             theme: theme.clone(),
@@ -90,12 +123,17 @@ impl Appearance {
             ui_builder: UiBuilder::new(
                 theme,
                 ui_font_family,
-                DEFAULT_UI_FONT_SIZE,
+                ui_font_size,
                 DEFAULT_COMMAND_PALETTE_FONT_SIZE,
                 line_height_ratio,
             ),
             ai_font_family,
+            terminal_fallback_font_family,
             password_font_family,
+            ui_font_size,
+            heading_font_size_multipliers,
+            theme_overrides: HashMap::new(),
+            ui_builder_overrides: HashMap::new(),
         }
     }
 
@@ -114,6 +152,7 @@ impl Appearance {
             mock_terminal_colors(),
             None,
             Some("Dark".to_string()),
+            None,
         );
         let line_height_ratio = 1.4;
         let ui_font_family = FamilyId(1);
@@ -133,7 +172,12 @@ impl Appearance {
             ),
             ui_font_family,
             ai_font_family: FamilyId(0),
+            terminal_fallback_font_family: None,
             password_font_family: FamilyId(0),
+            ui_font_size: DEFAULT_UI_FONT_SIZE,
+            heading_font_size_multipliers: HeadingFontSizeMultipliers::default(),
+            theme_overrides: HashMap::new(),
+            ui_builder_overrides: HashMap::new(),
         }
     }
 
@@ -211,6 +255,22 @@ impl Appearance {
         });
     }
 
+    pub fn set_terminal_fallback_font_family(
+        &mut self,
+        new_family: Option<FamilyId>,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let previous_family_id = self.terminal_fallback_font_family;
+        self.terminal_fallback_font_family = new_family;
+
+        ctx.invalidate_all_views();
+
+        ctx.emit(AppearanceEvent::TerminalFallbackFontFamilyChanged {
+            previous_family_id,
+            current_family_id: new_family,
+        });
+    }
+
     pub fn set_monospace_font_size(&mut self, new_font_size: f32, ctx: &mut ModelContext<Self>) {
         let previous_font_size = self.monospace_font_size;
         self.monospace_font_size = new_font_size;
@@ -241,9 +301,45 @@ impl Appearance {
         });
     }
 
+    pub fn set_ui_font_size(&mut self, new_font_size: f32, ctx: &mut ModelContext<Self>) {
+        let previous_font_size = self.ui_font_size;
+        self.ui_font_size = new_font_size;
+        self.ui_builder = UiBuilder::new(
+            self.theme.clone(),
+            self.ui_font_family,
+            self.ui_font_size,
+            DEFAULT_COMMAND_PALETTE_FONT_SIZE,
+            self.line_height_ratio,
+        );
+
+        ctx.invalidate_all_views();
+
+        ctx.emit(AppearanceEvent::UiFontSizeChanged {
+            current_font_size: self.ui_font_size,
+            previous_font_size,
+        });
+    }
+
     #[cfg(feature = "test-util")]
     pub fn set_monospace_font_size_test(&mut self, new_font_size: f32) {
         self.monospace_font_size = new_font_size;
+    }
+
+    #[cfg(test)]
+    pub fn set_ui_font_size_test(&mut self, new_font_size: f32) {
+        self.ui_font_size = new_font_size;
+        self.ui_builder = UiBuilder::new(
+            self.theme.clone(),
+            self.ui_font_family,
+            self.ui_font_size,
+            DEFAULT_COMMAND_PALETTE_FONT_SIZE,
+            self.line_height_ratio,
+        );
+    }
+
+    #[cfg(test)]
+    pub fn set_terminal_fallback_font_family_test(&mut self, new_family: Option<FamilyId>) {
+        self.terminal_fallback_font_family = new_family;
     }
 
     pub fn set_line_height_ratio(
@@ -256,7 +352,7 @@ impl Appearance {
         self.ui_builder = UiBuilder::new(
             self.theme.clone(),
             self.ui_font_family,
-            DEFAULT_UI_FONT_SIZE,
+            self.ui_font_size,
             DEFAULT_COMMAND_PALETTE_FONT_SIZE,
             self.line_height_ratio,
         );
@@ -271,11 +367,62 @@ impl Appearance {
     }
 
     pub fn ui_builder(&self) -> &UiBuilder {
-        &self.ui_builder
+        if self.ui_builder_overrides.is_empty() {
+            return &self.ui_builder;
+        }
+        match current_render_window() {
+            Some(w) => self.ui_builder_overrides.get(&w).unwrap_or(&self.ui_builder),
+            None => &self.ui_builder,
+        }
     }
 
     pub fn theme(&self) -> &WarpTheme {
-        &self.theme
+        if self.theme_overrides.is_empty() {
+            return &self.theme;
+        }
+        match current_render_window() {
+            Some(w) => self.theme_overrides.get(&w).unwrap_or(&self.theme),
+            None => &self.theme,
+        }
+    }
+
+    /// Sets a per-window theme override, invalidating only that window.
+    pub fn set_window_theme(
+        &mut self,
+        window_id: WindowId,
+        theme: WarpTheme,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let ui_builder = UiBuilder::new(
+            theme.clone(),
+            self.ui_font_family,
+            self.ui_font_size(),
+            DEFAULT_COMMAND_PALETTE_FONT_SIZE,
+            self.line_height_ratio,
+        );
+        self.theme_overrides.insert(window_id, theme);
+        self.ui_builder_overrides.insert(window_id, ui_builder);
+
+        // Only redraw the affected window; other windows keep their theme.
+        ctx.invalidate_all_views_for_window(window_id);
+
+        ctx.emit(AppearanceEvent::ThemeChanged);
+        ctx.notify();
+    }
+
+    /// Clears a per-window theme override, returning the window to the global
+    /// theme and invalidating only that window.
+    pub fn clear_window_theme(&mut self, window_id: WindowId, ctx: &mut ModelContext<Self>) {
+        let had_override = self.theme_overrides.remove(&window_id).is_some();
+        self.ui_builder_overrides.remove(&window_id);
+        if !had_override {
+            return;
+        }
+
+        ctx.invalidate_all_views_for_window(window_id);
+
+        ctx.emit(AppearanceEvent::ThemeChanged);
+        ctx.notify();
     }
 
     pub fn monospace_font_family(&self) -> FamilyId {
@@ -286,8 +433,26 @@ impl Appearance {
         self.ai_font_family
     }
 
+    pub fn terminal_fallback_font_family(&self) -> Option<FamilyId> {
+        self.terminal_fallback_font_family
+    }
+
     pub fn monospace_font_size(&self) -> f32 {
         self.monospace_font_size
+    }
+
+    pub fn heading_font_size_multipliers(&self) -> &HeadingFontSizeMultipliers {
+        &self.heading_font_size_multipliers
+    }
+
+    pub fn set_heading_font_size_multipliers(
+        &mut self,
+        new_multipliers: HeadingFontSizeMultipliers,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        self.heading_font_size_multipliers = new_multipliers;
+        ctx.invalidate_all_views();
+        ctx.emit(AppearanceEvent::HeadingFontSizeMultipliersChanged);
     }
 
     pub fn monospace_ui_scalar(&self) -> f32 {
@@ -303,7 +468,7 @@ impl Appearance {
     }
 
     pub fn ui_font_size(&self) -> f32 {
-        DEFAULT_UI_FONT_SIZE
+        self.ui_font_size
     }
 
     pub fn header_font_family(&self) -> FamilyId {
@@ -311,7 +476,7 @@ impl Appearance {
     }
 
     pub fn header_font_size(&self) -> f32 {
-        HEADER_FONT_SIZE
+        self.ui_font_size * HEADER_FONT_SIZE / DEFAULT_UI_FONT_SIZE
     }
 
     pub fn overline_font_family(&self) -> FamilyId {
@@ -319,7 +484,50 @@ impl Appearance {
     }
 
     pub fn overline_font_size(&self) -> f32 {
-        OVERLINE_FONT_SIZE
+        self.ui_font_size * OVERLINE_FONT_SIZE / DEFAULT_UI_FONT_SIZE
+    }
+
+    /// 语义化字号: overline。与 [`Self::overline_font_size`] 等价，
+    /// 但字面量不再被外部常量耦合，推荐新调用点使用本方法，
+    /// `overline_font_size` 逐步作为历史调用点保留。
+    pub fn ui_font_overline(&self) -> f32 {
+        self.ui_font_size * 10.0 / DEFAULT_UI_FONT_SIZE
+    }
+
+    pub fn ui_font_footnote(&self) -> f32 {
+        self.ui_font_size * 11.0 / DEFAULT_UI_FONT_SIZE
+    }
+
+    pub fn ui_font_body(&self) -> f32 {
+        self.ui_font_size
+    }
+
+    pub fn ui_font_body_large(&self) -> f32 {
+        self.ui_font_size * 13.0 / DEFAULT_UI_FONT_SIZE
+    }
+
+    pub fn ui_font_subheading(&self) -> f32 {
+        self.ui_font_size * 14.0 / DEFAULT_UI_FONT_SIZE
+    }
+
+    pub fn ui_font_heading_3(&self) -> f32 {
+        self.ui_font_size * 16.0 / DEFAULT_UI_FONT_SIZE
+    }
+
+    pub fn ui_font_heading_2(&self) -> f32 {
+        self.ui_font_size * 18.0 / DEFAULT_UI_FONT_SIZE
+    }
+
+    pub fn ui_font_heading_1(&self) -> f32 {
+        self.ui_font_size * 20.0 / DEFAULT_UI_FONT_SIZE
+    }
+
+    pub fn ui_font_display(&self) -> f32 {
+        self.ui_font_size * 24.0 / DEFAULT_UI_FONT_SIZE
+    }
+
+    pub fn ui_font_hero(&self) -> f32 {
+        self.ui_font_size * 36.0 / DEFAULT_UI_FONT_SIZE
     }
 
     pub fn line_height_ratio(&self) -> f32 {
@@ -329,6 +537,11 @@ impl Appearance {
     pub fn password_font_family(&self) -> FamilyId {
         self.password_font_family
     }
+
+    /// 根据 UI 字体大小计算 dropdown 顶栏所需的最小高度
+    pub fn dropdown_top_bar_height(&self) -> f32 {
+        (self.ui_font_size * 2.5).max(30.0)
+    }
 }
 
 impl Entity for Appearance {
@@ -336,3 +549,7 @@ impl Entity for Appearance {
 }
 
 impl SingletonEntity for Appearance {}
+
+#[cfg(test)]
+#[path = "appearance_tests.rs"]
+mod tests;

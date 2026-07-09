@@ -22,7 +22,6 @@ use crate::ai::llms::{
     is_using_api_key_for_provider, DisableReason, LLMId, LLMInfo, LLMPreferences, LLMProvider,
     LLMSpec,
 };
-use crate::auth::AuthStateProvider;
 use crate::features::FeatureFlag;
 use crate::search::data_source::{Query, QueryFilter, QueryResult};
 use crate::search::mixer::DataSourceRunErrorWrapper;
@@ -434,7 +433,7 @@ impl SearchItem for ModelSearchItem {
         let header = render_model_spec_header(&title, &description, app);
 
         // BYOP 走专用 score 渲染:Context / Output (bar 用 log2 归一化) + Cost = BilledToApi。
-        // 视觉与默认 Warp 面板完全一致,只是行的语义不同。
+        // 视觉与默认 Zap 面板完全一致,只是行的语义不同。
         if byop_llm_id::is_byop(&self.id) {
             if let Some((provider, _api_key, model_id)) = lookup_byop(app, &self.id) {
                 let model_entry = provider.models.iter().find(|m| m.id == model_id);
@@ -542,16 +541,6 @@ impl SearchItem for ModelSearchItem {
             .with_child(scores);
 
         if self.disable_reason.as_ref() == Some(&DisableReason::RequiresUpgrade) {
-            let upgrade_url = if let Some(team) = UserWorkspaces::as_ref(app).current_team() {
-                UserWorkspaces::upgrade_link_for_team(team.uid)
-            } else {
-                let user_id = AuthStateProvider::as_ref(app)
-                    .get()
-                    .user_id()
-                    .unwrap_or_default();
-                UserWorkspaces::upgrade_link(user_id)
-            };
-
             let mut display_name = self.display_text.clone();
             if let Some(first) = display_name.get_mut(..1) {
                 first.make_ascii_uppercase();
@@ -579,12 +568,9 @@ impl SearchItem for ModelSearchItem {
                     ),
                 ]
             } else {
-                vec![
-                    FormattedTextFragment::plain_text(format!(
-                        "{display_name} is not available for free users. "
-                    )),
-                    FormattedTextFragment::hyperlink("Upgrade", upgrade_url),
-                ]
+                vec![FormattedTextFragment::plain_text(format!(
+                    "{display_name} is not available in the current local configuration."
+                ))]
             };
 
             let upgrade_text = FormattedTextElement::new(
@@ -595,6 +581,7 @@ impl SearchItem for ModelSearchItem {
                 theme.disabled_ui_text_color().into_solid(),
                 HighlightedHyperlink::default(),
             )
+            .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
             .with_hyperlink_font_color(theme.accent().into_solid())
             .register_default_click_handlers_with_action_support(|hyperlink_lens, event, ctx| {
                 match hyperlink_lens {
@@ -666,7 +653,7 @@ impl SearchItem for ModelSearchItem {
 }
 
 /// Returns true when a promo discount chip should be shown for a model.
-/// Discounts only apply when the user is billing through Warp credits,
+/// Discounts only apply when the user is billing through Zap credits,
 /// so we suppress the chip when the user is routing through their own API key.
 fn should_show_discount_chip(discount_percentage: Option<f32>, is_using_byok: bool) -> bool {
     discount_percentage.is_some_and(|p| p > 0.) && !is_using_byok

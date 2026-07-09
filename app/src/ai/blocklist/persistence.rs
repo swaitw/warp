@@ -13,8 +13,7 @@ use crate::{
         agent::{
             conversation::AIConversationId, AIAgentActionType, AIAgentAttachment, AIAgentContext,
             AIAgentExchangeId, AIAgentInput, AIAgentPtyWriteMode, AskUserQuestionItem,
-            FileLocations, PassiveSuggestionResultType, ReadFilesRequest, SearchCodebaseRequest,
-            UserQueryMode,
+            FileLocations, PassiveSuggestionResultType, ReadFilesRequest, UserQueryMode,
         },
         llms::LLMId,
     },
@@ -83,7 +82,6 @@ impl TryFrom<&AIAgentInput> for PersistedAIInputType {
             AIAgentInput::ActionResult { .. }
             | AIAgentInput::ResumeConversation { .. }
             | AIAgentInput::InitProjectRules { .. }
-            | AIAgentInput::CreateEnvironment { .. }
             | AIAgentInput::TriggerPassiveSuggestion { .. }
             | AIAgentInput::CreateNewProject { .. }
             | AIAgentInput::CloneRepository { .. }
@@ -165,11 +163,6 @@ pub(crate) enum PersistedAIAgentActionType {
     GetFiles {
         file_names: Vec<String>,
     },
-    GetRelevantFiles {
-        query: String,
-        partial_paths: Option<Vec<String>>,
-        codebase_path: Option<String>,
-    },
     Grep {
         queries: Vec<String>,
         path: String,
@@ -229,15 +222,6 @@ impl From<&AIAgentActionType> for PersistedAIAgentActionType {
             },
             AIAgentActionType::ReadFiles(ReadFilesRequest { locations: files }) => Self::GetFiles {
                 file_names: files.iter().map(|f| f.name.clone()).collect(),
-            },
-            AIAgentActionType::SearchCodebase(SearchCodebaseRequest {
-                query,
-                partial_paths,
-                codebase_path,
-            }) => Self::GetRelevantFiles {
-                query: query.clone(),
-                partial_paths: partial_paths.clone(),
-                codebase_path: codebase_path.clone(),
             },
             AIAgentActionType::Grep { queries, path } => Self::Grep {
                 queries: queries.clone(),
@@ -319,15 +303,6 @@ impl TryFrom<PersistedAIAgentActionType> for AIAgentActionType {
                 input: input.clone(),
                 mode: mode.into(),
             }),
-            PersistedAIAgentActionType::GetRelevantFiles {
-                query,
-                partial_paths,
-                codebase_path,
-            } => Ok(Self::SearchCodebase(SearchCodebaseRequest {
-                query,
-                partial_paths,
-                codebase_path,
-            })),
             PersistedAIAgentActionType::RequestFileEdits { .. } => {
                 // TODO(CODE-301): Implement proper restoration for suggested diffs.
                 //

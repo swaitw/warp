@@ -8,14 +8,14 @@ use warpui::{
 };
 
 use crate::{
-    cloud_object::{model::persistence::CloudModel, CloudObjectEventEntrypoint, Space},
-    drive::OpenWarpDriveObjectSettings,
+    cloud_object::{
+        model::persistence::ObjectStoreModel, update_manager::UpdateManager, Space,
+        StoredObjectEventEntrypoint,
+    },
+    drive::ZapDriveObjectSettings,
     integration_testing::view_getters::{notebook_view, workspace_view},
     notebooks::manager::NotebookSource,
-    server::{
-        cloud_objects::update_manager::UpdateManager,
-        ids::{ClientId, SyncId},
-    },
+    server::ids::{ClientId, SyncId},
     workspaces::user_workspaces::UserWorkspaces,
 };
 
@@ -45,7 +45,7 @@ pub fn create_a_personal_notebook(key: impl Into<String>, title: impl Into<Strin
                         .expect("User UID must be set in tests"),
                     None,
                     Default::default(),
-                    CloudObjectEventEntrypoint::ManagementUI,
+                    StoredObjectEventEntrypoint::ManagementUI,
                     true,
                     ctx,
                 );
@@ -57,9 +57,9 @@ pub fn create_a_personal_notebook(key: impl Into<String>, title: impl Into<Strin
             data.insert(key.clone(), sync_id);
         })
         .add_assertion(move |app, _| {
-            CloudModel::handle(app).read(app, |cloud_model, ctx| {
+            ObjectStoreModel::handle(app).read(app, |object_store_model, ctx| {
                 async_assert!(
-                    cloud_model
+                    object_store_model
                         .active_cloud_objects_in_space(Space::Personal, ctx)
                         .count()
                         > 0,
@@ -83,7 +83,7 @@ pub fn open_notebook(window_key: impl Into<String>, notebook_key: impl Into<Stri
             WindowManager::as_ref(ctx).show_window_and_focus_app(*window_id);
             workspace.open_notebook(
                 &NotebookSource::Existing(*notebook_id),
-                &OpenWarpDriveObjectSettings::default(),
+                &ZapDriveObjectSettings::default(),
                 ctx,
                 true,
             );

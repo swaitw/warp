@@ -1,16 +1,11 @@
 use warp_core::ui::appearance::Appearance;
-use warpui::{platform::WindowStyle, App, SingletonEntity, ViewHandle};
-
-use std::sync::Arc;
+use warpui::{platform::WindowStyle, App, ViewHandle};
 
 use super::WorkflowModal;
 use crate::auth::AuthStateProvider;
 use crate::{
-    cloud_object::model::persistence::CloudModel,
+    cloud_object::model::persistence::ObjectStoreModel,
     editor::PlainTextEditorViewAction as EditorAction,
-    server::server_api::team::MockTeamClient,
-    server::server_api::workspace::MockWorkspaceClient,
-    server::server_api::ServerApiProvider,
     settings_view::keybindings::KeybindingChangedNotifier,
     test_util::settings::initialize_settings_for_tests,
     workflows::workflow::{Argument, Workflow},
@@ -21,32 +16,19 @@ fn initialize_app(app: &mut App) {
     initialize_settings_for_tests(app);
 
     app.add_singleton_model(|_| Appearance::mock());
-    app.add_singleton_model(CloudModel::mock);
-    app.add_singleton_model(|_| ServerApiProvider::new_for_test());
+    app.add_singleton_model(ObjectStoreModel::mock);
     app.add_singleton_model(|_| KeybindingChangedNotifier::mock());
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
 
     #[cfg(feature = "voice_input")]
     app.add_singleton_model(voice_input::VoiceInput::new);
 
-    let team_client_mock = Arc::new(MockTeamClient::new());
-    let workspace_client_mock = Arc::new(MockWorkspaceClient::new());
-    app.add_singleton_model(|ctx| {
-        UserWorkspaces::mock(
-            team_client_mock.clone(),
-            workspace_client_mock.clone(),
-            vec![],
-            ctx,
-        )
-    });
+    app.add_singleton_model(|ctx| UserWorkspaces::mock(vec![], ctx));
 }
 
 fn create_modal(app: &mut App) -> ViewHandle<WorkflowModal> {
     initialize_app(app);
-    let (_, modal_view) = app.add_window(WindowStyle::NotStealFocus, |ctx| {
-        let server_api = ServerApiProvider::as_ref(ctx).get();
-        WorkflowModal::new(server_api.clone(), ctx)
-    });
+    let (_, modal_view) = app.add_window(WindowStyle::NotStealFocus, WorkflowModal::new);
 
     modal_view
 }

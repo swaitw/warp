@@ -5,7 +5,7 @@ use warpui::{Entity, ModelContext, SingletonEntity};
 
 use crate::settings::{AISettings, FontSettings, ThinkingDisplayMode};
 use crate::{
-    auth::auth_state::AuthState,
+    auth::AuthState,
     report_if_error,
     settings::input::InputBoxType,
     settings::{InputSettings, PrivacySettings, ThemeSettings},
@@ -67,7 +67,7 @@ impl SettingsInitializer {
                 if !settings.input_box_type.is_value_explicitly_set()
                     && *settings.input_box_type.value() == InputBoxType::Classic
                 {
-                    log::debug!("Setting default input type to Warp prompt for new user");
+                    log::debug!("Setting default input type to Zap prompt for new user");
                     report_if_error!(settings
                         .input_box_type
                         .set_value(InputBoxType::Universal, ctx));
@@ -176,5 +176,5 @@ impl Entity for SettingsInitializer {
     type Event = ();
 }
 
-/// Mark CloudPreferencesSyncer as global application state.
+/// Mark PreferencesSyncer as global application state.
 impl SingletonEntity for SettingsInitializer {}

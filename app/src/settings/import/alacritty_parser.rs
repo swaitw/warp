@@ -298,13 +298,14 @@ impl AlacrittyTheme {
                 terminal_colors,
                 None,
                 Some(String::from("Imported Alacritty Theme")),
+                None,
             )))
         }
     }
 }
 
 impl AlacrittyColors {
-    /// Returns terminal colors with Warp's default colors substituted in for any
+    /// Returns terminal colors with Zap's default colors substituted in for any
     /// missing terminal colors.
     fn into_ansi_with_default(self, default: AnsiColors) -> Result<AnsiColors, ThemeError> {
         Ok(AnsiColors {

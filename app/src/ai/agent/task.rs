@@ -194,7 +194,7 @@ impl Task {
         }
     }
 
-    /// OpenWarp BYOP 专用:agent 自起 LRC 收到 snapshot 时,在 conversation 里直接
+    /// Zap BYOP 专用:agent 自起 LRC 收到 snapshot 时,在 conversation 里直接
     /// 创建一个 Server-backed subagent task。
     ///
     /// 不能复用 `new_optimistic_cli_agent_subtask`:其产生的 `TaskImpl::Optimistic`
@@ -704,6 +704,24 @@ impl Task {
             should_convert_input_messages,
         )?;
         self.try_get_source_mut()?.messages.extend(messages);
+        Ok(())
+    }
+
+    pub(super) fn append_source_messages(
+        &mut self,
+        messages: Vec<api::Message>,
+    ) -> Result<(), UpdateTaskError> {
+        self.try_get_source_mut()?.messages.extend(messages);
+        Ok(())
+    }
+
+    pub(super) fn remove_source_messages_by_ids(
+        &mut self,
+        message_ids: &std::collections::HashSet<String>,
+    ) -> Result<(), UpdateTaskError> {
+        self.try_get_source_mut()?
+            .messages
+            .retain(|message| !message_ids.contains(&message.id));
         Ok(())
     }
 

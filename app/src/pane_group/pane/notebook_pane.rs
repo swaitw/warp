@@ -7,7 +7,7 @@ use warpui::{AppContext, ModelHandle, SingletonEntity, ViewContext, ViewHandle};
 use crate::{
     app_state::{LeafContents, NotebookPaneSnapshot},
     cloud_object::Space,
-    drive::{items::WarpDriveItemId, CloudObjectTypeAndId, OpenWarpDriveObjectSettings},
+    drive::{items::WarpDriveItemId, ObjectTypeAndId, ZapDriveObjectSettings},
     notebooks::{
         link::{LinkEvent, NotebookLinks},
         manager::{NotebookManager, NotebookSource},
@@ -47,7 +47,7 @@ impl NotebookPane {
     /// Restore a notebook pane given its cloud notebook ID.
     pub fn restore(
         notebook_id: Option<SyncId>,
-        settings: &OpenWarpDriveObjectSettings,
+        settings: &ZapDriveObjectSettings,
         ctx: &mut ViewContext<PaneGroup>,
     ) -> anyhow::Result<Self> {
         let window_id = ctx.window_id();
@@ -79,9 +79,9 @@ impl PaneContent for NotebookPane {
 
     fn snapshot(&self, app: &AppContext) -> LeafContents {
         let notebook_id = self.notebook_view(app).as_ref(app).notebook_id(app);
-        LeafContents::Notebook(NotebookPaneSnapshot::CloudNotebook {
+        LeafContents::Notebook(NotebookPaneSnapshot::NotebookObject {
             notebook_id,
-            settings: OpenWarpDriveObjectSettings::default(),
+            settings: ZapDriveObjectSettings::default(),
         })
     }
 
@@ -183,9 +183,9 @@ pub(super) fn subscribe_to_link_model(
                 session: session.clone(),
             })
         }
-        LinkEvent::OpenWarpDriveLink {
+        LinkEvent::ZapDriveLink {
             open_warp_drive_args,
-        } => ctx.emit(crate::pane_group::Event::OpenWarpDriveLink {
+        } => ctx.emit(crate::pane_group::Event::ZapDriveLink {
             open_warp_drive_args: open_warp_drive_args.clone(),
         }),
         LinkEvent::StartLocalSession { path } => {
@@ -205,7 +205,7 @@ pub(super) fn subscribe_to_link_model(
             target,
             line_col,
         } => {
-            // Emit event to workspace to handle opening in Warp
+            // Emit event to workspace to handle opening in Zap
             ctx.emit(crate::pane_group::Event::OpenFileWithTarget {
                 path: path.clone(),
                 target: target.clone(),
@@ -232,9 +232,9 @@ fn handle_notebook_event(
         }
         NotebookEvent::ViewInWarpDrive(id) => view_in_warp_drive(*id, ctx),
         NotebookEvent::MoveToSpace {
-            cloud_object_type_and_id,
+            object_type_and_id,
             new_space,
-        } => move_to_space(*cloud_object_type_and_id, *new_space, ctx),
+        } => move_to_space(*object_type_and_id, *new_space, ctx),
         NotebookEvent::Pane(pane_event) => group.handle_pane_event(pane_id, pane_event, ctx),
         NotebookEvent::AttachPlanAsContext(ai_document_id) => {
             ctx.emit(crate::pane_group::Event::AttachPlanAsContext {
@@ -266,12 +266,12 @@ fn view_in_warp_drive(id: WarpDriveItemId, ctx: &mut ViewContext<PaneGroup>) {
 }
 
 fn move_to_space(
-    cloud_object_type_and_id: CloudObjectTypeAndId,
+    object_type_and_id: ObjectTypeAndId,
     space: Space,
     ctx: &mut ViewContext<PaneGroup>,
 ) {
     ctx.emit(crate::pane_group::Event::MoveToSpace {
-        cloud_object_type_and_id,
+        object_type_and_id,
         space,
     });
 }

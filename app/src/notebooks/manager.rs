@@ -10,17 +10,17 @@ use warpui::{
 
 use crate::{
     cloud_object::{
-        model::persistence::{CloudModel, CloudModelEvent},
+        model::persistence::{ObjectStoreEvent, ObjectStoreModel},
         Owner,
     },
-    drive::OpenWarpDriveObjectSettings,
+    drive::ZapDriveObjectSettings,
     pane_group::{NotebookPane, PaneContent},
     safe_debug, safe_warn,
     server::ids::SyncId,
     workspace::PaneViewLocator,
 };
 
-use super::{notebook::NotebookView, CloudNotebook};
+use super::{notebook::NotebookView, NotebookObject};
 
 #[cfg(test)]
 #[path = "manager_tests.rs"]
@@ -32,7 +32,7 @@ mod tests;
 /// [pane group](crate::pane_group::PaneGroup) views, as they contain all open notebook panes.
 ///
 /// The overall flow is:
-/// 1. A `Workspace` is asked to open a notebook (from the Warp Drive index, universal search, etc.).
+/// 1. A `Workspace` is asked to open a notebook (from the Zap Drive index, universal search, etc.).
 /// 2. It checks the `NotebookManager` to see if the notebook is already open.
 /// 3. If it is, the existing notebook pane is focused (this may be in another window).
 /// 4. If not, the `Workspace` uses the `NotebookManager` to create a new notebook pane and
@@ -74,8 +74,11 @@ pub enum NotebookSource {
 
 impl NotebookManager {
     /// Create a new [`NotebookManager`] singleton.
-    pub fn new(cached_notebooks: Vec<CloudNotebook>, ctx: &mut ModelContext<Self>) -> Self {
-        ctx.subscribe_to_model(&CloudModel::handle(ctx), Self::handle_cloud_model_event);
+    pub fn new(cached_notebooks: Vec<NotebookObject>, ctx: &mut ModelContext<Self>) -> Self {
+        ctx.subscribe_to_model(
+            &ObjectStoreModel::handle(ctx),
+            Self::handle_object_store_event,
+        );
 
         let mut raw_text_by_hashed_id: HashMap<String, NotebookRawTextStatus> = HashMap::new();
         // Parse all the cached notebook raw text
@@ -96,7 +99,7 @@ impl NotebookManager {
     }
 
     fn spawn_raw_text_parse_for_notebook(
-        notebook: CloudNotebook,
+        notebook: NotebookObject,
         ctx: &mut ModelContext<Self>,
     ) -> SpawnedFutureHandle {
         let hashed_id = notebook.id.uid();
@@ -136,8 +139,12 @@ impl NotebookManager {
         }
     }
 
-    fn handle_cloud_model_event(&mut self, event: &CloudModelEvent, ctx: &mut ModelContext<Self>) {
-        if let CloudModelEvent::ObjectUpdated { type_and_id, .. } = event {
+    fn handle_object_store_event(
+        &mut self,
+        event: &ObjectStoreEvent,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        if let ObjectStoreEvent::ObjectUpdated { type_and_id, .. } = event {
             if let Some(notebook_id) = type_and_id.as_notebook_id() {
                 self.update_raw_text_for_notebook(notebook_id, ctx);
             }
@@ -172,7 +179,7 @@ impl NotebookManager {
     pub fn create_pane(
         &mut self,
         source: &NotebookSource,
-        settings: &OpenWarpDriveObjectSettings,
+        settings: &ZapDriveObjectSettings,
         window_id: WindowId,
         ctx: &mut ModelContext<Self>,
     ) -> NotebookPane {
@@ -180,7 +187,9 @@ impl NotebookManager {
 
         match source {
             NotebookSource::Existing(notebook_id) => {
-                let notebook = CloudModel::as_ref(ctx).get_notebook(notebook_id).cloned();
+                let notebook = ObjectStoreModel::as_ref(ctx)
+                    .get_notebook(notebook_id)
+                    .cloned();
                 if let Some(notebook) = notebook {
                     view.update(ctx, |view, ctx| view.load(notebook, settings, ctx));
                 } else {
@@ -259,7 +268,7 @@ impl NotebookManager {
     /// result to the cache ones the operation has been completed.
     fn update_raw_text_for_notebook(&mut self, notebook_id: SyncId, ctx: &mut ModelContext<Self>) {
         log::debug!("Updating raw text cache for {}", notebook_id.uid());
-        let Some(notebook) = CloudModel::handle(ctx).read(ctx, |model, _| {
+        let Some(notebook) = ObjectStoreModel::handle(ctx).read(ctx, |model, _| {
             Some(model.get_notebook(&notebook_id)?.clone())
         }) else {
             return;

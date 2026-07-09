@@ -5,7 +5,7 @@ use crate::{
         AppState, BranchSnapshot, LeafContents, LeafSnapshot, NotebookPaneSnapshot, PaneFlex,
         PaneNodeSnapshot, SplitDirection, TabSnapshot, TerminalPaneSnapshot, WindowSnapshot,
     },
-    drive::OpenWarpDriveObjectSettings,
+    drive::ZapDriveObjectSettings,
     tab::SelectedTabColor,
 };
 
@@ -35,6 +35,7 @@ fn single_tab_snapshot(root: PaneNodeSnapshot) -> AppState {
             left_panel_width: None,
             right_panel_width: None,
             agent_management_filters: None,
+            theme_override: None,
         }],
         active_window_index: Some(0),
         block_lists: Default::default(),
@@ -59,6 +60,7 @@ fn multi_tab_snapshot(active_tab_index: usize, tabs: Vec<TabSnapshot>) -> AppSta
             left_panel_width: None,
             right_panel_width: None,
             agent_management_filters: None,
+            theme_override: None,
         }],
         active_window_index: Some(0),
         block_lists: Default::default(),
@@ -79,9 +81,9 @@ fn test_config_from_snapshot_flattens_single_pane() {
                 PaneNodeSnapshot::Leaf(LeafSnapshot {
                     is_focused: true,
                     custom_vertical_tabs_title: None,
-                    contents: LeafContents::Notebook(NotebookPaneSnapshot::CloudNotebook {
+                    contents: LeafContents::Notebook(NotebookPaneSnapshot::NotebookObject {
                         notebook_id: None,
-                        settings: OpenWarpDriveObjectSettings::default(),
+                        settings: ZapDriveObjectSettings::default(),
                     }),
                 }),
             ),
@@ -149,9 +151,9 @@ fn test_config_from_snapshot_filters_panes() {
                 PaneNodeSnapshot::Leaf(LeafSnapshot {
                     is_focused: false,
                     custom_vertical_tabs_title: None,
-                    contents: LeafContents::Notebook(NotebookPaneSnapshot::CloudNotebook {
+                    contents: LeafContents::Notebook(NotebookPaneSnapshot::NotebookObject {
                         notebook_id: None,
-                        settings: OpenWarpDriveObjectSettings::default(),
+                        settings: ZapDriveObjectSettings::default(),
                     }),
                 }),
             ),
@@ -213,9 +215,9 @@ fn test_config_from_snapshot_filters_tabs() {
             PaneNodeSnapshot::Leaf(LeafSnapshot {
                 is_focused: true,
                 custom_vertical_tabs_title: None,
-                contents: LeafContents::Notebook(NotebookPaneSnapshot::CloudNotebook {
+                contents: LeafContents::Notebook(NotebookPaneSnapshot::NotebookObject {
                     notebook_id: None,
-                    settings: OpenWarpDriveObjectSettings::default(),
+                    settings: ZapDriveObjectSettings::default(),
                 }),
             }),
         )],
@@ -283,10 +285,12 @@ fn test_config_with_active_tab_index_and_filtered_tabs() {
                         PaneNodeSnapshot::Leaf(LeafSnapshot {
                             is_focused: true,
                             custom_vertical_tabs_title: None,
-                            contents: LeafContents::Notebook(NotebookPaneSnapshot::CloudNotebook {
-                                notebook_id: None,
-                                settings: OpenWarpDriveObjectSettings::default(),
-                            }),
+                            contents: LeafContents::Notebook(
+                                NotebookPaneSnapshot::NotebookObject {
+                                    notebook_id: None,
+                                    settings: ZapDriveObjectSettings::default(),
+                                },
+                            ),
                         }),
                     )],
                 }),
@@ -374,10 +378,12 @@ fn test_config_with_active_tab_being_filtered() {
                         PaneNodeSnapshot::Leaf(LeafSnapshot {
                             is_focused: true,
                             custom_vertical_tabs_title: None,
-                            contents: LeafContents::Notebook(NotebookPaneSnapshot::CloudNotebook {
-                                notebook_id: None,
-                                settings: OpenWarpDriveObjectSettings::default(),
-                            }),
+                            contents: LeafContents::Notebook(
+                                NotebookPaneSnapshot::NotebookObject {
+                                    notebook_id: None,
+                                    settings: ZapDriveObjectSettings::default(),
+                                },
+                            ),
                         }),
                     )],
                 }),

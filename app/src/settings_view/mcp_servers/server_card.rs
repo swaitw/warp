@@ -28,10 +28,10 @@ use warpui::{
 
 use crate::{
     ai::mcp::{
-        templatable::CloudTemplatableMCPServer, MCPServerState, TemplatableMCPServerManager,
+        templatable::TemplatableMCPServerObject, MCPServerState, TemplatableMCPServerManager,
     },
     appearance::Appearance,
-    cloud_object::CloudObject,
+    cloud_object::StoredObject,
     settings_view::mcp_servers::{style, ServerCardItemId},
     ui_components::{
         avatar::{Avatar, AvatarContent, StatusElementTypes},
@@ -467,7 +467,7 @@ impl ServerCardView {
                             right: 6.,
                         }),
                         font_family_id: Some(appearance.ui_font_family()),
-                        font_size: Some(style::TOOL_CHIP_TEXT_SIZE),
+                        font_size: Some(appearance.ui_font_body()),
                         font_color: Some(blended_colors::text_main(
                             appearance.theme(),
                             internal_colors::neutral_4(appearance.theme()),
@@ -550,10 +550,11 @@ impl ServerCardView {
             .sub_text_color(appearance.theme().surface_3())
             .into_solid();
 
+        let chip_font_size = appearance.ui_font_overline();
         let text_element = Text::new(
             chip.text.clone(),
             appearance.ui_font_family(),
-            style::TITLE_CHIP_FONT_SIZE,
+            chip_font_size,
         )
         .with_color(chip_color)
         .finish();
@@ -564,8 +565,8 @@ impl ServerCardView {
                 .with_spacing(2.)
                 .with_child(
                     ConstrainedBox::new(icon.to_warpui_icon(chip_color.into()).finish())
-                        .with_width(style::TITLE_CHIP_FONT_SIZE)
-                        .with_height(style::TITLE_CHIP_FONT_SIZE)
+                        .with_width(chip_font_size)
+                        .with_height(chip_font_size)
                         .finish(),
                 )
                 .with_child(text_element)
@@ -620,9 +621,9 @@ impl ServerCardView {
 
         match self.item_id {
             ServerCardItemId::TemplatableMCP(template_uuid) => {
-                let cloud_server = CloudTemplatableMCPServer::get_by_uuid(&template_uuid, app);
-                if let Some(cloud_server) = cloud_server {
-                    lines.push(format!("Template sync id: {}", cloud_server.sync_id()));
+                let server_object = TemplatableMCPServerObject::get_by_uuid(&template_uuid, app);
+                if let Some(server_object) = server_object {
+                    lines.push(format!("Template sync id: {}", server_object.sync_id()));
                 }
             }
             ServerCardItemId::TemplatableMCPInstallation(installation_uuid) => {
@@ -635,12 +636,13 @@ impl ServerCardView {
                         Some(uuid) => format!("Gallery Id: {uuid}"),
                         None => "Gallery Id: None".to_string(),
                     };
-                    let cloud_server = CloudTemplatableMCPServer::get_by_uuid(&template_uuid, app);
-                    let template_sync_id_text = match cloud_server {
-                        Some(cloud_server) => {
-                            format!("Template sync id: {}", cloud_server.sync_id())
+                    let server_object =
+                        TemplatableMCPServerObject::get_by_uuid(&template_uuid, app);
+                    let template_sync_id_text = match server_object {
+                        Some(server_object) => {
+                            format!("Template sync id: {}", server_object.sync_id())
                         }
-                        None => "Could not find cloud template".to_string(),
+                        None => "Could not find template object".to_string(),
                     };
                     lines.push(format!(
                         "{}",
@@ -669,6 +671,7 @@ impl ServerCardView {
             blended_colors::text_sub(appearance.theme(), appearance.theme().surface_1()),
             HighlightedHyperlink::default(),
         )
+        .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
         .finish()
     }
 
@@ -693,6 +696,7 @@ impl ServerCardView {
                     ),
                     HighlightedHyperlink::default(),
                 )
+                .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
                 .finish(),
             );
         }
@@ -709,6 +713,7 @@ impl ServerCardView {
                     blended_colors::text_sub(appearance.theme(), appearance.theme().surface_1()),
                     HighlightedHyperlink::default(),
                 )
+                .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
                 .finish(),
             );
         }
@@ -725,6 +730,7 @@ impl ServerCardView {
                     appearance.theme().ui_error_color(),
                     HighlightedHyperlink::default(),
                 )
+                .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
                 .finish(),
             );
         }

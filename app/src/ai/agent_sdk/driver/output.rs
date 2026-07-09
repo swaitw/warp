@@ -15,9 +15,8 @@ pub mod text {
             AIAgentActionType, AIAgentInput, AIAgentOutput, AIAgentOutputMessageType, AIAgentTodo,
             ArtifactCreatedData, CallMCPToolResult, FileGlobResult, FileGlobV2Result, GrepResult,
             ReadFilesResult, ReadMCPResourceResult, RequestCommandOutputResult,
-            RequestFileEditsResult, SearchCodebaseResult, SuggestNewConversationResult,
-            SuggestPromptResult, TodoOperation, WebFetchStatus, WebSearchStatus,
-            WriteToLongRunningShellCommandResult,
+            RequestFileEditsResult, SuggestNewConversationResult, SuggestPromptResult,
+            TodoOperation, WebFetchStatus, WebSearchStatus, WriteToLongRunningShellCommandResult,
         },
         AIAgentActionResultType,
     };
@@ -36,7 +35,6 @@ pub mod text {
             | AIAgentInput::InitProjectRules { .. }
             | AIAgentInput::CodeReview { .. }
             | AIAgentInput::FetchReviewComments { .. }
-            | AIAgentInput::CreateEnvironment { .. }
             | AIAgentInput::SummarizeConversation { .. }
             | AIAgentInput::InvokeSkill { .. }
             | AIAgentInput::StartFromAmbientRunPrompt { .. }
@@ -111,19 +109,6 @@ pub mod text {
                     ReadFilesResult::Success { .. } => Ok(()),
                     ReadFilesResult::Error(error) => writeln!(w, "Reading files failed: {error}"),
                     ReadFilesResult::Cancelled => writeln!(w, "{CANCELLED_MESSAGE}"),
-                },
-                AIAgentActionResultType::SearchCodebase(result) => match result {
-                    SearchCodebaseResult::Success { files } => {
-                        writeln!(w, "Codebase search results:")?;
-                        for file in files {
-                            writeln!(w, "- {file}")?;
-                        }
-                        Ok(())
-                    }
-                    SearchCodebaseResult::Failed { message, .. } => {
-                        writeln!(w, "Searching codebase failed: {message}")
-                    }
-                    SearchCodebaseResult::Cancelled => todo!(),
                 },
                 AIAgentActionResultType::Grep(result) => match result {
                     GrepResult::Success { matched_files } => {
@@ -296,14 +281,6 @@ pub mod text {
                         )?;
                         // TODO: Better formatting, need shell info.
                     }
-                    AIAgentActionType::SearchCodebase(request) => {
-                        writeln!(
-                            w,
-                            "Searching {} for {}",
-                            request.codebase_path.as_deref().unwrap_or("codebase"),
-                            request.query
-                        )?;
-                    }
                     AIAgentActionType::RequestFileEdits { file_edits, title } => {
                         write!(w, "Editing files:")?;
                         if let Some(title) = title {
@@ -424,7 +401,7 @@ pub mod text {
                     } => {
                         writeln!(
                             w,
-                            "File artifact uploaded: {filepath} (artifact: {artifact_uid})"
+                            "File artifact recorded: {filepath} (artifact: {artifact_uid})"
                         )?;
                     }
                 },
@@ -461,11 +438,9 @@ pub mod text {
         )
     }
 
-    /// Report the run ID with a link to the Oz dashboard.
+    /// Report the run ID.
     pub fn run_started<W: Write>(run_id: &str, w: &mut W) -> io::Result<()> {
-        let run_url = super::run_url(run_id);
-        writeln!(w, "Run ID: {run_id}")?;
-        writeln!(w, "Open in Oz: {run_url}\n")
+        writeln!(w, "Run ID: {run_id}\n")
     }
 
     /// Report that a shared session has been established.
@@ -503,8 +478,7 @@ pub mod json {
             AIAgentOutputMessageType, AIAgentTodo, ArtifactCreatedData, CallMCPToolResult,
             FileContext, FileGlobResult, FileGlobV2Result, GrepResult, ReadFilesResult,
             ReadMCPResourceResult, RequestCommandOutputResult, RequestFileEditsResult,
-            SearchCodebaseResult, SubagentCall, TodoOperation,
-            WriteToLongRunningShellCommandResult,
+            SubagentCall, TodoOperation, WriteToLongRunningShellCommandResult,
         },
         AIAgentActionResultType,
     };
@@ -583,10 +557,6 @@ pub mod json {
         ReadFiles {
             files: Vec<JsonFile<'a>>,
         },
-        SearchCodebase {
-            query: &'a str,
-            codebase: Option<&'a str>,
-        },
         EditFiles {
             title: Option<&'a str>,
             file_paths: Vec<&'a str>,
@@ -615,7 +585,6 @@ pub mod json {
         RunCommand(JsonRunCommandResult<'a>),
         EditFiles(JsonEditFilesResult<'a>),
         ReadFiles(JsonFileCollectionResult<'a>),
-        SearchCodebase(JsonFileCollectionResult<'a>),
         Grep(JsonFileCollectionResult<'a>),
         FileGlob(JsonFileCollectionResult<'a>),
         ReadMcpResource(JsonReadMcpResourceResult<'a>),
@@ -707,7 +676,6 @@ pub mod json {
                 | AIAgentInput::InitProjectRules { .. }
                 | AIAgentInput::CodeReview { .. }
                 | AIAgentInput::FetchReviewComments { .. }
-                | AIAgentInput::CreateEnvironment { .. }
                 | AIAgentInput::SummarizeConversation { .. }
                 | AIAgentInput::InvokeSkill { .. }
                 | AIAgentInput::StartFromAmbientRunPrompt { .. }
@@ -794,17 +762,6 @@ pub mod json {
                         error: Cow::Borrowed(error.as_str()),
                     }),
                     ReadFilesResult::Cancelled => Some(JsonMessage::ToolCanceled),
-                },
-                AIAgentActionResultType::SearchCodebase(result) => match result {
-                    SearchCodebaseResult::Success { files } => Some(JsonMessage::ToolResult(
-                        JsonToolResult::SearchCodebase(JsonFileCollectionResult {
-                            files: JsonFile::from_file_contexts(files),
-                        }),
-                    )),
-                    SearchCodebaseResult::Failed { message, .. } => Some(JsonMessage::ToolError {
-                        error: Cow::Borrowed(message.as_str()),
-                    }),
-                    SearchCodebaseResult::Cancelled => Some(JsonMessage::ToolCanceled),
                 },
                 AIAgentActionResultType::Grep(result) => match result {
                     GrepResult::Success { matched_files } => {
@@ -933,12 +890,6 @@ pub mod json {
                             })
                             .collect();
                         Some(JsonMessage::ToolCall(JsonToolCall::ReadFiles { files }))
-                    }
-                    AIAgentActionType::SearchCodebase(request) => {
-                        Some(JsonMessage::ToolCall(JsonToolCall::SearchCodebase {
-                            query: request.query.as_str(),
-                            codebase: request.codebase_path.as_deref(),
-                        }))
                     }
                     AIAgentActionType::RequestFileEdits { file_edits, title } => {
                         let file_paths: Vec<&str> =
@@ -1158,10 +1109,9 @@ pub mod json {
 
     /// Write a run_started system event to stdout.
     pub fn run_started<W: Write>(run_id: &str, w: &mut W) -> io::Result<()> {
-        let run_url = super::run_url(run_id);
         let message = JsonMessage::System(JsonSystemEvent::RunStarted {
             run_id,
-            run_url: &run_url,
+            run_url: "",
         });
         write_message(&message, w)
     }
@@ -1176,14 +1126,6 @@ pub mod json {
 use crate::ai::agent::{AIAgentText, AIAgentTextSection};
 use crate::code::editor_management::CodeSource;
 use std::io::{self, BufWriter, Write};
-use warp_core::channel::ChannelState;
-
-/// Constructs the Oz dashboard URL for a given run ID.
-fn run_url(run_id: &str) -> String {
-    let oz_root_url = ChannelState::oz_root_url();
-    format!("{oz_root_url}/runs/{run_id}")
-}
-
 /// Execute a closure with a buffered stdout writer and flush it afterwards.
 pub fn with_stdout_buffered<F>(f: F) -> io::Result<()>
 where
@@ -1241,6 +1183,7 @@ fn format_agent_text<W: Write>(text: &AIAgentText, w: &mut W) -> io::Result<()> 
                     Some(CodeSource::AIAction { .. })
                     | Some(CodeSource::New { .. })
                     | Some(CodeSource::FileTree { .. })
+                    | Some(CodeSource::RemoteFileTree { .. })
                     | Some(CodeSource::Finder { .. })
                     | None => {}
                 }

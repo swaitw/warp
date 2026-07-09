@@ -15,14 +15,18 @@ use url::Url;
 use crate::{
     ai::blocklist::secret_redaction::find_secrets_in_text,
     appearance::Appearance,
-    auth::{auth_state::AuthState, AuthStateProvider},
+    auth::{AuthState, AuthStateProvider},
     cloud_object::{
         breadcrumbs::ContainingObject,
         model::{
-            persistence::{CloudModel, CloudModelEvent},
-            view::CloudViewModel,
+            persistence::{ObjectStoreEvent, ObjectStoreModel},
+            view::ObjectStoreViewModel,
         },
-        CloudObject, CloudObjectEventEntrypoint, ObjectType, Owner, Revision, Space,
+        update_manager::{
+            FetchSingleObjectOption, ObjectOperation, OperationSuccessType, UpdateManager,
+            UpdateManagerEvent,
+        },
+        ObjectType, Owner, Revision, Space, StoredObject, StoredObjectEventEntrypoint,
     },
     drive::{
         cloud_object_styling::warp_drive_icon_color,
@@ -36,7 +40,7 @@ use crate::{
             workflow_arg_selector::{WorkflowArgSelector, WorkflowArgSelectorEvent},
             workflow_arg_type_helpers::{self, ArgumentEditorRowIndex},
         },
-        CloudObjectTypeAndId, DriveObjectType, OpenWarpDriveObjectSettings,
+        DriveObjectType, ObjectTypeAndId, ZapDriveObjectSettings,
     },
     editor::{
         EditorOptions, EditorView, EnterAction, EnterSettings, Event as EditorEvent,
@@ -50,13 +54,8 @@ use crate::{
     },
     send_telemetry_from_ctx,
     server::{
-        cloud_objects::update_manager::{
-            FetchSingleObjectOption, ObjectOperation, OperationSuccessType, UpdateManager,
-            UpdateManagerEvent,
-        },
         ids::{ClientId, ServerId, SyncId},
-        server_api::{ai::AIClient, ServerApiProvider},
-        telemetry::{CloudObjectTelemetryMetadata, TelemetryCloudObjectType, TelemetryEvent},
+        telemetry::{ObjectTelemetryMetadata, TelemetryEvent, TelemetryObjectType},
     },
     settings::{
         app_installation_detection::{UserAppInstallDetectionSettings, UserAppInstallStatus},
@@ -73,7 +72,7 @@ use crate::{
     view_components::{DismissibleToast, ToastType},
     workflows::{
         workflow::{Argument, Workflow},
-        CloudWorkflow,
+        WorkflowObject,
     },
     workspace::ToastStack,
     FeatureFlag,
@@ -103,7 +102,7 @@ use warpui::{
 };
 
 use super::{
-    aliases::WorkflowAliases, command_parser::WorkflowCommandDisplayData, CloudWorkflowModel,
+    aliases::WorkflowAliases, command_parser::WorkflowCommandDisplayData, WorkflowObjectModel,
     WorkflowSource, WorkflowType, WorkflowViewMode,
 };
 
@@ -149,7 +148,6 @@ const CORE_HORIZONATAL_MARGIN: f32 = 24.;
 const CORE_VERTICAL_MARGIN_IN_PANE: f32 = 36.;
 
 const SECTION_SPACING: f32 = 16.;
-const SECTION_FONT_SIZE: f32 = 16.;
 
 const DETAIL_TEXT_MARGIN_LEFT: f32 = 12.;
 const DETAIL_BOX_PADDING_TOP_AND_LEFT: f32 = 12.;
@@ -162,10 +160,9 @@ const COMMAND_MARGIN_TOP: f32 = 20.;
 const VERTICAL_TEXT_INPUT_PADDING: f32 = 5.;
 const HORIZONTAL_TEXT_INPUT_PADDING: f32 = 10.;
 
-const EDITOR_FONT_SIZE: f32 = 14.;
 
+pub(super) const EDITOR_FONT_SIZE: f32 = 14.;
 const BUTTON_PADDING: f32 = 12.;
-const BUTTON_FONT_SIZE: f32 = 14.;
 const BUTTON_BORDER_RADIUS: f32 = 4.;
 const BUTTON_HEIGHT: f32 = 32.;
 
@@ -175,7 +172,7 @@ const AI_ASSIST_LOADING_TEXT: &str = "Loading";
 
 const ALIAS_HELP_TEXT: &str = "Aliases allow you to create short strings to execute workflows. Each alias can have different argument values and environment variables, and aliases are personal to you.";
 
-const RUN_ON_DESKTOP_BUTTON_TEXT: &str = "Run in Warp";
+const RUN_ON_DESKTOP_BUTTON_TEXT: &str = "Run in Zap";
 const RUN_ON_DESKTOP_BUTTON_WIDTH: f32 = 108.;
 
 const UNSAVED_CHANGES_TEXT: &str = "You have unsaved changes.";
@@ -311,7 +308,6 @@ pub struct WorkflowView {
     pub(super) ai_metadata_assist_state: AiAssistState,
     revision_ts: Option<Revision>,
     pub(super) auth_state: Arc<AuthState>,
-    pub(super) ai_client: Arc<dyn AIClient>,
     owner: Option<Owner>,
     initial_folder_id: Option<SyncId>,
 
@@ -354,6 +350,8 @@ impl WorkflowView {
         let header_font_size = appearance.header_font_size();
         let ui_font_family = appearance.ui_font_family();
         let monospace_font_family = appearance.monospace_font_family();
+        let description_font_size = appearance.ui_font_subheading();
+        let steps_font_size = appearance.ui_font_subheading();
 
         let name_editor = Self::create_editor_handle(
             ctx,
@@ -367,7 +365,7 @@ impl WorkflowView {
 
         let description_editor = Self::create_editor_handle(
             ctx,
-            Some(EDITOR_FONT_SIZE),
+            Some(description_font_size),
             Some(ui_font_family),
             Some(crate::t!("workflow-description-input-placeholder")),
             false,
@@ -377,7 +375,7 @@ impl WorkflowView {
 
         let content_editor = Self::create_editor_handle(
             ctx,
-            Some(EDITOR_FONT_SIZE),
+            Some(steps_font_size),
             Some(monospace_font_family),
             Some(COMMAND_PLACEHOLDER_TEXT),
             true,
@@ -387,7 +385,7 @@ impl WorkflowView {
 
         let view_only_content_editor = Self::create_editor_handle(
             ctx,
-            Some(EDITOR_FONT_SIZE),
+            Some(steps_font_size),
             Some(monospace_font_family),
             Some(COMMAND_PLACEHOLDER_TEXT),
             true,
@@ -406,8 +404,6 @@ impl WorkflowView {
         ctx.subscribe_to_view(&content_editor, |me, _, event, ctx| {
             me.handle_content_editor_event(event, ctx);
         });
-
-        let ai_client = ServerApiProvider::as_ref(ctx).get_ai_client();
 
         let enum_creation_dialog = ctx.add_typed_action_view(EnumCreationDialog::new);
         ctx.subscribe_to_view(&enum_creation_dialog, |me, _, event, ctx| {
@@ -459,7 +455,6 @@ impl WorkflowView {
             revision_ts: None,
             command_display_data: WorkflowCommandDisplayData::new_empty(),
             auth_state: AuthStateProvider::as_ref(ctx).get().clone(),
-            ai_client,
             pending_argument_editor_row: None,
             show_enum_creation_dialog: false,
             enum_creation_dialog,
@@ -522,9 +517,10 @@ impl WorkflowView {
     }
 
     fn subscribe_to_model_updates(&self, ctx: &mut ViewContext<Self>) {
-        ctx.subscribe_to_model(&CloudModel::handle(ctx), move |workflow, _, event, ctx| {
-            workflow.handle_cloud_model_event(event, ctx)
-        });
+        ctx.subscribe_to_model(
+            &ObjectStoreModel::handle(ctx),
+            move |workflow, _, event, ctx| workflow.handle_object_store_event(event, ctx),
+        );
 
         let update_manager = UpdateManager::handle(ctx);
         ctx.subscribe_to_model(&update_manager, |me, _, event, ctx| {
@@ -532,19 +528,19 @@ impl WorkflowView {
         });
     }
 
-    fn handle_cloud_model_event(&mut self, event: &CloudModelEvent, ctx: &mut ViewContext<Self>) {
+    fn handle_object_store_event(&mut self, event: &ObjectStoreEvent, ctx: &mut ViewContext<Self>) {
         match event {
-            CloudModelEvent::ObjectUpdated {
-                type_and_id: CloudObjectTypeAndId::Workflow(sync_id),
+            ObjectStoreEvent::ObjectUpdated {
+                type_and_id: ObjectTypeAndId::Workflow(sync_id),
                 source: _,
             } => {
                 if self.workflow_id() == *sync_id && !self.is_editable() {
                     self.reset(ctx);
                 }
             }
-            CloudModelEvent::ObjectTrashed { .. }
-            | CloudModelEvent::ObjectDeleted { .. }
-            | CloudModelEvent::ObjectUntrashed { .. } => ctx.notify(),
+            ObjectStoreEvent::ObjectTrashed { .. }
+            | ObjectStoreEvent::ObjectDeleted { .. }
+            | ObjectStoreEvent::ObjectUntrashed { .. } => ctx.notify(),
             _ => (),
         }
     }
@@ -576,11 +572,11 @@ impl WorkflowView {
                 });
 
                 if let Some(workflow) =
-                    CloudModel::as_ref(ctx).get_workflow_by_uid(&server_id.uid())
+                    ObjectStoreModel::as_ref(ctx).get_workflow_by_uid(&server_id.uid())
                 {
                     self.load(
                         workflow.clone(),
-                        &OpenWarpDriveObjectSettings::default(),
+                        &ZapDriveObjectSettings::default(),
                         self.workflow_view_mode,
                         ctx,
                     );
@@ -600,7 +596,7 @@ impl WorkflowView {
                 {
                     self.load(
                         workflow,
-                        &OpenWarpDriveObjectSettings::default(),
+                        &ZapDriveObjectSettings::default(),
                         self.workflow_view_mode,
                         ctx,
                     );
@@ -614,11 +610,11 @@ impl WorkflowView {
     }
 
     fn reset(&mut self, ctx: &mut ViewContext<Self>) {
-        let cloud_workflow = self.get_cloud_workflow(ctx);
-        if let Some(workflow) = cloud_workflow {
+        let workflow = self.get_cloud_workflow(ctx);
+        if let Some(workflow) = workflow {
             self.load(
                 workflow,
-                &OpenWarpDriveObjectSettings::default(),
+                &ZapDriveObjectSettings::default(),
                 self.workflow_view_mode,
                 ctx,
             );
@@ -628,22 +624,30 @@ impl WorkflowView {
     pub fn wait_for_initial_load_then_load(
         &mut self,
         workflow_id: SyncId,
-        settings: &OpenWarpDriveObjectSettings,
+        settings: &ZapDriveObjectSettings,
         mode: WorkflowViewMode,
         window_id: WindowId,
         ctx: &mut ViewContext<Self>,
     ) {
-        let initial_load_complete = UpdateManager::as_ref(ctx).initial_load_complete();
+        let initial_load_complete =
+            crate::cloud_object::model::persistence::ObjectStoreModel::as_ref(ctx)
+                .initial_load_complete();
         // TODO @ianhodge CLD-2002: it could be nice to have a loading screen here while we wait for the load
         let settings = settings.clone();
         ctx.spawn(initial_load_complete, move |me, _, ctx| {
-            let workflow = CloudModel::as_ref(ctx).get_workflow(&workflow_id).cloned();
-            // If either the focused folder or the workflow can't be found in cloudmodel, fetch the object from the server
+            let workflow = ObjectStoreModel::as_ref(ctx)
+                .get_workflow(&workflow_id)
+                .cloned();
+            // If either the focused folder or the workflow can't be found in ObjectStoreModel, fetch the object from the server
             let fetch_needed = workflow.is_none()
                 || settings
                     .focused_folder_id
                     .map(SyncId::ServerId)
-                    .map(|folder_id| CloudModel::as_ref(ctx).get_folder(&folder_id).is_none())
+                    .map(|folder_id| {
+                        ObjectStoreModel::as_ref(ctx)
+                            .get_folder(&folder_id)
+                            .is_none()
+                    })
                     .unwrap_or(false);
             if fetch_needed {
                 if let Some(server_id) = workflow_id.into_server() {
@@ -656,7 +660,7 @@ impl WorkflowView {
             } else {
                 ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
                     toast_stack.add_ephemeral_toast_by_type(
-                        ToastType::CloudObjectNotFound,
+                        ToastType::StoredObjectNotFound,
                         window_id,
                         ctx,
                     );
@@ -669,7 +673,7 @@ impl WorkflowView {
     fn fetch_and_load_workflow(
         &mut self,
         workflow_id: ServerId,
-        settings: &OpenWarpDriveObjectSettings,
+        settings: &ZapDriveObjectSettings,
         mode: WorkflowViewMode,
         window_id: WindowId,
         ctx: &mut ViewContext<Self>,
@@ -686,7 +690,7 @@ impl WorkflowView {
             });
         let settings = settings.clone();
         ctx.spawn(fetch_cloud_object_rx, move |me, _, ctx| {
-            if let Some(workflow) = CloudModel::as_ref(ctx)
+            if let Some(workflow) = ObjectStoreModel::as_ref(ctx)
                 .get_workflow(&SyncId::ServerId(workflow_id))
                 .cloned()
             {
@@ -694,7 +698,7 @@ impl WorkflowView {
             } else {
                 ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
                     toast_stack.add_ephemeral_toast_by_type(
-                        ToastType::CloudObjectNotFound,
+                        ToastType::StoredObjectNotFound,
                         window_id,
                         ctx,
                     );
@@ -706,8 +710,8 @@ impl WorkflowView {
 
     pub fn load(
         &mut self,
-        workflow: CloudWorkflow,
-        settings: &OpenWarpDriveObjectSettings,
+        workflow: WorkflowObject,
+        settings: &ZapDriveObjectSettings,
         mode: WorkflowViewMode,
         ctx: &mut ViewContext<Self>,
     ) {
@@ -751,7 +755,7 @@ impl WorkflowView {
         if let ContainerConfiguration::Pane(pane_config) = &mut self.container_configuration {
             pane_config.update(ctx, |pane_config, ctx| {
                 pane_config.set_title(workflow_name, ctx);
-                // TODO(openwarp-cloud-removal Phase 5): sharing UI 已退役,
+                // TODO(zap-cloud-removal Phase 5): sharing UI 已退役,
                 // workflow ShareableObject 注入移除;workflow.id 仍为 cloud_object id,
                 // Phase 5 退役 cloud_object 时一并清。
                 let _ = workflow.id;
@@ -839,12 +843,12 @@ impl WorkflowView {
 
         if let Some(focused_folder_id) = settings.focused_folder_id.map(SyncId::ServerId) {
             self.view_in_warp_drive(
-                WarpDriveItemId::Object(CloudObjectTypeAndId::Folder(focused_folder_id)),
+                WarpDriveItemId::Object(ObjectTypeAndId::Folder(focused_folder_id)),
                 ctx,
             );
         }
 
-        // TODO(openwarp-cloud-removal Phase 5): workflow invitee_email 同样无 UI
+        // TODO(zap-cloud-removal Phase 5): workflow invitee_email 同样无 UI
         // 出口,但 settings 由上层传入,彻底退役时清字段。
         let _ = settings;
 
@@ -877,7 +881,7 @@ impl WorkflowView {
     pub fn workflow_link(&self, ctx: &AppContext) -> Option<String> {
         let id = self.workflow_id();
 
-        if let Some(workflow) = CloudModel::as_ref(ctx).get_workflow(&id) {
+        if let Some(workflow) = ObjectStoreModel::as_ref(ctx).get_workflow(&id) {
             return workflow.object_link();
         }
 
@@ -886,13 +890,13 @@ impl WorkflowView {
 
     /// Generic object telemetry metadata for the currently-open object.
     #[cfg_attr(not(target_family = "wasm"), allow(dead_code))]
-    fn telemetry_metadata(&self, ctx: &mut ViewContext<Self>) -> CloudObjectTelemetryMetadata {
-        let space = CloudModel::as_ref(ctx)
+    fn telemetry_metadata(&self, ctx: &mut ViewContext<Self>) -> ObjectTelemetryMetadata {
+        let space = ObjectStoreModel::as_ref(ctx)
             .get_workflow(&self.workflow_id)
             .map(|workflow| workflow.space(ctx));
 
-        CloudObjectTelemetryMetadata {
-            object_type: TelemetryCloudObjectType::Workflow,
+        ObjectTelemetryMetadata {
+            object_type: TelemetryObjectType::Workflow,
             object_uid: self.workflow_id.into_server(),
             space: space.map(Into::into),
             team_uid: match self.owner {
@@ -908,12 +912,12 @@ impl WorkflowView {
 
     /// The current user's access level for this workflow.
     fn access_level(&self, app: &AppContext) -> SharingAccessLevel {
-        CloudViewModel::as_ref(app).access_level(&self.workflow_id.uid(), app)
+        ObjectStoreViewModel::as_ref(app).access_level(&self.workflow_id.uid(), app)
     }
 
     /// Whether or not the current user is allowed to edit this workflow.
     fn editability(&self, app: &AppContext) -> ContentEditability {
-        CloudViewModel::as_ref(app).object_editability(&self.workflow_id.uid(), app)
+        ObjectStoreViewModel::as_ref(app).object_editability(&self.workflow_id.uid(), app)
     }
 
     pub fn pane_configuration(&self) -> &ModelHandle<PaneConfiguration> {
@@ -1269,7 +1273,7 @@ impl WorkflowView {
         let mut sent_requests: HashSet<SyncId> = HashSet::new();
         let owner = match self.workflow_view_mode {
             WorkflowViewMode::View => None,
-            WorkflowViewMode::Edit => CloudModel::as_ref(ctx)
+            WorkflowViewMode::Edit => ObjectStoreModel::as_ref(ctx)
                 .get_workflow(&self.workflow_id)
                 .map(|workflow| workflow.permissions().owner),
             WorkflowViewMode::Create => self.owner,
@@ -1405,7 +1409,7 @@ impl WorkflowView {
     fn try_set_view_mode(&mut self, ctx: &mut ViewContext<Self>) {
         self.workflow_view_mode =
             WorkflowViewMode::supported_view_mode(Some(self.workflow_id), ctx);
-        // always reset with the cloudmodel version whether or not we successfully
+        // always reset with the ObjectStoreModel version whether or not we successfully
         // transition to the view mode. This reset doesn't always set the correct revision_ts
         // we rely on the load called when we handle the update_manager's change event.
         self.reset(ctx);
@@ -1455,7 +1459,7 @@ impl WorkflowView {
             WorkflowViewMode::Create => WorkflowViewMode::Create,
         };
 
-        // Always reset the view with cloud model when we transition to the view or edit mode.
+        // Always reset the view with object store when we transition to the view or edit mode.
         // This reset is necessary when transitioning to edit mode so that we can reset the `revision_ts`.
         // Without this, any updates after a first update will get rejected, due to a perceived conflict.
         if matches!(self.workflow_view_mode, WorkflowViewMode::View)
@@ -1476,14 +1480,14 @@ impl WorkflowView {
     fn copy_to_command_line(&mut self, ctx: &mut ViewContext<Self>) {
         // If we are in a context where we can run workflows AND the content is dirty (e.g. not
         // saved). Copy the current workflow to the command line buffer.
-        // Otherwise use the workflow that exists in cloud model cache.
+        // Otherwise use the workflow that exists in object store cache.
         // This is because we want to use the version of the edited command that a user has in the
         // buffer if they click to execute a command from the workflow in pane.
         if self.is_workflow_dirty(ctx) {
             let new_workflow = self.create_workflow_object_from_input(ctx);
-            if let Some(cloud_workflow) = self.get_cloud_workflow(ctx) {
-                let mut cloned_cloud_workflow = cloud_workflow.clone();
-                cloned_cloud_workflow.set_model(CloudWorkflowModel::new(new_workflow));
+            if let Some(workflow) = self.get_cloud_workflow(ctx) {
+                let mut cloned_cloud_workflow = workflow.clone();
+                cloned_cloud_workflow.set_model(WorkflowObjectModel::new(new_workflow));
                 if let Some(owner) = self.owner {
                     ctx.emit(WorkflowViewEvent::RunWorkflow {
                         workflow: Arc::new(WorkflowType::Cloud(Box::new(cloned_cloud_workflow))),
@@ -1561,7 +1565,7 @@ impl WorkflowView {
     }
 
     /// Save the workflow and associated state. This makes a best-effort attempt to not
-    /// unnecessarily modify the backing Warp Drive object.
+    /// unnecessarily modify the backing Zap Drive object.
     fn save(&mut self, ctx: &mut ViewContext<Self>) {
         if FeatureFlag::WorkflowAliases.is_enabled() && self.are_aliases_dirty(ctx) {
             self.save_aliases(ctx);
@@ -1629,7 +1633,7 @@ impl WorkflowView {
                             space,
                             self.initial_folder_id,
                             client_id,
-                            CloudObjectEventEntrypoint::Unknown,
+                            StoredObjectEventEntrypoint::Unknown,
                             true,
                             ctx,
                         );
@@ -1814,7 +1818,7 @@ impl WorkflowView {
                 .map(BreadcrumbState::new)
                 .collect();
         } else {
-            log::warn!("Workflow not found from cloudmodel, could not update breadcrumb");
+            log::warn!("Workflow not found from ObjectStoreModel, could not update breadcrumb");
         }
     }
 
@@ -1958,6 +1962,19 @@ impl WorkflowView {
                         .build()
                         .finish()
                 });
+            } else {
+                // openWarp UX: 与 notebook details_bar 一致,给 workflow 编辑
+                // 切换按钮加 tooltip,避免用户不知道这个铅笔能点、
+                // 点了会发生什么。Tooltip 表达「点击后会发生的动作」。
+                let tooltip_text = match self.workflow_view_mode {
+                    WorkflowViewMode::View => crate::t!("common-tooltip-enter-edit-mode"),
+                    WorkflowViewMode::Edit => crate::t!("common-tooltip-exit-edit-mode"),
+                    _ => crate::t!("common-tooltip-enter-edit-mode"),
+                };
+                let ui_builder = appearance.ui_builder().clone();
+                edit_button = edit_button.with_tooltip(move || {
+                    ui_builder.tool_tip(tooltip_text.clone()).build().finish()
+                });
             }
             let edit_button = edit_button.build();
 
@@ -1989,7 +2006,7 @@ impl WorkflowView {
 
         UpdateManager::handle(ctx).update(ctx, |update_manager, ctx| {
             update_manager.duplicate_object(
-                &CloudObjectTypeAndId::from_id_and_type(self.workflow_id, ObjectType::Workflow),
+                &ObjectTypeAndId::from_id_and_type(self.workflow_id, ObjectType::Workflow),
                 ctx,
             );
         });
@@ -2005,7 +2022,7 @@ impl WorkflowView {
 
         UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
             update_manager.trash_object(
-                CloudObjectTypeAndId::from_id_and_type(self.workflow_id, ObjectType::Workflow),
+                ObjectTypeAndId::from_id_and_type(self.workflow_id, ObjectType::Workflow),
                 ctx,
             );
         });
@@ -2018,18 +2035,20 @@ impl WorkflowView {
 
         UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
             update_manager.untrash_object(
-                CloudObjectTypeAndId::from_id_and_type(self.workflow_id, ObjectType::Workflow),
+                ObjectTypeAndId::from_id_and_type(self.workflow_id, ObjectType::Workflow),
                 ctx,
             );
         });
     }
 
-    fn get_cloud_workflow(&mut self, ctx: &mut ViewContext<Self>) -> Option<CloudWorkflow> {
-        if let Some(workflow) = CloudModel::as_ref(ctx).get_workflow(&self.workflow_id.clone()) {
+    fn get_cloud_workflow(&mut self, ctx: &mut ViewContext<Self>) -> Option<WorkflowObject> {
+        if let Some(workflow) =
+            ObjectStoreModel::as_ref(ctx).get_workflow(&self.workflow_id.clone())
+        {
             return Some(workflow.clone());
         } else {
             log::warn!(
-                "Workflow for id: {} not found in cloudmodel",
+                "Workflow for id: {} not found in ObjectStoreModel",
                 self.workflow_id
             );
         }
@@ -2179,7 +2198,7 @@ impl WorkflowView {
                 .ui_builder()
                 .span(text.into())
                 .with_style(UiComponentStyles {
-                    font_size: Some(SECTION_FONT_SIZE),
+                    font_size: Some(appearance.ui_font_heading_3()),
                     font_weight: Some(Weight::Bold),
                     ..Default::default()
                 })
@@ -2263,7 +2282,7 @@ impl WorkflowView {
                 self.ui_state_handles.keep_editing_state.clone(),
             )
             .with_style(UiComponentStyles {
-                font_size: Some(BUTTON_FONT_SIZE),
+                font_size: Some(appearance.ui_font_subheading()),
                 font_weight: Some(Weight::Bold),
                 padding: Some(Coords::uniform(BUTTON_PADDING)),
                 ..Default::default()
@@ -2283,7 +2302,7 @@ impl WorkflowView {
                 self.ui_state_handles.discard_changes_state.clone(),
             )
             .with_style(UiComponentStyles {
-                font_size: Some(BUTTON_FONT_SIZE),
+                font_size: Some(appearance.ui_font_subheading()),
                 font_weight: Some(Weight::Bold),
                 padding: Some(Coords::uniform(BUTTON_PADDING)),
                 ..Default::default()
@@ -2322,7 +2341,7 @@ impl WorkflowView {
         appearance: &Appearance,
     ) -> Button {
         let default_button_styles = UiComponentStyles {
-            font_size: Some(BUTTON_FONT_SIZE),
+            font_size: Some(appearance.ui_font_subheading()),
             border_radius: Some(CornerRadius::with_all(Radius::Pixels(BUTTON_BORDER_RADIUS))),
             ..Default::default()
         };
@@ -2446,7 +2465,7 @@ impl WorkflowView {
                     .finish();
 
                 let button_with_tool_tip = appearance.ui_builder().tool_tip_on_element(
-                    "Generate a title, descriptions, or parameters with Warp AI".to_string(),
+                    "Generate a title, descriptions, or parameters with Zap AI".to_string(),
                     self.ui_state_handles.ai_assist_tool_tip.clone(),
                     rendered_button,
                     ParentAnchor::TopMiddle,
@@ -2744,13 +2763,13 @@ impl WorkflowView {
     }
 
     pub(super) fn render_trash_banner(&self, app: &AppContext) -> Option<Box<dyn Element>> {
-        let cloud_model = CloudModel::as_ref(app);
+        let object_store_model = ObjectStoreModel::as_ref(app);
         let deleted = if matches!(self.workflow_view_mode, WorkflowViewMode::Create) {
             return None;
         } else {
-            match cloud_model.get_workflow(&self.workflow_id) {
+            match object_store_model.get_workflow(&self.workflow_id) {
                 Some(notebook) => {
-                    if notebook.is_trashed(cloud_model) {
+                    if notebook.is_trashed(object_store_model) {
                         false
                     } else {
                         return None;
@@ -2784,7 +2803,7 @@ impl WorkflowView {
                             .ui_builder()
                             .span(text)
                             .with_style(UiComponentStyles {
-                                font_size: Some(appearance.ui_font_size() + 2.),
+                                font_size: Some(appearance.ui_font_subheading()),
                                 ..Default::default()
                             })
                             .build()
@@ -3095,7 +3114,7 @@ impl TypedActionView for WorkflowView {
             #[cfg(target_family = "wasm")]
             WorkflowAction::OpenLinkOnDesktop(url) => {
                 send_telemetry_from_ctx!(
-                    TelemetryEvent::WebCloudObjectOpenedOnDesktop {
+                    TelemetryEvent::WebObjectOpenedOnDesktop {
                         object_metadata: self.telemetry_metadata(ctx)
                     },
                     ctx
@@ -3152,7 +3171,7 @@ impl BackingView for WorkflowView {
             }
         }
 
-        let space = CloudViewModel::as_ref(ctx).object_space(&self.workflow_id.uid(), ctx);
+        let space = ObjectStoreViewModel::as_ref(ctx).object_space(&self.workflow_id.uid(), ctx);
 
         // Add "Duplicate" to menu
         if space != Some(Space::Shared) {

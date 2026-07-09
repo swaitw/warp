@@ -7,12 +7,14 @@
 use thiserror::Error;
 use zeroize::Zeroizing;
 
-const SERVICE: &str = "openwarp.ssh";
+const SERVICE: &str = "zap.ssh";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SecretKind {
     Password,
     Passphrase,
+    RootPassword,
+    OneKeyPassword,
 }
 
 impl SecretKind {
@@ -20,6 +22,8 @@ impl SecretKind {
         match self {
             SecretKind::Password => "password",
             SecretKind::Passphrase => "passphrase",
+            SecretKind::RootPassword => "root_password",
+            SecretKind::OneKeyPassword => "onekey_password",
         }
     }
 }
@@ -173,6 +177,9 @@ mod tests {
         let store = InMemorySecretStore::default();
         store.set("n", SecretKind::Password, "pw").unwrap();
         store.set("n", SecretKind::Passphrase, "pp").unwrap();
+        store
+            .set("n", SecretKind::OneKeyPassword, "onekey-pw")
+            .unwrap();
         assert_eq!(
             &*store.get("n", SecretKind::Password).unwrap().unwrap(),
             "pw"
@@ -180,6 +187,10 @@ mod tests {
         assert_eq!(
             &*store.get("n", SecretKind::Passphrase).unwrap().unwrap(),
             "pp"
+        );
+        assert_eq!(
+            &*store.get("n", SecretKind::OneKeyPassword).unwrap().unwrap(),
+            "onekey-pw"
         );
     }
 

@@ -67,14 +67,9 @@ use crate::{
 use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::{color::internal_colors, Fill};
 use warp_core::HostId;
-use warpui::ui_components::components::UiComponent;
 
 mod editing;
 mod render;
-
-const REMOTE_TEXT: &str = "The Project Explorer requires access to your local workspace, which isn’t supported in remote sessions.";
-const DISABLED_TEXT: &str = "The Project Explorer requires access to your local workspace. Open a new session or navigate to an active session to view.";
-const WSL_TEXT: &str = "The Project Explorer doesn't currently work in WSL.";
 
 /// Stable identifier for an item in the file tree.
 /// Includes both the root directory and the index within that root's flattened list.
@@ -178,7 +173,6 @@ pub fn init(app: &mut AppContext) {
 }
 
 // Constants matching the Drive panel styling
-const ITEM_FONT_SIZE: f32 = 14.;
 const FOLDER_INDENT: f32 = 16.; // Indentation per folder level
 const ITEM_PADDING: f32 = 4.;
 
@@ -658,7 +652,7 @@ impl FileTreeView {
                     soft_wrap: false,
                     single_line: true,
                     text: TextOptions {
-                        font_size_override: Some(ITEM_FONT_SIZE),
+                        font_size_override: Some(appearance.ui_font_subheading()),
                         font_family_override: Some(appearance.ui_font_family()),
                         ..Default::default()
                     },
@@ -1848,7 +1842,7 @@ impl FileTreeView {
                         Text::new_inline(
                             render_state.display_name,
                             appearance.ui_font_family(),
-                            ITEM_FONT_SIZE,
+                            appearance.ui_font_subheading(),
                         )
                         .with_color(text_color)
                         .with_style(text_style)
@@ -1904,7 +1898,7 @@ impl FileTreeView {
         let text = Text::new(
             render_state.display_name,
             appearance.ui_font_family(),
-            ITEM_FONT_SIZE,
+            appearance.ui_font_subheading(),
         )
         .with_color(text_color)
         .finish();
@@ -1935,7 +1929,6 @@ impl FileTreeView {
         let is_selected = self.selected_item.as_ref() == Some(id);
         let is_expanded = self.is_item_expanded(&id.root, item);
         let render_state = item.to_render_state(is_expanded, appearance);
-        let is_remote_file = root_dir.is_remote() && matches!(item, FileTreeItem::File { .. });
 
         let item_display_name = render_state.display_name.clone();
         let item_position_id = format!("file_tree_item:{item_display_name}");
@@ -1954,34 +1947,15 @@ impl FileTreeView {
         let id_for_context = id.clone();
         let id_for_drop = id.clone();
         let id_for_drag = id.clone();
-        let ui_builder = appearance.ui_builder();
         let hoverable = Hoverable::new(render_state.mouse_state.clone(), move |mouse_state| {
             let item_highlight_state = ItemHighlightState::new(is_selected, mouse_state);
-            let element = Self::render_item_with_hover(
+            // 远端文件已支持通过 buffer-sync 协议打开,不再显示「无法打开」提示。
+            Self::render_item_with_hover(
                 render_state,
                 appearance,
                 item_highlight_state,
                 editor_view,
-            );
-
-            if is_remote_file && mouse_state.is_hovered() {
-                let tooltip = ui_builder
-                    .tool_tip(crate::t!("code-open-file-unavailable-remote-tooltip"))
-                    .build()
-                    .finish();
-                let offset = OffsetPositioning::offset_from_parent(
-                    Vector2F::new(0., 4.),
-                    ParentOffsetBounds::WindowByPosition,
-                    ParentAnchor::BottomLeft,
-                    ChildAnchor::TopLeft,
-                );
-                Stack::new()
-                    .with_child(element)
-                    .with_positioned_overlay_child(tooltip, offset)
-                    .finish()
-            } else {
-                element
-            }
+            )
         })
         .on_click(
             move |event_ctx: &mut EventContext, _app_ctx: &AppContext, _position| {
@@ -2004,12 +1978,8 @@ impl FileTreeView {
                 });
             },
         )
-        // Remote files can't be opened in the editor, so use the default cursor.
-        .with_cursor(if is_remote_file {
-            Cursor::Arrow
-        } else {
-            Cursor::PointingHand
-        })
+        // 本地和远端文件都可点击打开,统一用手型光标。
+        .with_cursor(Cursor::PointingHand)
         .finish();
 
         let draggable = Draggable::new(draggable_state, hoverable)
@@ -2230,10 +2200,28 @@ impl FileTreeView {
 
         match item {
             FileTreeItem::File { metadata, .. } => {
-                // Remote file trees don't support opening files in the editor.
                 if !is_remote {
                     let path = metadata.path.to_local_path_lossy();
                     self.open_file(&path, None, ctx);
+                } else {
+                    // 远端文件:图片走图片查看器,其余走 buffer-sync 协议打开。
+                    #[cfg(feature = "local_tty")]
+                    if let Some(host_id) = root_dir.remote_host_id.clone() {
+                        let remote_path = crate::code::buffer_location::RemotePath::new(
+                            host_id,
+                            (*metadata.path).clone(),
+                        );
+                        // `is_supported_image_file` 接受 `impl AsRef<Path>`,而
+                        // `metadata.path` 是 `StandardizedPath`(无 `AsRef<Path>`)——
+                        // 转成本地 PathBuf 仅为取扩展名,远端语义无关。
+                        if crate::util::openable_file_type::is_supported_image_file(
+                            metadata.path.to_local_path_lossy(),
+                        ) {
+                            ctx.emit(FileTreeEvent::OpenRemoteImage { remote_path });
+                        } else {
+                            ctx.emit(FileTreeEvent::OpenRemoteFile { remote_path });
+                        }
+                    }
                 }
             }
             FileTreeItem::DirectoryHeader { directory, .. } => {
@@ -2696,9 +2684,9 @@ impl FileTreeView {
             )
             .with_child(
                 Text::new(
-                    "Project explorer unavailable",
+                    crate::t!("project-explorer-unavailable-title"),
                     appearance.ui_font_family(),
-                    appearance.ui_font_size() + 2.,
+                    appearance.ui_font_subheading(),
                 )
                 .with_style(Properties::default().weight(Weight::Semibold))
                 .with_color(theme.sub_text_color(theme.background()).into())
@@ -2714,7 +2702,7 @@ impl FileTreeView {
                                 FormattedTextElement::from_str(
                                     text,
                                     appearance.ui_font_family(),
-                                    appearance.ui_font_size() + 2.,
+                                    appearance.ui_font_subheading(),
                                 )
                                 .with_alignment(TextAlignment::Center)
                                 .with_color(theme.disabled_text_color(theme.background()).into())
@@ -2870,6 +2858,16 @@ pub enum FileTreeEvent {
     CDToDirectory { path: PathBuf },
     #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     OpenDirectoryInNewTab { path: PathBuf },
+    /// 在远端文件树里点击一个文件时发出,请求以远端 buffer 方式打开它。
+    #[cfg_attr(not(feature = "local_tty"), allow(dead_code))]
+    OpenRemoteFile {
+        remote_path: crate::code::buffer_location::RemotePath,
+    },
+    /// 在远端文件树里点击一个图片文件时发出,请求以远端图片查看器打开它。
+    #[cfg_attr(not(feature = "local_tty"), allow(dead_code))]
+    OpenRemoteImage {
+        remote_path: crate::code::buffer_location::RemotePath,
+    },
 }
 
 impl Entity for FileTreeView {
@@ -2883,13 +2881,19 @@ impl View for FileTreeView {
 
     #[cfg(not(feature = "local_fs"))]
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
-        self.render_error_state(REMOTE_TEXT.to_string(), app)
+        self.render_error_state(
+            crate::t!("project-explorer-unavailable-remote-description"),
+            app,
+        )
     }
 
     #[cfg(feature = "local_fs")]
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         if matches!(self.enablement, CodingPanelEnablementState::Disabled) {
-            return self.render_error_state(DISABLED_TEXT.to_string(), app);
+            return self.render_error_state(
+                crate::t!("project-explorer-unavailable-disabled-description"),
+                app,
+            );
         }
 
         if matches!(
@@ -2910,7 +2914,10 @@ impl View for FileTreeView {
                 return if has_remote_server {
                     self.render_loading_state(app)
                 } else {
-                    self.render_error_state(REMOTE_TEXT.to_string(), app)
+                    self.render_error_state(
+                        crate::t!("project-explorer-unavailable-remote-description"),
+                        app,
+                    )
                 };
             }
 
@@ -2918,7 +2925,10 @@ impl View for FileTreeView {
                 self.enablement,
                 CodingPanelEnablementState::UnsupportedSession
             ) {
-                return self.render_error_state(WSL_TEXT.to_string(), app);
+                return self.render_error_state(
+                    crate::t!("project-explorer-unavailable-wsl-description"),
+                    app,
+                );
             }
 
             return self.render_loading_state(app);

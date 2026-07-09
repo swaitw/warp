@@ -14,7 +14,7 @@
 //! ## warp 现状
 //!
 //! warp 的 inline_action/ 目录每个 view(web_search.rs / web_fetch.rs /
-//! search_codebase.rs / requested_command.rs / requested_action.rs / ...)各
+//! requested_command.rs / requested_action.rs / ...)各
 //! 自完整渲染卡片(header + body + footer + permission ring + 状态切换),
 //! 重复样板 ~150 行起。这是历史包袱,**全量重构需要一次性改 12+ 个 view**,
 //! 风险大、阻力大。
@@ -140,7 +140,7 @@ pub fn render_inline_tool_card(spec: ToolCardSpec, app: &AppContext) -> Box<dyn 
                 spinner_handle.clone(),
             ))
         }
-        _ => spec.icon.clone().finish(),
+        _ => spec.icon.finish(),
     };
     let icon_box = ConstrainedBox::new(icon_element)
         .with_width(icon_size(app))

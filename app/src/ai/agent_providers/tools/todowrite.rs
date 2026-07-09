@@ -18,7 +18,7 @@
 //! `update_todo_list_from_todo_op` 会把第二条命中的项从 pending 移到 completed
 //! (`mark_todos_complete` 在 pending 里 lookup id),最终 `AIAgentTodoList` 状态:
 //! `completed_items = [completed]`、`pending_items = [pending + in_progress]`。
-//! Warp UI `in_progress_item()` 拿 `pending_items.first()`,所以 in_progress 的
+//! Zap UI `in_progress_item()` 拿 `pending_items.first()`,所以 in_progress 的
 //! todo 应该是 `todos` 数组里第一个 `status != completed/cancelled` 的项。
 //!
 //! 然后再合成一对 `Message::ToolCall`(carrier,tool=None) + `Message::ToolCallResult`
@@ -47,7 +47,7 @@ pub struct TodoArg {
     /// 解析时按未识别值兜底为 `pending`。
     #[serde(default)]
     pub status: String,
-    /// opencode 协议带 priority,Warp 数据模型不区分,这里收下但不用,
+    /// opencode 协议带 priority,Zap 数据模型不区分,这里收下但不用,
     /// 保留是为了让模型按 opencode 习惯发参数不报错。
     #[serde(default, rename = "priority")]
     pub _priority: Option<String>,
@@ -105,6 +105,30 @@ pub static TODOWRITE: OpenAiTool = OpenAiTool {
     from_args,
     result_to_json,
 };
+
+/// 合成给上游模型看的 todowrite tool_result。
+///
+/// `todowrite` 是本地拦截工具,不会产生 `AIAgentAction`,所以必须带
+/// `_byop_intercepted` sentinel。controller 会用这个标记触发 auto-resume,
+/// 让模型在下一轮收到 tool_result 后继续 loop。
+pub fn success_result_to_json(message: &'static str) -> Value {
+    json!({
+        "_byop_intercepted": true,
+        "status": "ok",
+        "message": message,
+    })
+}
+
+pub fn invalid_arguments_result_to_json(detail: String, received_args: &str) -> Value {
+    json!({
+        "_byop_intercepted": true,
+        "error": "invalid_arguments",
+        "detail": detail,
+        "tool": TOOL_NAME,
+        "received_args": received_args,
+        "hint": "Expected { todos: [{ content: string, status: string }] }.",
+    })
+}
 
 /// 根据 content 计算稳定 id。模型用同样 content 第二次发 todo 时拿到同一个 id,
 /// 这样 `mark_todos_complete(todo_ids)` 才能在 pending 里命中 → 把它移到 completed。
@@ -188,5 +212,26 @@ fn make_update_todos_message(
         )),
         request_id: request_id.to_owned(),
         timestamp: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intercepted_result_payloads_include_auto_resume_sentinel() {
+        let ok = success_result_to_json("todo list updated");
+        assert_eq!(ok["_byop_intercepted"], true);
+        assert_eq!(ok["status"], "ok");
+        let ok_string = serde_json::to_string(&ok).unwrap();
+        assert!(ok_string.contains(r#""_byop_intercepted":true"#));
+
+        let err = invalid_arguments_result_to_json("bad args".to_owned(), "{}");
+        assert_eq!(err["_byop_intercepted"], true);
+        assert_eq!(err["error"], "invalid_arguments");
+        assert_eq!(err["tool"], TOOL_NAME);
+        let err_string = serde_json::to_string(&err).unwrap();
+        assert!(err_string.contains(r#""_byop_intercepted":true"#));
     }
 }

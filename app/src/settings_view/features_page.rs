@@ -5,7 +5,6 @@ use crate::terminal::input::OPEN_COMPLETIONS_KEYBINDING_NAME;
 use crate::terminal::session_settings::WorkingDirectoryConfig;
 
 use lazy_static::lazy_static;
-use warp_core::context_flag::ContextFlag;
 use warpui::platform::GraphicsBackend;
 use warpui::rendering::GPUPowerPreference;
 use warpui::{elements::DispatchEventResult, platform::Cursor};
@@ -25,7 +24,7 @@ use super::settings_page::{
 };
 use super::settings_page::{
     render_body_item, render_dropdown_item, AdditionalInfo, SettingsPageMeta,
-    SettingsPageViewHandle, ToggleState, CONTENT_FONT_SIZE, HEADER_PADDING,
+    SettingsPageViewHandle, ToggleState, HEADER_PADDING,
 };
 use super::{features, SettingsAction};
 use super::{flags, DisplayCount};
@@ -44,16 +43,16 @@ use crate::settings::{
 };
 use crate::settings::{
     AliasExpansionEnabled, AliasExpansionSettings, AppEditorSettings, AtContextMenuInTerminalMode,
-    AutocompleteSymbols, AutosuggestionKeybindingHint, CloudPreferencesSettings, CodeSettings,
-    CommandCorrections, CompletionsOpenWhileTyping, CopyOnSelect, CtrlTabBehavior,
-    DefaultSessionMode, EnableSlashCommandsInTerminal, EnableSshWrapper, ErrorUnderliningEnabled,
-    ExtraMetaKeys, GPUSettings, GlobalHotkeyMode, InputSettings, InputSettingsChangedEvent,
-    LinuxSelectionClipboard, MiddleClickPasteEnabled, MouseScrollMultiplier,
-    OutlineCodebaseSymbolsForAtContextMenu, PreferLowPowerGPU, PreferredGraphicsBackend,
-    QuakeModeSettings, ScrollSettings, SelectionSettings, ShowAutosuggestionIgnoreButton,
-    ShowTerminalInputMessageBar, SshSettings, SyntaxHighlighting, TabBehavior, VimModeEnabled,
-    VimStatusBar, VimUnnamedSystemClipboard, DEFAULT_QUAKE_MODE_SIZE_PERCENTAGES,
-    QUAKE_WINDOW_AUTOHIDE_SUPPORTED,
+    AutocompleteSymbols, AutosuggestionKeybindingHint, CodeSettings, CommandCorrections,
+    CompletionsOpenWhileTyping, CopyOnSelect, CtrlTabBehavior, DefaultSessionMode,
+    EnableSshAutoDiscovery, EnableSlashCommandsInTerminal, EnableSshWrapper,
+    ErrorUnderliningEnabled, ExtraMetaKeys,
+    GPUSettings, GlobalHotkeyMode, InputSettings, InputSettingsChangedEvent,
+    LinuxSelectionClipboard, MiddleClickPasteEnabled, MouseScrollMultiplier, PreferLowPowerGPU,
+    PreferencesSettings, PreferredGraphicsBackend, QuakeModeSettings, ScrollSettings,
+    SelectionSettings, ShowAutosuggestionIgnoreButton, ShowTerminalInputMessageBar, SshSettings,
+    SyntaxHighlighting, TabBehavior, VimModeEnabled, VimStatusBar, VimUnnamedSystemClipboard,
+    DEFAULT_QUAKE_MODE_SIZE_PERCENTAGES, QUAKE_WINDOW_AUTOHIDE_SUPPORTED,
 };
 use crate::terminal::alt_screen_reporting::{
     AltScreenReporting, FocusReportingEnabled, MouseReportingEnabled, ScrollReportingEnabled,
@@ -69,7 +68,7 @@ use crate::terminal::keys_settings::{
 use crate::terminal::session_settings::StartupShellOverride;
 use crate::terminal::session_settings::{
     Notifications, NotificationsMode, NotificationsSettings, SessionSettings,
-    SessionSettingsChangedEvent, ShouldConfirmCloseSession,
+    SessionSettingsChangedEvent,
 };
 use crate::terminal::settings::{
     MaximumGridSize, ShowTerminalZeroStateBlock, TerminalSettings, UseAudibleBell,
@@ -373,6 +372,15 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
     }
 
     toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        &crate::t!("toggle-suffix-ssh-auto-discovery"),
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleSshAutoDiscovery,
+        )),
+        context,
+        flags::SSH_AUTO_DISCOVERY_CONTEXT_FLAG,
+    ));
+
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
         &crate::t!("toggle-suffix-link-tooltip"),
         builder(SettingsAction::FeaturesPageToggle(
             FeaturesPageAction::ToggleLinkTooltip,
@@ -635,6 +643,7 @@ pub enum FeaturesPageAction {
     ToggleOpenLinksInDesktopApp,
     #[deprecated]
     ToggleSshWrapper,
+    ToggleSshAutoDiscovery,
     ToggleSnackbar,
     ToggleLinkTooltip,
     ToggleCompletionsOpenWhileTyping,
@@ -695,14 +704,13 @@ pub enum FeaturesPageAction {
     SetDefaultTabConfig(String),
     SearchForKeybinding(String),
     ToggleAutosuggestions,
-    ToggleConfirmCloseSession,
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     ToggleForceX11,
     ToggleAutosuggestionKeybindingHint,
     ToggleShowAutosuggestionIgnoreButton,
     ToggleAtContextMenuInTerminalMode,
     ToggleSlashCommandsInTerminalMode,
-    ToggleOutlineCodebaseSymbolsForAtContextMenu,
+    // Zap:`ToggleOutlineCodebaseSymbolsForAtContextMenu` 随 outline / RAG 下线删除。
     ToggleAutoOpenCodeReviewPane,
     ToggleShowTerminalInputMessageLine,
     ToggleAgentInAppNotifications,
@@ -725,7 +733,7 @@ lazy_static! {
 const NOTIFICATION_CHECKBOX_MARGIN_RIGHT: f32 = 5.;
 const NOTIFICATION_EDITOR_MARGIN: f32 = 5.;
 
-const NOTIFICATIONS_DOCS_URL: &str = "https://docs.warp.dev/terminal/more-features/notifications";
+const NOTIFICATIONS_DOCS_URL: &str = "";
 
 /// WARNING: this constant was computed manually by determining the pixel width
 /// of the quake mode dropdowns based on the number of expanded items in the flex row.
@@ -828,6 +836,10 @@ impl FeaturesPageAction {
             Self::ToggleSshWrapper => TelemetryEvent::FeaturesPageAction {
                 action: "ToggleSshWrapper".to_string(),
                 value: to_string(*ssh_settings.enable_legacy_ssh_wrapper.value()),
+            },
+            Self::ToggleSshAutoDiscovery => TelemetryEvent::FeaturesPageAction {
+                action: "ToggleSshAutoDiscovery".to_string(),
+                value: to_string(*ssh_settings.enable_ssh_auto_discovery.value()),
             },
             Self::SetGlobalHotkeyMode(mode) => TelemetryEvent::FeaturesPageAction {
                 action: "SetGlobalHotkeyMode".to_string(),
@@ -1140,10 +1152,6 @@ impl FeaturesPageAction {
                 action: "SetPreferredGraphicsBackend".to_string(),
                 value: format!("{backend:?}"),
             },
-            Self::ToggleConfirmCloseSession => TelemetryEvent::FeaturesPageAction {
-                action: "ToggleConfirmCloseSession".to_string(),
-                value: to_string(*SessionSettings::as_ref(ctx).should_confirm_close_session),
-            },
             Self::ToggleShowTerminalZeroStateBlock => TelemetryEvent::FeaturesPageAction {
                 action: "ToggleShowTerminalZeroStateBlock".to_string(),
                 value: to_string(*TerminalSettings::as_ref(ctx).show_terminal_zero_state_block),
@@ -1180,16 +1188,8 @@ impl FeaturesPageAction {
                         .value(),
                 ),
             },
-            Self::ToggleOutlineCodebaseSymbolsForAtContextMenu => {
-                TelemetryEvent::FeaturesPageAction {
-                    action: "ToggleOutlineCodebaseSymbolsForAtContextMenu".to_string(),
-                    value: to_string(
-                        *InputSettings::as_ref(ctx)
-                            .outline_codebase_symbols_for_at_context_menu
-                            .value(),
-                    ),
-                }
-            }
+            // Zap:ToggleOutlineCodebaseSymbolsForAtContextMenu 已下线,
+            // telemetry 分支一并删除。
             Self::MakeWarpDefaultTerminal => TelemetryEvent::FeaturesPageAction {
                 action: "MakeWarpDefaultTerminal".to_string(),
                 value: to_string(DefaultTerminal::as_ref(ctx).is_warp_default()),
@@ -1398,6 +1398,13 @@ impl TypedActionView for FeaturesPageView {
                 SshSettings::handle(ctx).update(ctx, |ssh_settings, ctx| {
                     report_if_error!(ssh_settings
                         .enable_legacy_ssh_wrapper
+                        .toggle_and_save_value(ctx));
+                });
+            }
+            ToggleSshAutoDiscovery => {
+                SshSettings::handle(ctx).update(ctx, |ssh_settings, ctx| {
+                    report_if_error!(ssh_settings
+                        .enable_ssh_auto_discovery
                         .toggle_and_save_value(ctx));
                 });
             }
@@ -1870,15 +1877,6 @@ impl TypedActionView for FeaturesPageView {
                 ctx.update_rendering_config(|config| config.backend_preference = *graphics_backend);
                 self.graphics_backend_preference_changed = true;
             }
-            ToggleConfirmCloseSession => {
-                SessionSettings::handle(ctx).update(ctx, |session_settings, ctx| {
-                    session_settings
-                        .should_confirm_close_session
-                        .toggle_and_save_value(ctx)
-                        .expect("failed to serialize ShouldConfirmCloseSession");
-                    ctx.notify();
-                })
-            }
             ToggleShowTerminalZeroStateBlock => {
                 TerminalSettings::handle(ctx).update(ctx, |terminal_settings, ctx| {
                     report_if_error!(terminal_settings
@@ -1925,13 +1923,8 @@ impl TypedActionView for FeaturesPageView {
                         .toggle_and_save_value(ctx));
                 });
             }
-            ToggleOutlineCodebaseSymbolsForAtContextMenu => {
-                InputSettings::handle(ctx).update(ctx, |input_settings, ctx| {
-                    report_if_error!(input_settings
-                        .outline_codebase_symbols_for_at_context_menu
-                        .toggle_and_save_value(ctx));
-                });
-            }
+            // Zap:`ToggleOutlineCodebaseSymbolsForAtContextMenu` action 随 outline
+            // 下线推退删除。
             ToggleAutoOpenCodeReviewPane => {
                 GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(settings
@@ -2363,7 +2356,7 @@ impl FeaturesPageView {
             ctx.add_typed_action_view(|ctx| {
                 let options = SingleLineEditorOptions {
                     text: TextOptions {
-                        font_size_override: Some(appearance_handle.as_ref(ctx).ui_font_size() - 2.),
+                        font_size_override: Some(appearance_handle.as_ref(ctx).ui_font_footnote()),
                         ..Default::default()
                     },
                     ..Default::default()
@@ -2389,7 +2382,7 @@ impl FeaturesPageView {
         let notification_toast_duration_editor = ctx.add_typed_action_view(|ctx| {
             let options = SingleLineEditorOptions {
                 text: TextOptions {
-                    font_size_override: Some(appearance_handle.as_ref(ctx).ui_font_size() - 2.),
+                    font_size_override: Some(appearance_handle.as_ref(ctx).ui_font_footnote()),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -2514,7 +2507,7 @@ impl FeaturesPageView {
 
         #[cfg(feature = "local_fs")]
         {
-            if !FeatureFlag::OpenWarpNewSettingsModes.is_enabled() {
+            if !FeatureFlag::ZapNewSettingsModes.is_enabled() {
                 let external_editor_settings =
                     crate::util::file::external_editor::EditorSettings::as_ref(ctx);
                 if external_editor_settings
@@ -2549,7 +2542,7 @@ impl FeaturesPageView {
         }
 
         if FeatureFlag::AutoOpenCodeReviewPane.is_enabled()
-            && !FeatureFlag::OpenWarpNewSettingsModes.is_enabled()
+            && !FeatureFlag::ZapNewSettingsModes.is_enabled()
         {
             general_widgets.push(Box::new(AutoOpenCodeReviewPaneWidget::default()));
         }
@@ -2573,6 +2566,13 @@ impl FeaturesPageView {
                 .is_supported_on_current_platform()
         {
             session_widgets.push(Box::new(SSHWrapperWidget::default()));
+        }
+
+        if SshSettings::as_ref(ctx)
+            .enable_ssh_auto_discovery
+            .is_supported_on_current_platform()
+        {
+            session_widgets.push(Box::new(SSHAutoDiscoveryWidget::default()));
         }
 
         let session_settings = SessionSettings::as_ref(ctx);
@@ -2599,15 +2599,6 @@ impl FeaturesPageView {
             .is_supported_on_current_platform()
         {
             session_widgets.push(Box::new(UndoCloseWidget::default()));
-        }
-
-        if FeatureFlag::CreatingSharedSessions.is_enabled()
-            && ContextFlag::CreateSharedSession.is_enabled()
-            && session_settings
-                .should_confirm_close_session
-                .is_supported_on_current_platform()
-        {
-            session_widgets.push(Box::new(ConfirmCloseSharedSessionWidget::default()));
         }
 
         let mut keys_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![];
@@ -2706,16 +2697,6 @@ impl FeaturesPageView {
                 .is_supported_on_current_platform()
         {
             editor_widgets.push(Box::new(SlashCommandsInTerminalModeWidget::default()));
-        }
-
-        if input_settings
-            .outline_codebase_symbols_for_at_context_menu
-            .is_supported_on_current_platform()
-            && FeatureFlag::AIContextMenuCode.is_enabled()
-        {
-            editor_widgets.push(Box::new(
-                OutlineCodebaseSymbolsForAtContextMenuWidget::default(),
-            ));
         }
 
         if FeatureFlag::AgentView.is_enabled() {
@@ -3392,8 +3373,8 @@ impl FeaturesPageView {
                     .filter(|val| {
                         *val != DefaultSessionMode::DockerSandbox || docker_sandbox_enabled
                     })
-                    // 去中心化分支:不再展示 Cloud Oz / Cloud Agent 选项。
-                    .filter(|val| *val != DefaultSessionMode::CloudAgent)
+                    // 去中心化分支:不再展示 Oz / Agent 选项。
+                    .filter(|val| *val != DefaultSessionMode::AmbientAgent)
                     .map(|val| {
                         DropdownItem::new(
                             val.display_name(),
@@ -3704,7 +3685,7 @@ impl FeaturesPageView {
         appearance: &Appearance,
     ) -> Box<dyn Element> {
         let theme = appearance.theme();
-        let font_size = appearance.ui_font_size() - 2.;
+        let font_size = appearance.ui_font_footnote();
         let font_color = if notification_settings.is_long_running_enabled {
             theme.active_ui_text_color()
         } else {
@@ -3810,7 +3791,7 @@ impl FeaturesPageView {
         appearance: &Appearance,
     ) -> Box<dyn Element> {
         let text = text.to_string();
-        let font_size = appearance.ui_font_size() - 2.;
+        let font_size = appearance.ui_font_footnote();
         let font_color = if is_enabled {
             appearance.theme().active_ui_text_color()
         } else {
@@ -4264,9 +4245,9 @@ impl SettingsWidget for NativeRedirectWidget {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: None,
                 secondary_text: None,
-                tooltip_override_text: Some(
-                    crate::t!("settings-features-open-links-in-desktop-tooltip").into(),
-                ),
+                tooltip_override_text: Some(crate::t!(
+                    "settings-features-open-links-in-desktop-tooltip"
+                )),
             }),
             LocalOnlyIconState::for_setting(
                 UserNativeRedirectPreference::storage_key(),
@@ -4333,7 +4314,7 @@ impl SettingsWidget for SessionRestorationWidget {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/sessions/session-restoration".into(),
+                    "".into(),
                 )),
                 secondary_text: None,
                 tooltip_override_text: None,
@@ -4357,7 +4338,7 @@ impl SettingsWidget for SessionRestorationWidget {
             let message = Text::new_inline(
                 crate::t!("settings-features-wayland-window-restore-warning"),
                 appearance.ui_font_family(),
-                CONTENT_FONT_SIZE,
+                appearance.ui_font_body(),
             )
             .with_color(appearance.theme().disabled_ui_text_color().into())
             .finish();
@@ -4365,7 +4346,7 @@ impl SettingsWidget for SessionRestorationWidget {
             let link = ui_builder
                 .link(
                     crate::t!("settings-features-see-docs"),
-                    Some("https://docs.warp.dev/terminal/sessions/session-restoration".to_owned()),
+                    Some("".to_owned()),
                     None,
                     self.docs_link.clone(),
                 )
@@ -4467,7 +4448,7 @@ impl SettingsWidget for SnackbarHeaderWidget {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/blocks/sticky-command-header".into(),
+                    "".into(),
                 )),
                 secondary_text: None,
                 tooltip_override_text: None,
@@ -4924,7 +4905,7 @@ impl SettingsWidget for SSHWrapperWidget {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/warpify/ssh-legacy#implementation".into(),
+                    "".into(),
                 )),
                 secondary_text: if view.ssh_wrapper_toggled {
                     Some(crate::t!("settings-features-takes-effect-new-sessions"))
@@ -4951,6 +4932,52 @@ impl SettingsWidget for SSHWrapperWidget {
                 .on_click(move |ctx, _, _| {
                     #[allow(deprecated)]
                     ctx.dispatch_typed_action(FeaturesPageAction::ToggleSshWrapper);
+                })
+                .finish(),
+            None,
+        )
+    }
+}
+
+#[derive(Default)]
+struct SSHAutoDiscoveryWidget {
+    switch_state: SwitchStateHandle,
+}
+
+impl SettingsWidget for SSHAutoDiscoveryWidget {
+    type View = FeaturesPageView;
+
+    fn search_terms(&self) -> &str {
+        "ssh auto discovery"
+    }
+
+    fn render(
+        &self,
+        view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let ui_builder = appearance.ui_builder();
+        render_body_item::<FeaturesPageAction>(
+            crate::t!("settings-features-ssh-auto-discovery"),
+            None,
+            LocalOnlyIconState::for_setting(
+                EnableSshAutoDiscovery::storage_key(),
+                EnableSshAutoDiscovery::sync_to_cloud(),
+                &mut view
+                    .button_mouse_states
+                    .local_only_icon_tooltip_states
+                    .borrow_mut(),
+                app,
+            ),
+            ToggleState::Enabled,
+            appearance,
+            ui_builder
+                .switch(self.switch_state.clone())
+                .check(*SshSettings::as_ref(app).enable_ssh_auto_discovery.value())
+                .build()
+                .on_click(move |ctx, _, _| {
+                    ctx.dispatch_typed_action(FeaturesPageAction::ToggleSshAutoDiscovery);
                 })
                 .finish(),
             None,
@@ -5086,7 +5113,7 @@ impl SettingsWidget for DesktopNotificationsWidget {
 
             if show_agent_notifications {
                 let theme = appearance.theme();
-                let font_size = appearance.ui_font_size() - 2.;
+                let font_size = appearance.ui_font_footnote();
                 let font_color = theme.active_ui_text_color();
 
                 let editor_style = UiComponentStyles {
@@ -5247,53 +5274,6 @@ impl SettingsWidget for UndoCloseWidget {
 }
 
 #[derive(Default)]
-struct ConfirmCloseSharedSessionWidget {
-    switch_state: SwitchStateHandle,
-}
-
-impl SettingsWidget for ConfirmCloseSharedSessionWidget {
-    type View = FeaturesPageView;
-
-    fn search_terms(&self) -> &str {
-        "warning popup modal dialog shared session close"
-    }
-
-    fn render(
-        &self,
-        view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let ui_builder = appearance.ui_builder();
-        let session_settings = SessionSettings::as_ref(app);
-        render_body_item::<FeaturesPageAction>(
-            crate::t!("settings-features-confirm-close-shared-session"),
-            None,
-            LocalOnlyIconState::for_setting(
-                ShouldConfirmCloseSession::storage_key(),
-                ShouldConfirmCloseSession::sync_to_cloud(),
-                &mut view
-                    .button_mouse_states
-                    .local_only_icon_tooltip_states
-                    .borrow_mut(),
-                app,
-            ),
-            ToggleState::Enabled,
-            appearance,
-            ui_builder
-                .switch(self.switch_state.clone())
-                .check(*session_settings.should_confirm_close_session)
-                .build()
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(FeaturesPageAction::ToggleConfirmCloseSession);
-                })
-                .finish(),
-            None,
-        )
-    }
-}
-
-#[derive(Default)]
 struct ExtraMetaKeysWidget {
     left_switch_state: SwitchStateHandle,
     right_switch_state: SwitchStateHandle,
@@ -5403,7 +5383,7 @@ impl SettingsWidget for GlobalHotkeyWidget {
                             .link(
                                 crate::t!("settings-features-see-docs"),
                                 Some(
-                                    "https://docs.warp.dev/terminal/windows/global-hotkey"
+                                    ""
                                         .to_owned(),
                                 ),
                                 None,
@@ -6058,58 +6038,6 @@ impl SettingsWidget for SlashCommandsInTerminalModeWidget {
 }
 
 #[derive(Default)]
-struct OutlineCodebaseSymbolsForAtContextMenuWidget {
-    switch_state: SwitchStateHandle,
-}
-
-impl SettingsWidget for OutlineCodebaseSymbolsForAtContextMenuWidget {
-    type View = FeaturesPageView;
-
-    fn search_terms(&self) -> &str {
-        "outline codebase symbols context menu code indexing"
-    }
-
-    fn render(
-        &self,
-        view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
-            crate::t!("settings-features-outline-codebase-symbols"),
-            None,
-            LocalOnlyIconState::for_setting(
-                OutlineCodebaseSymbolsForAtContextMenu::storage_key(),
-                OutlineCodebaseSymbolsForAtContextMenu::sync_to_cloud(),
-                &mut view
-                    .button_mouse_states
-                    .local_only_icon_tooltip_states
-                    .borrow_mut(),
-                app,
-            ),
-            ToggleState::Enabled,
-            appearance,
-            ui_builder
-                .switch(self.switch_state.clone())
-                .check(
-                    *InputSettings::as_ref(app)
-                        .outline_codebase_symbols_for_at_context_menu
-                        .value(),
-                )
-                .build()
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(
-                        FeaturesPageAction::ToggleOutlineCodebaseSymbolsForAtContextMenu,
-                    );
-                })
-                .finish(),
-            None,
-        )
-    }
-}
-
-#[derive(Default)]
 struct ShowTerminalInputMessageLineWidget {
     switch_state: SwitchStateHandle,
 }
@@ -6375,13 +6303,13 @@ impl SettingsWidget for TabKeyBehaviorWidget {
                     .ui_builder()
                     .span(crate::t!("settings-features-tab-key-behavior"))
                     .with_style(UiComponentStyles {
-                        font_size: Some(CONTENT_FONT_SIZE + 1.),
+                        font_size: Some(appearance.ui_font_body_large()),
                         ..Default::default()
                     })
                     .build()
                     .finish(),
             );
-        if *CloudPreferencesSettings::as_ref(app).settings_sync_enabled {
+        if *PreferencesSettings::as_ref(app).settings_sync_enabled {
             tab_key_span.add_child(render_local_only_icon(
                 appearance,
                 view.button_mouse_states
@@ -6480,7 +6408,7 @@ impl SettingsWidget for MouseReportingWidget {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/more-features/full-screen-apps#mouse-and-scroll-reporting"
+                    ""
                         .into(),
                 )),
                 secondary_text: None,
@@ -6745,7 +6673,7 @@ impl SettingsWidget for SmartSelectWidget {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/more-features/text-selection".into(),
+                    "".into(),
                 )),
                 secondary_text: None,
                 tooltip_override_text: None,
@@ -6996,7 +6924,7 @@ impl SettingsWidget for WorkflowsInCommandSearch {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
                 on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/entry/yaml-workflows".into(),
+                    "".into(),
                 )),
                 secondary_text: None,
                 tooltip_override_text: None,

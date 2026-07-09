@@ -4,15 +4,15 @@ use crate::ai::document::ai_document_model::AIDocumentModel;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::facts::manager::AIFactManager;
 use crate::ai::llms::LLMPreferences;
-use crate::ai::outline::RepoOutlines;
-use crate::ai::persisted_workspace::PersistedWorkspace;
 use crate::ai::restored_conversations::RestoredAgentConversations;
 use crate::ai::skills::SkillManager;
 use crate::ai::AIRequestUsageModel;
-use crate::cloud_object::model::persistence::CloudModel;
-use crate::cloud_object::model::view::CloudViewModel;
+use crate::auth::UserUid;
+use crate::cloud_object::model::persistence::ObjectStoreModel;
+use crate::cloud_object::model::view::ObjectStoreViewModel;
 use crate::context_chips::prompt::Prompt;
 use crate::editor::Event;
+use crate::editor::ReplicaId;
 use crate::gpu_state::GPUState;
 use crate::network::NetworkStatus;
 use crate::notebooks::editor::keys::NotebookKeybindings;
@@ -20,26 +20,21 @@ use crate::notebooks::notebook::NotebookView;
 use crate::pane_group::{Direction, PaneGroupAction, PaneId};
 use crate::pricing::PricingInfoModel;
 use crate::suggestions::ignored_suggestions_model::IgnoredSuggestionsModel;
+use crate::terminal::shared_session::protocol::SessionSourceType;
+use crate::terminal::shared_session::protocol::{ParticipantId, ParticipantList};
 #[cfg(feature = "local_fs")]
 use crate::user_config::tab_configs_dir;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::watcher::DirectoryWatcher;
 #[cfg(feature = "local_fs")]
-use repo_metadata::CanonicalizedPath;
-#[cfg(feature = "local_fs")]
 use repo_metadata::RepoMetadataModel;
-use session_sharing_protocol::sharer::SessionSourceType;
 use std::collections::HashMap;
-#[cfg(feature = "local_fs")]
-use tempfile::TempDir;
+use std::sync::Arc;
 use watcher::HomeDirectoryWatcher;
 
-use crate::server::cloud_objects::{listener::Listener, update_manager::UpdateManager};
+use crate::cloud_object::update_manager::UpdateManager;
 use crate::server::experiments::ServerExperiments;
-use crate::server::server_api::ServerApiProvider;
-use crate::server::sync_queue::SyncQueue;
 
-use crate::server::telemetry::context_provider::AppTelemetryContextProvider;
 use crate::settings::PrivacySettings;
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 use crate::settings_view::DisplayCount;
@@ -49,8 +44,6 @@ use crate::terminal::history::History;
 use crate::terminal::keys::TerminalKeybindings;
 #[cfg(windows)]
 use crate::util::traffic_lights::windows::RendererState;
-use crate::workspaces::team_tester::TeamTesterStatus;
-use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_profiles::UserProfiles;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
@@ -72,14 +65,12 @@ use crate::workflows::local_workflows::LocalWorkflows;
 use crate::ObjectActions;
 use crate::{experiments, workspace, GlobalResourceHandlesProvider};
 
-use crate::settings::cloud_preferences_syncer::CloudPreferencesSyncer;
+// Zap(本地化,Phase 5):`PreferencesSyncer` 已物理删除。
 
+use crate::terminal::shared_session::protocol::SessionId;
 use ai::project_context::model::ProjectContextModel;
 use pane_group::{NotebookPane, PaneState, SplitPaneState, TerminalPaneId};
-use session_sharing_protocol::common::SessionId;
-use terminal::shared_session::permissions_manager::SessionPermissionsManager;
 use terminal::view::ActiveSessionState;
-use warp_editor::editor::NavigationKey;
 use warpui::AddSingletonModel;
 use warpui::{platform::WindowStyle, App, ViewHandle};
 
@@ -87,55 +78,42 @@ fn initialize_app(app: &mut App) {
     initialize_settings_for_tests(app);
 
     // Add the necessary singleton models to the App
-    app.add_singleton_model(|_ctx| ServerApiProvider::new_for_test());
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
-    app.add_singleton_model(AppTelemetryContextProvider::new_context_provider);
     app.add_singleton_model(AuthManager::new_for_test);
     app.add_singleton_model(|_ctx| PtySpawner::new_for_test());
     app.add_singleton_model(|_| Prompt::mock());
-    app.add_singleton_model(|ctx| AutoupdateState::new(ServerApiProvider::as_ref(ctx).get()));
+    app.add_singleton_model(|_| AutoupdateState::new(Arc::new(http_client::Client::new())));
     app.add_singleton_model(|_| NetworkStatus::new());
     app.add_singleton_model(|_| SystemStats::new());
-    app.add_singleton_model(SyncQueue::mock);
-    app.add_singleton_model(CloudModel::mock);
+    app.add_singleton_model(ObjectStoreModel::mock);
     app.add_singleton_model(UserWorkspaces::default_mock);
     app.add_singleton_model(|_ctx| UserProfiles::new(Vec::new()));
-    app.add_singleton_model(TeamTesterStatus::mock);
-    app.add_singleton_model(TeamUpdateManager::mock);
     app.add_singleton_model(UpdateManager::mock);
     app.add_singleton_model(MCPGalleryManager::new);
-    app.add_singleton_model(CloudViewModel::mock);
-    app.add_singleton_model(Listener::mock);
+    app.add_singleton_model(ObjectStoreViewModel::mock);
     app.add_singleton_model(|_| Appearance::mock());
     app.add_singleton_model(AppearanceManager::new);
     app.add_singleton_model(|_| DisplayCount::mock());
     app.add_singleton_model(PrivacySettings::mock);
     app.add_singleton_model(|_| KeybindingChangedNotifier::new());
     app.add_singleton_model(|_ctx| RelaunchModel::new());
-    app.add_singleton_model(|ctx| ChangelogModel::new(ServerApiProvider::as_ref(ctx).get()));
+    app.add_singleton_model(|_| ChangelogModel::new(Arc::new(http_client::Client::new())));
     app.add_singleton_model(|_| GitHubAuthNotifier::new());
+    app.add_singleton_model(|_| crate::ssh_manager::SshTreeChangedNotifier::new());
     app.add_singleton_model(|_ctx| SyncedInputState::mock());
     app.add_singleton_model(|_| ResizableData::default());
     app.add_singleton_model(LocalWorkflows::new);
     app.add_singleton_model(UndoCloseStack::new);
-    app.add_singleton_model(terminal::shared_session::manager::Manager::new);
     app.add_singleton_model(|_| ActiveSession::default());
     app.add_singleton_model(|_| WorkspaceToastStack);
     app.add_singleton_model(|_| ObjectActions::new(Vec::new()));
     app.add_singleton_model(NotebookKeybindings::new);
     app.add_singleton_model(TerminalKeybindings::new);
     app.add_singleton_model(NotebookManager::mock);
-    app.add_singleton_model(|ctx| {
-        CloudPreferencesSyncer::new(
-            false,                     // force_local_wins_on_startup
-            std::path::PathBuf::new(), // unused in tests that don't exercise the hash path
-            ctx,
-        )
-    });
+    // Zap(本地化,Phase 5):`PreferencesSyncer` 已物理删除,test singleton 不再需要。
     app.add_singleton_model(|_| BlocklistAIHistoryModel::new_for_test());
     app.add_singleton_model(|_| CLIAgentSessionsModel::new());
     app.add_singleton_model(AgentConversationsModel::new);
-    app.add_singleton_model(SessionPermissionsManager::new);
     app.add_singleton_model(LLMPreferences::new);
     app.add_singleton_model(|_| SettingsPaneManager::new());
     app.add_singleton_model(|_| AIFactManager::new());
@@ -152,7 +130,7 @@ fn initialize_app(app: &mut App) {
     app.add_singleton_model(|ctx| {
         AIExecutionProfilesModel::new(&crate::LaunchMode::new_for_unit_test(), ctx)
     });
-    app.add_singleton_model(RepoOutlines::new_for_test);
+    // Zap:RepoOutlines 已删除,不再注册。
     #[cfg(feature = "voice_input")]
     app.add_singleton_model(voice_input::VoiceInput::new);
     app.add_singleton_model(BlocklistAIPermissions::new);
@@ -186,14 +164,11 @@ fn initialize_app(app: &mut App) {
 
     app.update(experiments::init);
 
-    app.add_singleton_model(|ctx| {
-        AIRequestUsageModel::new_for_test(ServerApiProvider::as_ref(ctx).get_ai_client(), ctx)
-    });
+    app.add_singleton_model(AIRequestUsageModel::new_for_test);
     app.add_singleton_model(
         crate::workspace::bonus_grant_notification_model::BonusGrantNotificationModel::new,
     );
 
-    app.add_singleton_model(|ctx| PersistedWorkspace::new(vec![], HashMap::new(), None, ctx));
     app.add_singleton_model(|_| ProjectContextModel::default());
     app.add_singleton_model(|_| PricingInfoModel::new());
     app.add_singleton_model(AIDocumentModel::new);
@@ -298,209 +273,36 @@ fn open_worktree_sidecar(workspace: &ViewHandle<Workspace>, app: &mut App) {
 
 #[cfg(feature = "local_fs")]
 #[test]
+#[ignore = "依赖已下线的 PersistedWorkspace"]
 fn test_worktree_sidecar_hover_takes_precedence_over_selection() {
-    let _tab_configs_guard = FeatureFlag::TabConfigs.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let workspace = mock_workspace(&mut app);
-        let temp_root = TempDir::new().expect("failed to create temp dir");
-        let alpha_repo = temp_root.path().join("alpha-repo");
-        let beta_repo = temp_root.path().join("beta-repo");
-        std::fs::create_dir_all(&alpha_repo).expect("failed to create alpha repo dir");
-        std::fs::create_dir_all(&beta_repo).expect("failed to create beta repo dir");
-
-        workspace.update(&mut app, |_, ctx| {
-            PersistedWorkspace::handle(ctx).update(ctx, |persisted, ctx| {
-                persisted.user_added_workspace(alpha_repo.clone(), ctx);
-                persisted.user_added_workspace(beta_repo.clone(), ctx);
-            });
-        });
-
-        open_worktree_sidecar(&workspace, &mut app);
-
-        workspace.update(&mut app, |workspace, ctx| {
-            workspace
-                .new_session_sidecar_menu
-                .update(ctx, |menu, view_ctx| {
-                    menu.set_selected_by_index(1, view_ctx);
-                    menu.handle_action(
-                        &crate::menu::MenuAction::HoverSubmenuLeafNode {
-                            depth: 0,
-                            row_index: 2,
-                            position: Vector2F::zero(),
-                        },
-                        view_ctx,
-                    );
-                });
-
-            workspace.handle_new_session_sidecar_event(&MenuEvent::ItemHovered, ctx);
-        });
-
-        workspace.read(&app, |workspace, ctx| {
-            assert_eq!(
-                workspace
-                    .new_session_sidecar_menu
-                    .read(ctx, |menu, _| menu.selected_index()),
-                Some(2)
-            );
-        });
-    });
+    unimplemented!("PersistedWorkspace 已下线,worktree sidecar 仓库列表测试暂停");
 }
 
 #[cfg(feature = "local_fs")]
 #[test]
+#[ignore = "依赖已下线的 PersistedWorkspace"]
 fn test_worktree_sidecar_pointer_entry_does_not_select_top_repo() {
-    let _tab_configs_guard = FeatureFlag::TabConfigs.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let workspace = mock_workspace(&mut app);
-        let temp_root = TempDir::new().expect("failed to create temp dir");
-        let alpha_repo = temp_root.path().join("alpha-repo");
-        let beta_repo = temp_root.path().join("beta-repo");
-        std::fs::create_dir_all(&alpha_repo).expect("failed to create alpha repo dir");
-        std::fs::create_dir_all(&beta_repo).expect("failed to create beta repo dir");
-
-        workspace.update(&mut app, |_, ctx| {
-            PersistedWorkspace::handle(ctx).update(ctx, |persisted, ctx| {
-                persisted.user_added_workspace(alpha_repo.clone(), ctx);
-                persisted.user_added_workspace(beta_repo.clone(), ctx);
-            });
-        });
-
-        workspace.update(&mut app, |workspace, ctx| {
-            workspace.open_new_session_dropdown_menu(Vector2F::zero(), ctx);
-
-            let worktree_index = workspace
-                .new_session_dropdown_menu
-                .read(ctx, |menu, _| {
-                    menu.items().iter().position(|item| {
-                        matches!(
-                            item,
-                            MenuItem::Item(fields) if fields.label() == "New worktree config"
-                        )
-                    })
-                })
-                .expect("expected new worktree config item in new-session menu");
-
-            workspace
-                .new_session_dropdown_menu
-                .update(ctx, |menu, view_ctx| {
-                    menu.handle_action(
-                        &crate::menu::MenuAction::HoverSubmenuWithChildren(
-                            0,
-                            crate::menu::SelectAction::Index {
-                                row: worktree_index,
-                                item: 0,
-                            },
-                        ),
-                        view_ctx,
-                    );
-                });
-            workspace.update_new_session_sidecar(ctx);
-        });
-
-        workspace.read(&app, |workspace, ctx| {
-            assert!(workspace.show_new_session_sidecar);
-            assert_eq!(
-                workspace
-                    .new_session_sidecar_menu
-                    .read(ctx, |menu, _| menu.selected_index()),
-                None
-            );
-        });
-    });
+    unimplemented!("PersistedWorkspace 已下线,worktree sidecar 仓库列表测试暂停");
 }
 
 #[cfg(feature = "local_fs")]
 #[test]
+#[ignore = "依赖已下线的 PersistedWorkspace"]
 fn test_worktree_sidecar_close_via_select_item_executes_from_workspace() {
-    let _tab_configs_guard = FeatureFlag::TabConfigs.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        let _cleanup = TabConfigCleanupGuard::new("alpha-repo");
-
-        initialize_app(&mut app);
-
-        let workspace = mock_workspace(&mut app);
-        let temp_root = TempDir::new().expect("failed to create temp dir");
-        let alpha_repo = temp_root.path().join("alpha-repo");
-        std::fs::create_dir_all(&alpha_repo).expect("failed to create alpha repo dir");
-
-        workspace.update(&mut app, |_, ctx| {
-            PersistedWorkspace::handle(ctx).update(ctx, |persisted, ctx| {
-                persisted.user_added_workspace(alpha_repo.clone(), ctx);
-            });
-        });
-
-        open_worktree_sidecar(&workspace, &mut app);
-
-        workspace.update(&mut app, |workspace, ctx| {
-            workspace
-                .new_session_sidecar_menu
-                .update(ctx, |menu, view_ctx| {
-                    menu.set_selected_by_index(1, view_ctx);
-                });
-            workspace.handle_new_session_sidecar_event(
-                &MenuEvent::Close {
-                    via_select_item: true,
-                },
-                ctx,
-            );
-            workspace.handle_new_session_sidecar_event(&MenuEvent::ItemSelected, ctx);
-        });
-
-        workspace.read(&app, |workspace, _| {
-            assert_eq!(workspace.tab_count(), 2);
-        });
-    });
+    unimplemented!("PersistedWorkspace 已下线,worktree sidecar 仓库列表测试暂停");
 }
 
 #[cfg(feature = "local_fs")]
 #[test]
+#[ignore = "依赖已下线的 PersistedWorkspace"]
 fn test_worktree_sidecar_search_editor_enter_executes_selection() {
-    let _tab_configs_guard = FeatureFlag::TabConfigs.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        let _cleanup = TabConfigCleanupGuard::new("alpha-repo");
-
-        initialize_app(&mut app);
-
-        let workspace = mock_workspace(&mut app);
-        let temp_root = TempDir::new().expect("failed to create temp dir");
-        let alpha_repo = temp_root.path().join("alpha-repo");
-        std::fs::create_dir_all(&alpha_repo).expect("failed to create alpha repo dir");
-
-        workspace.update(&mut app, |_, ctx| {
-            PersistedWorkspace::handle(ctx).update(ctx, |persisted, ctx| {
-                persisted.user_added_workspace(alpha_repo.clone(), ctx);
-            });
-        });
-
-        open_worktree_sidecar(&workspace, &mut app);
-
-        workspace.update(&mut app, |workspace, ctx| {
-            workspace
-                .worktree_sidecar_search_editor
-                .update(ctx, |_, ctx| {
-                    ctx.emit(Event::Enter);
-                });
-        });
-
-        workspace.read(&app, |workspace, _| {
-            assert_eq!(workspace.tab_count(), 2);
-            assert!(workspace.show_new_session_dropdown_menu.is_none());
-        });
-    });
+    unimplemented!("PersistedWorkspace 已下线,worktree sidecar 仓库列表测试暂停");
 }
 
 /// RAII guard that removes tab config TOML files whose name starts with
 /// `prefix` from `~/.warp/tab_configs/` on drop. Because `Drop` runs even
 /// when a test panics, this prevents stale worktree configs from leaking
-/// into Warp dev.
+/// into Zap dev.
 #[cfg(feature = "local_fs")]
 struct TabConfigCleanupGuard {
     prefix: &'static str,
@@ -537,8 +339,6 @@ impl Drop for TabConfigCleanupGuard {
 
 /// Creates a workspace with a single, shared session.
 fn mock_workspace_with_shared_session(app: &mut App) -> ViewHandle<Workspace> {
-    use crate::terminal::shared_session::manager::Manager;
-
     // Create the workspace as a session-sharing sharer.
     let global_resource_handles = GlobalResourceHandles::mock(app);
     let (_, workspace) = app.add_window(WindowStyle::NotStealFocus, |ctx| {
@@ -574,14 +374,6 @@ fn mock_workspace_with_shared_session(app: &mut App) -> ViewHandle<Workspace> {
         );
     });
 
-    // Make sure the view is registered with the shared session manager.
-    app.read(|ctx| {
-        let manager = Manager::as_ref(ctx);
-        let shared_sessions = manager.shared_views(ctx).collect_vec();
-        assert_eq!(shared_sessions.len(), 1);
-        assert_eq!(shared_sessions[0].id(), terminal_view.id());
-    });
-
     workspace
 }
 
@@ -590,13 +382,14 @@ fn mock_workspace_viewing_shared_session(app: &mut App) -> ViewHandle<Workspace>
     // Create the workspace as a session-sharing sharer.
     let global_resource_handles = GlobalResourceHandles::mock(app);
 
-    let session_id = SessionId::new();
-
     let (_, workspace) = app.add_window(WindowStyle::NotStealFocus, |ctx| {
         Workspace::new(
             global_resource_handles,
             None,
-            NewWorkspaceSource::SharedSessionAsViewer { session_id },
+            NewWorkspaceSource::Empty {
+                previous_active_window: None,
+                shell: None,
+            },
             ctx,
         )
     });
@@ -611,10 +404,16 @@ fn mock_workspace_viewing_shared_session(app: &mut App) -> ViewHandle<Workspace>
             .unwrap()
     });
 
-    // Ensure session is opened as a viewer.
-    terminal_view.read(app, |terminal, _ctx| {
-        let model = terminal.model.clone();
-        assert!(model.lock().shared_session_status().is_viewer());
+    terminal_view.update(app, |view, ctx| {
+        view.on_session_share_joined(
+            ParticipantId::new(),
+            UserUid::new("mock_user_uid"),
+            ReplicaId::random(),
+            Box::new(ParticipantList::default()),
+            SessionId::new(),
+            SessionSourceType::default(),
+            ctx,
+        );
     });
 
     workspace
@@ -1028,7 +827,6 @@ fn setup_session_sharing_test(workspace: &ViewHandle<Workspace>, app: &mut App) 
 
 #[test]
 fn test_close_tab_confirmation_dialog() {
-    let _guard = FeatureFlag::CreatingSharedSessions.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         app.update(disable_quit_warning);
@@ -1094,7 +892,6 @@ fn test_close_tab_confirmation_dialog() {
 
 #[test]
 fn test_close_pane_confirmation_dialog() {
-    let _guard = FeatureFlag::CreatingSharedSessions.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
@@ -1149,7 +946,6 @@ fn test_close_pane_confirmation_dialog() {
 
 #[test]
 fn test_reopen_closed_shared_tab() {
-    let _guard = FeatureFlag::CreatingSharedSessions.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
@@ -1177,7 +973,6 @@ fn test_reopen_closed_shared_tab() {
 
 #[test]
 fn test_close_other_tabs_confirmation_dialog() {
-    let _guard = FeatureFlag::CreatingSharedSessions.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
@@ -1216,7 +1011,6 @@ fn test_close_other_tabs_confirmation_dialog() {
 
 #[test]
 fn test_close_tabs_right_confirmation_dialog() {
-    let _guard = FeatureFlag::CreatingSharedSessions.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
@@ -1258,7 +1052,6 @@ fn test_close_tabs_right_confirmation_dialog() {
 
 #[test]
 fn test_confirmation_dialog_dont_show_again() {
-    let _guard = FeatureFlag::CreatingSharedSessions.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         app.update(disable_quit_warning);
@@ -1315,8 +1108,6 @@ fn test_confirmation_dialog_dont_show_again() {
 
 #[test]
 fn test_close_last_tab_skip_confirmation() {
-    let _guard = FeatureFlag::CreatingSharedSessions.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         app.update(disable_quit_warning);
@@ -1356,7 +1147,7 @@ fn test_notebook_pane_tracking() {
                     owner: Owner::mock_current_user(),
                     initial_folder_id: None,
                 },
-                &OpenWarpDriveObjectSettings::default(),
+                &ZapDriveObjectSettings::default(),
                 ctx,
                 true,
             );
@@ -1396,7 +1187,7 @@ fn test_notebook_pane_tracking() {
             // Re-opening the notebook should not create a new view.
             workspace.open_notebook(
                 &NotebookSource::Existing(notebook_id),
-                &OpenWarpDriveObjectSettings::default(),
+                &ZapDriveObjectSettings::default(),
                 ctx,
                 true,
             );
@@ -1513,7 +1304,7 @@ fn test_open_or_toggle_warp_drive() {
 
         let workspace = mock_workspace(&mut app);
         workspace.update(&mut app, |workspace, ctx| {
-            // First, unconditionally open Warp Drive as a system action. WD should be open and welcome tips should not have opening warp drive.
+            // First, unconditionally open Zap Drive as a system action. WD should be open and welcome tips should not have opening zap drive.
             workspace.open_or_toggle_warp_drive(
                 false, /* toggle */
                 false, /* explicit_user_action */
@@ -1521,18 +1312,18 @@ fn test_open_or_toggle_warp_drive() {
             );
             assert!(
                 workspace.current_workspace_state.is_warp_drive_open,
-                "Warp Drive should be open"
+                "Zap Drive should be open"
             );
             assert!(
                 !workspace
                     .tips_completed
                     .as_ref(ctx)
                     .features_used
-                    .contains(&Tip::Action(TipAction::OpenWarpDrive)),
-                "Warp drive welcome tip should not be completed"
+                    .contains(&Tip::Action(TipAction::ZapDrive)),
+                "Zap drive welcome tip should not be completed"
             );
 
-            // Next, toggle warp drive as a user action. WD should be closed and tip should not be filled out.
+            // Next, toggle zap drive as a user action. WD should be closed and tip should not be filled out.
             workspace.open_or_toggle_warp_drive(
                 true, /* toggle */
                 true, /* explicit_user_action */
@@ -1540,18 +1331,18 @@ fn test_open_or_toggle_warp_drive() {
             );
             assert!(
                 !workspace.current_workspace_state.is_warp_drive_open,
-                "Warp Drive should be closed"
+                "Zap Drive should be closed"
             );
             assert!(
                 !workspace
                     .tips_completed
                     .as_ref(ctx)
                     .features_used
-                    .contains(&Tip::Action(TipAction::OpenWarpDrive)),
-                "Warp drive welcome tip should not be completed"
+                    .contains(&Tip::Action(TipAction::ZapDrive)),
+                "Zap drive welcome tip should not be completed"
             );
 
-            // Finally, toggle warp drive again as a user action. WD should be open and tip filled out.
+            // Finally, toggle zap drive again as a user action. WD should be open and tip filled out.
             workspace.open_or_toggle_warp_drive(
                 true, /* toggle */
                 true, /* explicit_user_action */
@@ -1559,205 +1350,22 @@ fn test_open_or_toggle_warp_drive() {
             );
             assert!(
                 workspace.current_workspace_state.is_warp_drive_open,
-                "Warp Drive should be open"
+                "Zap Drive should be open"
             );
             assert!(
                 workspace
                     .tips_completed
                     .as_ref(ctx)
                     .features_used
-                    .contains(&Tip::Action(TipAction::OpenWarpDrive)),
-                "Warp drive welcome tip should not be completed"
+                    .contains(&Tip::Action(TipAction::ZapDrive)),
+                "Zap drive welcome tip should not be completed"
             );
-        });
-    });
-}
-
-#[test]
-fn test_stop_sharing_session() {
-    use crate::terminal::shared_session::manager::Manager;
-    let _guard = FeatureFlag::CreatingSharedSessions.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        // Create a workspace with a single session that's shared.
-        let workspace = mock_workspace_with_shared_session(&mut app);
-        let terminal_view = workspace.read(&app, |workspace, ctx| {
-            assert_eq!(workspace.tabs.len(), 1);
-            workspace
-                .active_tab_pane_group()
-                .as_ref(ctx)
-                .focused_session_view(ctx)
-                .unwrap()
-        });
-
-        // Stop sharing the shared session.
-        workspace.update(&mut app, |workspace, ctx| {
-            workspace.stop_sharing_session(
-                &terminal_view.id(),
-                SharedSessionActionSource::Tab,
-                ctx,
-            );
-        });
-
-        // Ensure that the session is no longer registered with the shared session manager.
-        app.read(|ctx| {
-            let manager = Manager::as_ref(ctx);
-            let shared_sessions = manager.shared_views(ctx).collect_vec();
-            assert_eq!(shared_sessions.len(), 0);
-        });
-    });
-}
-
-#[test]
-fn test_stop_sharing_all_sessions_in_tab() {
-    use crate::terminal::shared_session::manager::Manager;
-    let _guard = FeatureFlag::CreatingSharedSessions.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        // Create a workspace with two tabs. First tab has two shared sessions. Second tab has one shared session.
-        let workspace = mock_workspace_with_shared_session(&mut app);
-        let second_tab_session = workspace.update(&mut app, |workspace, ctx| {
-            workspace
-                .active_tab_pane_group()
-                .update(ctx, |pane_group, ctx| {
-                    pane_group.handle_action(&PaneGroupAction::Add(Direction::Right), ctx);
-                    pane_group
-                        .terminal_view_at_pane_index(1, ctx)
-                        .unwrap()
-                        .update(ctx, |terminal_view, ctx| {
-                            terminal_view.attempt_to_share_session(
-                                SharedSessionScrollbackType::None,
-                                None,
-                                SessionSourceType::default(),
-                                false,
-                                ctx,
-                            );
-                        });
-                });
-
-            workspace.add_terminal_tab(false, ctx);
-            workspace
-                .active_tab_pane_group()
-                .update(ctx, |pane_group, ctx| {
-                    pane_group
-                        .terminal_view_at_pane_index(0, ctx)
-                        .unwrap()
-                        .update(ctx, |terminal_view, ctx| {
-                            terminal_view.attempt_to_share_session(
-                                SharedSessionScrollbackType::None,
-                                None,
-                                SessionSourceType::default(),
-                                false,
-                                ctx,
-                            );
-                        });
-                });
-
-            workspace
-                .active_tab_pane_group()
-                .read(ctx, |pane_group, ctx| {
-                    pane_group.terminal_view_at_pane_index(0, ctx).unwrap().id()
-                })
-        });
-
-        // Ensure we have three shared sessions registered.
-        app.read(|ctx| {
-            let manager = Manager::as_ref(ctx);
-            let shared_sessions = manager.shared_views(ctx).collect_vec();
-            assert_eq!(shared_sessions.len(), 3);
-        });
-
-        // Stop sharing all sessions in first tab.
-        workspace.update(&mut app, |workspace, ctx| {
-            let tab = workspace.tabs[0].pane_group.downgrade();
-            workspace.stop_sharing_all_panes_in_tab(&tab, ctx);
-        });
-
-        // Ensure that the only remaining shared session is the one in the other tab.
-        app.read(|ctx| {
-            let manager = Manager::as_ref(ctx);
-            let shared_sessions = manager.shared_views(ctx).collect_vec();
-            assert_eq!(shared_sessions.len(), 1);
-            assert_eq!(shared_sessions[0].id(), second_tab_session);
-        });
-    });
-}
-
-#[test]
-fn test_tab_context_menu_share_session_items() {
-    let _guard = FeatureFlag::CreatingSharedSessions.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-        let workspace = mock_workspace(&mut app);
-        let shared_pane_id = setup_session_sharing_test(&workspace, &mut app);
-
-        workspace.update(&mut app, |workspace, ctx| {
-            // Focus the shared session
-            workspace.activate_tab(1, ctx);
-            workspace
-                .active_tab_pane_group()
-                .update(ctx, |pane_group, ctx| {
-                    pane_group.focus_pane_by_id(shared_pane_id, ctx);
-                });
-        });
-
-        // When there's a single shared session in a tab (focused), the options
-        // for sharing are "Stop sharing" and "Stop sharing all".
-        workspace.read(&app, |workspace, ctx| {
-            let items = workspace.tabs[1].menu_items(1, 3, ctx);
-            assert!(items[0]
-                .is_approximately_same_item_as(&MenuItemFields::new("Stop sharing").into_item()));
-            assert!(items[1].is_approximately_same_item_as(
-                &MenuItemFields::new("Stop sharing all").into_item()
-            ));
-        });
-
-        // Focus the other, non-shared pane in the tab
-        workspace.update(&mut app, |workspace, ctx| {
-            workspace.activate_tab(1, ctx);
-            workspace
-                .active_tab_pane_group()
-                .update(ctx, |pane_group, ctx| {
-                    pane_group.pane_by_index(1).unwrap().focus(ctx);
-                });
-        });
-
-        // When there's a single shared session in a tab (unfocused), the options
-        // for sharing are "Share session" and "Stop sharing all".
-        workspace.read(&app, |workspace, ctx| {
-            let items = workspace.tabs[1].menu_items(1, 3, ctx);
-            assert!(items[0]
-                .is_approximately_same_item_as(&MenuItemFields::new("Share session").into_item()));
-            assert!(items[1].is_approximately_same_item_as(
-                &MenuItemFields::new("Stop sharing all").into_item()
-            ));
-        });
-
-        // Stop sharing.
-        workspace.update(&mut app, |workspace, ctx| {
-            let tab = workspace.tabs[1].pane_group.downgrade();
-            workspace.stop_sharing_all_panes_in_tab(&tab, ctx);
-        });
-
-        // When there's no shared sessions in a tab, the only option is "Share session".
-        workspace.read(&app, |workspace, ctx| {
-            let items = workspace.tabs[1].menu_items(1, 3, ctx);
-            assert!(items[0]
-                .is_approximately_same_item_as(&MenuItemFields::new("Share session").into_item()));
-            assert!(items[1].is_approximately_same_item_as(&MenuItem::Separator));
         });
     });
 }
 
 #[test]
 fn test_view_only_session() {
-    let _guard = FeatureFlag::ViewingSharedSessions.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
@@ -1770,6 +1378,45 @@ fn test_view_only_session() {
         // Ensure command search doesn't work for read-only shared sessions
         workspace.read(&app, |workspace, _ctx| {
             assert!(!workspace.current_workspace_state.is_command_search_open);
+        });
+    });
+}
+
+#[test]
+fn test_server_token_compatibility_finds_restored_local_conversation() {
+    use crate::ai::agent::conversation::AIConversation;
+
+    App::test((), |mut app| async move {
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new_for_test());
+        let token = ServerConversationToken::new("restored-token".to_string());
+        let conversation_id = history_model.update(&mut app, |model, ctx| {
+            let mut conversation = AIConversation::new(false);
+            conversation.set_server_conversation_token(token.as_str().to_string());
+            let conversation_id = conversation.id();
+            model.restore_conversations(EntityId::new(), vec![conversation], ctx);
+            conversation_id
+        });
+
+        app.read(|ctx| {
+            assert_eq!(
+                Workspace::find_local_conversation_id_by_server_token(&token, ctx),
+                Some(conversation_id),
+            );
+        });
+    });
+}
+
+#[test]
+fn test_server_token_compatibility_ignores_unknown_token() {
+    App::test((), |app| async move {
+        app.add_singleton_model(|_| BlocklistAIHistoryModel::new_for_test());
+        let token = ServerConversationToken::new("missing-token".to_string());
+
+        app.read(|ctx| {
+            assert_eq!(
+                Workspace::find_local_conversation_id_by_server_token(&token, ctx),
+                None,
+            );
         });
     });
 }
@@ -1800,7 +1447,7 @@ fn test_switch_focus_panels() {
         workspace.update(&mut app, |view, ctx| {
             assert!(
                 view.left_panel_view.is_self_or_child_focused(ctx),
-                "Expected Warp Drive panel to be focused"
+                "Expected Zap Drive panel to be focused"
             );
         });
 
@@ -2686,195 +2333,16 @@ fn test_unified_new_session_menu_includes_reopen_closed_session() {
 
 #[cfg(feature = "local_fs")]
 #[test]
+#[ignore = "依赖已下线的 PersistedWorkspace"]
 fn test_worktree_sidecar_search_editor_proxies_navigation_and_escape() {
-    let _tab_configs_guard = FeatureFlag::TabConfigs.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let workspace = mock_workspace(&mut app);
-        let temp_root = TempDir::new().expect("failed to create temp dir");
-        let alpha_repo = temp_root.path().join("alpha-repo");
-        let beta_repo = temp_root.path().join("beta-repo");
-        std::fs::create_dir_all(&alpha_repo).expect("failed to create alpha repo dir");
-        std::fs::create_dir_all(&beta_repo).expect("failed to create beta repo dir");
-
-        workspace.update(&mut app, |_, ctx| {
-            PersistedWorkspace::handle(ctx).update(ctx, |persisted, ctx| {
-                persisted.user_added_workspace(alpha_repo.clone(), ctx);
-                persisted.user_added_workspace(beta_repo.clone(), ctx);
-            });
-        });
-
-        open_worktree_sidecar(&workspace, &mut app);
-
-        workspace.read(&app, |workspace, ctx| {
-            assert!(workspace.show_new_session_sidecar);
-            assert!(workspace.worktree_sidecar_search_editor.is_focused(ctx));
-            assert_eq!(
-                workspace
-                    .new_session_sidecar_menu
-                    .read(ctx, |menu, _| menu.selected_index()),
-                Some(1)
-            );
-        });
-
-        workspace.update(&mut app, |workspace, ctx| {
-            workspace
-                .worktree_sidecar_search_editor
-                .update(ctx, |_, ctx| {
-                    ctx.emit(Event::Navigate(NavigationKey::Down));
-                });
-        });
-        workspace.read(&app, |workspace, ctx| {
-            assert_eq!(
-                workspace
-                    .new_session_sidecar_menu
-                    .read(ctx, |menu, _| menu.selected_index()),
-                Some(2)
-            );
-        });
-
-        workspace.update(&mut app, |workspace, ctx| {
-            workspace
-                .worktree_sidecar_search_editor
-                .update(ctx, |_, ctx| {
-                    ctx.emit(Event::Navigate(NavigationKey::Up));
-                });
-        });
-        workspace.read(&app, |workspace, ctx| {
-            assert_eq!(
-                workspace
-                    .new_session_sidecar_menu
-                    .read(ctx, |menu, _| menu.selected_index()),
-                Some(1)
-            );
-        });
-
-        workspace.update(&mut app, |workspace, ctx| {
-            workspace
-                .worktree_sidecar_search_editor
-                .update(ctx, |editor, ctx| {
-                    editor.set_buffer_text("beta", ctx);
-                });
-        });
-        workspace.read(&app, |workspace, ctx| {
-            assert_eq!(workspace.worktree_sidecar_search_query, "beta");
-            assert_eq!(
-                workspace
-                    .new_session_sidecar_menu
-                    .read(ctx, |menu, _| menu.items_len()),
-                2
-            );
-            assert_eq!(
-                workspace
-                    .new_session_sidecar_menu
-                    .read(ctx, |menu, _| menu.selected_index()),
-                Some(1)
-            );
-        });
-
-        workspace.update(&mut app, |workspace, ctx| {
-            workspace
-                .worktree_sidecar_search_editor
-                .update(ctx, |_, ctx| {
-                    ctx.emit(Event::Escape);
-                });
-        });
-        workspace.read(&app, |workspace, ctx| {
-            assert!(workspace.show_new_session_dropdown_menu.is_none());
-            assert!(!workspace.show_new_session_sidecar);
-            assert!(workspace.worktree_sidecar_search_query.is_empty());
-            assert!(workspace
-                .worktree_sidecar_search_editor
-                .as_ref(ctx)
-                .buffer_text(ctx)
-                .is_empty());
-        });
-    });
+    unimplemented!("PersistedWorkspace 已下线,worktree sidecar 仓库列表测试暂停");
 }
 
 #[cfg(feature = "local_fs")]
 #[test]
+#[ignore = "依赖已下线的 PersistedWorkspace"]
 fn test_worktree_sidecar_hides_linked_worktrees_from_repo_list() {
-    let _tab_configs_guard = FeatureFlag::TabConfigs.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let workspace = mock_workspace(&mut app);
-        let temp_root = TempDir::new().expect("failed to create temp dir");
-        let main_repo = temp_root.path().join("main-repo");
-        let linked_worktree = temp_root.path().join("linked-worktree");
-        let external_git_dir = main_repo
-            .join(".git")
-            .join("worktrees")
-            .join("linked-worktree");
-
-        std::fs::create_dir_all(&main_repo).expect("failed to create main repo dir");
-        std::fs::create_dir_all(&linked_worktree).expect("failed to create linked worktree dir");
-        std::fs::create_dir_all(&external_git_dir).expect("failed to create external git dir");
-
-        workspace.update(&mut app, |_, ctx| {
-            PersistedWorkspace::handle(ctx).update(ctx, |persisted, ctx| {
-                persisted.user_added_workspace(main_repo.clone(), ctx);
-                persisted.user_added_workspace(linked_worktree.clone(), ctx);
-            });
-
-            let main_repo_canon =
-                CanonicalizedPath::try_from(main_repo.as_path()).expect("canonical main repo");
-            let linked_worktree_canon = CanonicalizedPath::try_from(linked_worktree.as_path())
-                .expect("canonical linked worktree");
-            let external_git_dir_canon = CanonicalizedPath::try_from(external_git_dir.as_path())
-                .expect("canonical external git dir");
-
-            let main_repo_std: warp_util::standardized_path::StandardizedPath =
-                main_repo_canon.into();
-            let linked_worktree_std: warp_util::standardized_path::StandardizedPath =
-                linked_worktree_canon.into();
-            let external_git_dir_std: warp_util::standardized_path::StandardizedPath =
-                external_git_dir_canon.into();
-
-            DetectedRepositories::handle(ctx).update(ctx, |repos, _ctx| {
-                repos.insert_test_repo_root(main_repo_std.clone());
-                repos.insert_test_repo_root(linked_worktree_std.clone());
-            });
-
-            DirectoryWatcher::handle(ctx).update(ctx, |watcher, ctx| {
-                watcher
-                    .add_directory_with_git_dir(main_repo_std, None, ctx)
-                    .expect("register main repo");
-                watcher
-                    .add_directory_with_git_dir(
-                        linked_worktree_std,
-                        Some(external_git_dir_std),
-                        ctx,
-                    )
-                    .expect("register linked worktree");
-            });
-        });
-
-        open_worktree_sidecar(&workspace, &mut app);
-
-        workspace.read(&app, |workspace, ctx| {
-            let labels = workspace.new_session_sidecar_menu.read(ctx, |menu, _| {
-                menu.items()
-                    .iter()
-                    .filter_map(|item| match item {
-                        MenuItem::Item(fields) => Some(fields.label().to_string()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-            });
-
-            let main_repo_label = main_repo.to_string_lossy().to_string();
-            let linked_worktree_label = linked_worktree.to_string_lossy().to_string();
-
-            assert!(labels.iter().any(|label| label == "Search repos"));
-            assert!(labels.iter().any(|label| label == &main_repo_label));
-            assert!(!labels.iter().any(|label| label == &linked_worktree_label));
-        });
-    });
+    unimplemented!("PersistedWorkspace 已下线,worktree sidecar 仓库列表测试暂停");
 }
 
 #[test]
@@ -2930,5 +2398,5 @@ fn test_standard_tab_context_menu_shows_hover_only_tab_bar() {
     });
 }
 
-// 已删:test_open_cloud_agent_setup_guide_action_opens_management_view_and_is_idempotent
-// agent_management_view 字段连同 cloud agent setup guide 整片功能在 Phase 2c 已删。
+// 已删:test_open_ambient_agent_setup_guide_action_opens_management_view_and_is_idempotent
+// agent_management_view 字段连同 agent setup guide 整片功能在 Phase 2c 已删。

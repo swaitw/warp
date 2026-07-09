@@ -66,7 +66,6 @@ pub struct KeybindingsView {
 
 /// Keybindings are sorted into these sections,
 /// where "Fundamentals" is the default for any remaining non-categorized ones.
-/// This should always align with documentation: https://docs.warp.dev/getting-started/keyboard-shortcuts
 #[derive(Clone, Eq, PartialEq, Sequence)]
 pub enum KeybindingSection {
     Essentials,
@@ -434,7 +433,7 @@ impl KeybindingsView {
         };
 
         let mut section_header = self.render_text(
-            title.into(),
+            title,
             Some(UiComponentStyles {
                 font_color: Some(appearance.theme().active_ui_text_color().into()),
                 font_size: Some(SECTION_HEADER_FONT_SIZE),

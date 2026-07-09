@@ -208,6 +208,8 @@ pub struct FontInfo {
 }
 
 type RasterBoundsKey = (GlyphKey, (OrderedFloat<f32>, OrderedFloat<f32>));
+type AvailableSystemFonts = Vec<(Option<FamilyId>, FontInfo)>;
+type AvailableSystemFontsSender = futures::channel::oneshot::Sender<AvailableSystemFonts>;
 
 pub struct Cache {
     selections: DashMap<(FamilyId, Properties), FontId>,
@@ -222,13 +224,12 @@ pub struct Cache {
     glyph_typographic_bounds: DashMap<(FontId, GlyphId), Result<RectI, Error>>,
     raster_bounds: DashMap<RasterBoundsKey, Result<RectI, Error>>,
     #[cfg_attr(target_family = "wasm", allow(dead_code))]
-    available_system_fonts: Option<Vec<(Option<FamilyId>, FontInfo)>>,
+    available_system_fonts: Option<AvailableSystemFonts>,
     /// In-flight 等待者：当 `available_system_fonts` 还没就绪、首次扫描尚在异步执行时，
     /// 后续 `all_system_fonts` 调用把自己的 sender 挂到这里复用同一次扫描结果，
     /// 避免重复 spawn + 重复主线程 `process_loaded_system_fonts`。
     #[cfg_attr(target_family = "wasm", allow(dead_code))]
-    pending_system_fonts_senders:
-        Vec<futures::channel::oneshot::Sender<Vec<(Option<FamilyId>, FontInfo)>>>,
+    pending_system_fonts_senders: Vec<AvailableSystemFontsSender>,
     font_fallback_cache: FontFallbackCache,
 }
 
@@ -293,7 +294,7 @@ impl Cache {
     pub fn all_system_fonts(
         &mut self,
         ctx: &mut crate::ModelContext<Self>,
-    ) -> BoxFuture<'static, Vec<(Option<FamilyId>, FontInfo)>> {
+    ) -> BoxFuture<'static, AvailableSystemFonts> {
         if let Some(fonts) = self.available_system_fonts.as_ref() {
             return futures::future::ready(fonts.clone()).boxed();
         }
@@ -481,7 +482,12 @@ impl Cache {
         let mut should_check_fallback_fonts = false;
         match self.glyphs_by_char.entry((font, char)) {
             Entry::Occupied(entry) => {
-                return *entry.into_ref();
+                let glyph_id = *entry.into_ref();
+                if glyph_id.is_some() || !include_fallback_fonts {
+                    return glyph_id;
+                }
+
+                should_check_fallback_fonts = true;
             }
             Entry::Vacant(entry) => {
                 let glyph_id = self.platform.glyph_for_char(font, char);

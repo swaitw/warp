@@ -25,7 +25,7 @@ use ai::skills::{
 use async_channel::Sender;
 use chrono::{DateTime, Duration, Utc};
 use repo_metadata::{
-    repositories::{DetectedRepositories, RepoDetectionSource},
+    repositories::DetectedRepositories,
     repository::{Repository, SubscriberId},
     DirectoryWatcher, RepoMetadataModel, RepositoryUpdate,
 };
@@ -141,7 +141,7 @@ impl SkillWatcher {
             Self::spawn_read_skills_from_directories(warp_managed_skill_dirs(), ctx);
             let skills_parent_paths: HashSet<PathBuf> = SKILL_PROVIDER_DEFINITIONS
                 .iter()
-                .filter(|provider| provider.provider != SkillProvider::Warp)
+                .filter(|provider| provider.provider != SkillProvider::Zap)
                 .filter_map(|provider| {
                     home_skills_path(provider.provider)
                         .and_then(|skills_path| skills_path.parent().map(Path::to_path_buf))
@@ -188,27 +188,6 @@ impl SkillWatcher {
                 | RepoMetadataEvent::FileTreeUpdated { .. }
                 | RepoMetadataEvent::UpdatingRepositoryFailed { .. }
                 | RepoMetadataEvent::IncrementalUpdateReady { .. } => {}
-            }
-        });
-
-        // Subscribe to DetectedRepositories to watch repos registered via CloudEnvironmentPrep.
-        // This fires when AgentDriver calls prepare_environment (for any run with a configured
-        // environment, Warp-hosted or self-hosted). The CloudEnvironmentPrep source filter means
-        // this is a no-op on local runs where no environment is configured.
-        ctx.subscribe_to_model(&DetectedRepositories::handle(ctx), |me, event, ctx| {
-            use repo_metadata::repositories::DetectedRepositoriesEvent;
-            match event {
-                DetectedRepositoriesEvent::DetectedGitRepo { source, .. }
-                    if *source == RepoDetectionSource::CloudEnvironmentPrep =>
-                {
-                    // The repo root is already registered in DirectoryWatcher by the time
-                    // this event fires. Extract its path from the repository handle.
-                    let DetectedRepositoriesEvent::DetectedGitRepo { repository, .. } = event;
-                    let repo_path = repository.as_ref(ctx).root_dir().to_local_path_lossy();
-                    me.watch_repo(repo_path.clone(), ctx);
-                    me.scan_repository_for_skills(&repo_path, ctx);
-                }
-                DetectedRepositoriesEvent::DetectedGitRepo { .. } => {}
             }
         });
 
@@ -722,7 +701,7 @@ impl SkillWatcher {
 
         let provider_root_paths: HashSet<String> = SKILL_PROVIDER_DEFINITIONS
             .iter()
-            .filter(|provider| provider.provider != SkillProvider::Warp)
+            .filter(|provider| provider.provider != SkillProvider::Zap)
             .filter_map(|provider| {
                 let component = provider.skills_path.components().next();
                 component.map(|component| component.as_os_str().to_string_lossy().to_string())

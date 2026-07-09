@@ -3,7 +3,27 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use warpui::{Entity, SingletonEntity};
 
-use crate::server::server_api::TranscribeError;
+#[derive(thiserror::Error, Debug)]
+pub enum TranscribeError {
+    #[error("Request failed due to lack of Voice quota.")]
+    QuotaLimit,
+
+    #[error("Zap is currently overloaded. Please try again later.")]
+    ServerOverloaded,
+
+    #[error("Internal error occurred at transport layer.")]
+    Transport,
+
+    #[error("Failed to deserialize JSON.")]
+    Deserialization,
+
+    /// Zap 已禁用语音转写(BYOP genai 协议无法承载音频)。
+    #[error("Voice transcription is unavailable in Zap.")]
+    Disabled,
+
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
 
 /// Interface for transcribing voice input.
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
@@ -33,6 +53,13 @@ impl VoiceTranscriber {
         Self {
             transcriber: Some(transcriber),
         }
+    }
+
+    /// Zap(本地化,Phase 4):创建一个禁用的 transcriber。原语义上 `Some(...)`
+    /// 代表云端 STT 后端可用,`None` 代表 "transcriber disabled";本地化后云端
+    /// `ServerVoiceTranscriber`(调 server_api.transcribe 发 Wispr STT)不可用,改走该构造子。
+    pub fn disabled() -> Self {
+        Self { transcriber: None }
     }
 
     /// Returns the transcriber if one is set.

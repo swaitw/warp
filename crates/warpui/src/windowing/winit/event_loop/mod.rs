@@ -50,7 +50,7 @@ use super::CustomEvent;
 #[cfg(windows)]
 use super::windows::{add_network_connection_listener, WindowsNetworkConnectionPoint};
 
-use self::key_events::convert_keyboard_input_event;
+use self::key_events::{convert_keyboard_input_event, text_fallback_event_for_unconverted_key};
 
 /// This is the time duration beyond which clicks get treated as separate single clicks instead of
 /// double-click, triple-click, etc.
@@ -503,6 +503,12 @@ pub(super) struct EventLoop {
     state: State,
     proxy: EventLoopProxy<CustomEvent>,
     ime_enabled: bool,
+    /// The most recently handled IME preedit `(text, cursor range)`, used to drop duplicate preedit
+    /// events. Some Wayland compositors (notably KDE Plasma 6) re-send an identical preedit in
+    /// response to the `set_ime_cursor_area` commit we issue while repositioning the candidate
+    /// window, which would otherwise spin into a preedit <-> reposition feedback loop (see upstream
+    /// warpdotdev/warp#11013). Reset whenever IME is enabled, committed, or disabled.
+    last_preedit: Option<(String, Option<(usize, usize)>)>,
     /// Whether to downrank non-NVIDIA vulkan adapters. This is set to true when we detect a DRI3
     /// error that occurs when trying to present against a non-NVIDIA Vulkan adapter when the
     /// PRIME Profile is set to "Performance" mode.  It's not fully clear why this error occurs. Our
@@ -532,6 +538,7 @@ impl EventLoop {
             state: Default::default(),
             proxy,
             ime_enabled: false,
+            last_preedit: None,
             downrank_non_nvidia_vulkan_adapters: false,
             #[cfg(target_family = "wasm")]
             soft_keyboard_manager: None,
@@ -750,9 +757,17 @@ impl EventLoop {
                 });
             }
             Event::UserEvent(CustomEvent::ActiveCursorPositionUpdated) => {
-                if self.ime_enabled {
-                    self.update_ime_position();
-                }
+                // 关键:不要用 `self.ime_enabled` 守卫这个调用。
+                //
+                // 在 Windows 上,winit 仅在收到 `WM_IME_STARTCOMPOSITION` 时才派发 `Ime::Enabled`,
+                // 此时 IMM 已经在同一条消息处理中读取过 COMPOSITIONFORM/CANDIDATEFORM,
+                // 异步等到 `Ime::Enabled` 才第一次 `ImmSetCompositionWindow` 已经赶不上 Win11
+                // 微软拼音渲染候选窗,导致候选窗落到屏幕右下角"输入工具箱"默认位置。
+                //
+                // 因此焦点/光标移动一旦触发 `ActiveCursorPositionUpdated`,无论 IME 是否处于
+                // composition 状态,都要把当前光标矩形推给 IMM,让下一次 composition 启动时
+                // IMM 上下文里已经有正确的位置。
+                self.update_ime_position();
             }
             Event::UserEvent(CustomEvent::AboutToSleep) => {
                 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
@@ -903,7 +918,7 @@ impl EventLoop {
                 };
 
                 // There is a winit bug such that events which cause a window to switch displays to
-                // one with a different scale factor resize the Warp window to an absurdly small
+                // one with a different scale factor resize the Zap window to an absurdly small
                 // size, <157, 25> on my system when I repro it. Events include unplugging a
                 // display, changing a display from extended to mirrored, and the like. We work
                 // around that by listening for [`WindowEvent::ScaleFactorChanged`] and changing
@@ -1285,7 +1300,7 @@ impl EventLoop {
                 }
 
                 // If the event is a modifier key, just by itself, we handle it specially, issuing
-                // the appropriate Warp-side event (ModifierKeyChanged).
+                // the appropriate Zap-side event (ModifierKeyChanged).
                 if let (None, keyboard::PhysicalKey::Code(keycode)) =
                     (&event.text, &event.physical_key)
                 {
@@ -1298,8 +1313,19 @@ impl EventLoop {
                 }
 
                 let event_text = event.text.as_ref().map(|text| text.to_string());
-                let warp_ui_event =
-                    convert_keyboard_input_event(event, window_state, is_synthetic)?;
+                let event_state = event.state;
+                let modifiers = window_state.modifiers;
+                let Some(warp_ui_event) =
+                    convert_keyboard_input_event(event, window_state, is_synthetic)
+                else {
+                    return text_fallback_event_for_unconverted_key(
+                        event_text,
+                        event_state,
+                        modifiers,
+                        is_synthetic,
+                    )
+                    .map(ConvertedEvent::Event);
+                };
                 Some(ConvertedEvent::KeyDownWithTypedCharacters {
                     chars: event_text,
                     event: warp_ui_event,
@@ -1509,6 +1535,8 @@ impl EventLoop {
         match event {
             winit::event::Ime::Enabled => {
                 self.ime_enabled = true;
+                // 新一轮 composition 上下文,清掉上次 preedit 的去重基准。
+                self.last_preedit = None;
                 self.ui_app
                     .update(|ctx| ctx.report_active_cursor_position_update());
             }
@@ -1516,6 +1544,29 @@ impl EventLoop {
                 if !self.ime_enabled {
                     return;
                 }
+
+                // KDE Plasma 6 (Wayland) 下,update_ime_position 发出的 set_ime_cursor_area commit
+                // 会促使输入法重新回送同一段(焦点切换时通常为空)的 preedit;若每次都派发
+                // SetMarkedText 并重定位,就会形成 preedit <-> 重定位的自激循环(上游
+                // warpdotdev/warp#11013:SetMarkedText 被刷屏约 7 万次后崩溃)。对与上一次完全
+                // 相同的 preedit 直接早退,断开这个环。
+                if self
+                    .last_preedit
+                    .as_ref()
+                    .is_some_and(|(text, range)| text == &preedit_text && *range == cursor_position)
+                {
+                    return;
+                }
+                // 记录 preedit 文本是否变化：update_ime_position 读取的是终端光标位置，该
+                // 位置只有在 preedit 文本实际改变时才会移动。若同文本仅 cursor_position 不同
+                // (IME 对 set_ime_cursor_area 的回声)，调用 update_ime_position 会再次触发
+                // 回送，引发 2-步振荡崩溃（Fixes #213）。
+                let preedit_text_changed = self
+                    .last_preedit
+                    .as_ref()
+                    .map(|(text, _)| text != &preedit_text)
+                    .unwrap_or(true);
+                self.last_preedit = Some((preedit_text.clone(), cursor_position));
 
                 let Some(window_state) = self.state.windows.get_mut(&winit_window_id) else {
                     return;
@@ -1534,8 +1585,20 @@ impl EventLoop {
                         .map(|cursor_position| cursor_position.0..cursor_position.1)
                         .unwrap_or(0..0),
                 });
+                drop(window_callbacks);
+
+                // composition 期间光标会因为预编辑文本插入、换行而移动,需要持续把最新的
+                // 矩形推给 IMM,否则候选窗会停留在 composition 起始位置(在某些 IME 上会
+                // 表现为候选窗与当前输入位置错位)。仅当文本变化时才重新定位，避免同文本
+                // 不同 cursor_position 的 IME 回声触发新一轮振荡。
+                if preedit_text_changed {
+                    self.update_ime_position();
+                }
             }
             winit::event::Ime::Commit(chars) => {
+                // composition 已提交,清掉去重基准,避免下一轮起始 preedit 被误判为重复。
+                self.last_preedit = None;
+
                 let Some(window_state) = self.state.windows.get_mut(&winit_window_id) else {
                     return;
                 };
@@ -1554,6 +1617,7 @@ impl EventLoop {
             }
             winit::event::Ime::Disabled => {
                 self.ime_enabled = false;
+                self.last_preedit = None;
             }
         };
     }
@@ -1620,10 +1684,15 @@ impl EventLoop {
                     // Double-clicking the titlebar does maximize/restore.
                     if click_count >= 2 {
                         window.toggle_maximized();
-                    } else if window_state.last_touch_purpose.is_none() {
+                    } else if window_state.last_touch_purpose.is_none()
+                        && !winit_window.is_maximized()
+                    {
                         // Single-click drag moves the window. Skip for touch events as
                         // drag_window doesn't work properly with touch input on Windows.
                         // We won't receive MouseInput::Released after drag_window.
+                        // Also skip when maximized: calling drag_window on a maximized window
+                        // corrupts OS window state on Windows, causing the window to become
+                        // unable to move or resize after restore. See: issue #220
                         match winit_window.drag_window() {
                             Ok(_) => window_state.current_mouse_button_pressed = None,
                             Err(err) => log::error!("error dragging window: {err:?}"),

@@ -13,7 +13,6 @@ default-members = [
   "crates/channel_versions",
   "crates/command",
   "crates/editor",
-  "crates/graphql",
   "crates/markdown_parser",
   "crates/sum_tree",
   "crates/warpui",
@@ -38,7 +37,6 @@ command = { path = "crates/command" }
 command-signatures-v2 = { path = "crates/command-signatures-v2" }
 computer_use = { path = "crates/computer_use" }
 field_mask = { path = "crates/field_mask" }
-firebase = { path = "crates/firebase" }
 fuzzy_match = { path = "crates/fuzzy_match" }
 handlebars = { path = "crates/handlebars" }
 http_client = { path = "crates/http_client" }
@@ -48,7 +46,6 @@ integration = { path = "crates/integration" }
 ipc = { path = "crates/ipc" }
 jsonrpc = { path = "crates/jsonrpc" }
 languages = { path = "crates/languages" }
-lsp = { path = "crates/lsp" }
 markdown_parser = { path = "crates/markdown_parser" }
 natural_language_detection = { path = "crates/natural_language_detection" }
 node_runtime = { path = "crates/node_runtime" }
@@ -75,17 +72,15 @@ warp_editor = { path = "crates/editor" }
 warp_features = { path = "crates/warp_features" }
 remote_server = { path = "crates/remote_server" }
 warp_files = { path = "crates/warp_files" }
-warp_graphql = { path = "crates/graphql" }
-warp_graphql_schema = { path = "crates/warp_graphql_schema" }
 warp_isolation_platform = { path = "crates/isolation_platform" }
 warp_js = { path = "crates/warp_js" }
 warp_logging = { path = "crates/warp_logging" }
 warp_managed_secrets = { path = "crates/managed_secrets" }
 warp_ripgrep = { path = "crates/warp_ripgrep" }
-warp_server_client = { path = "crates/warp_server_client" }
 warp_ssh_manager = { path = "crates/warp_ssh_manager" }
 warp_terminal = { path = "crates/warp_terminal" }
 warp_util = { path = "crates/warp_util" }
+zap_sync = { path = "crates/zap_sync" }
 warp_web_event_bus = { path = "crates/warp_web_event_bus" }
 warpui = { path = "crates/warpui" }
 warpui_core = { path = "crates/warpui_core" }
@@ -128,8 +123,6 @@ clap = { version = "4.5", features = ["derive"] }
 cocoa = "=0.26.0"
 ctrlc = "3.4.7"
 crc = "3.4.0"
-cynic = { version = "3" }
-cynic-codegen = { version = "3", features = ["rkyv"] }
 dashmap = "6.1.0"
 derive_more = "0.99.17"
 diesel = { version = "2.3.8", default-features = false }
@@ -151,12 +144,11 @@ gloo = { version = "0.11.0", default-features = false, features = [
   "futures",
   "utils",
 ] }
-graphql-ws-client = { version = "0.11.1", default-features = false }
 hex = "0.4.3"
 # This matches the version of hyper used by reqwest.
 hyper = "1.6.0"
 html5ever = "0.35.0"
-# OpenWarp BYOP webfetch:HTML→Markdown(纯 Rust 端口的 Turndown 实现,
+# Zap BYOP webfetch:HTML→Markdown(纯 Rust 端口的 Turndown 实现,
 # 对应 opencode webfetch.ts 用的 turndown JS 库)。
 htmd = "0.2"
 http = "1.1.0"
@@ -185,6 +177,14 @@ keyring = { version = "3.6", features = [
     "linux-native",
     "linux-native-sync-persistent",
     "crypto-rust",
+    # vendored:让 dbus-secret-service → dbus → libdbus-sys 从 C 源码编译 dbus,
+    # 不再依赖系统 `libdbus-1-dev` + pkg-config。这样:
+    #   1. 把 warp 交叉编译到 x86_64-unknown-linux-musl(dev 自动上传 remote-server、
+    #      release CI 的 musl CLI 产物)时,libdbus-sys 不会因 pkg-config 不支持
+    #      cross 而失败;
+    #   2. 普通 Linux 构建也不再需要预装 dbus 开发包。
+    # 代价是每次 clean build 多编译一个小 C 库(可缓存),换来构建自洽。
+    "vendored",
 ] }
 lasso = { version = "0.7.3", features = ["multi-threaded"] }
 lazy_static = "1.4.0"
@@ -261,17 +261,6 @@ sys-locale = "0.3"
 rustc-hash = "2.1.1"
 rustls = "0.23.39"
 schemars = { version = "1", features = ["chrono04"] }
-sentry = { version = "0.41.0", default-features = false, features = [
-  "anyhow",
-  "backtrace",
-  "contexts",
-  "debug-images",
-  "panic",
-  "release-health",
-  "reqwest",
-  "rustls",
-] }
-sentry-log = "0.41.0"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_bytes = "0.11"
 serde-bytes-repr = "0.3"
@@ -279,7 +268,6 @@ serde_json = { version = "1.0", features = ["raw_value"] }
 serde_urlencoded = "0.7"
 serde_with = "2.0.1"
 serde_yaml = "0.8"
-session-sharing-protocol = { git = "https://github.com/warpdotdev/session-sharing-protocol.git", rev = "3a12b871dfd1019a66057e4d9b7d5c812b73ee8c" }
 similar = { version = "2.7", features = ["inline"] }
 simplelog = "0.12.2"
 smallvec = "1.6.1"
@@ -327,6 +315,21 @@ arborium = { version = "2", default-features = false, features = [
   "lang-xml",
   "lang-vue",
   "lang-dockerfile",
+  "lang-dart",
+  "lang-zig",
+  "lang-scss",
+  "lang-r",
+  "lang-julia",
+  "lang-ocaml",
+  "lang-erlang",
+  "lang-nix",
+  "lang-groovy",
+  "lang-solidity",
+  "lang-graphql",
+  "lang-proto",
+  "lang-clojure",
+  "lang-elm",
+  "lang-cmake",
 ] }
 unicode-width = "0.1.12"
 uuid = { version = "1.1.2", features = ["v4", "serde", "js"] }
@@ -335,7 +338,7 @@ version-compare = "0.1"
 vte = { git = "https://github.com/warpdotdev/vte.git", rev = "4b399c87b63ba88f45709edaa6383fc519f6c900", default-features = false }
 walkdir = "2"
 warp-workflows = { git = "https://github.com/warpdotdev/workflows", rev = "793a98ddda6ef19682aed66364faebd2829f0e01" }
-warp_multi_agent_api = { git = "https://github.com/warpdotdev/warp-proto-apis.git", rev = "aa2f9cde164a5b48ac01087d417d1188771f9b6d" }
+warp_multi_agent_api = { git = "https://github.com/zerx-lab/warp-proto-apis.git", rev = "14ab9a71ea3e9521b2ffab2f97a64e7c21050669" }
 wasm-bindgen = "0.2.89"
 wasm-bindgen-futures = "0.4.42"
 web-sys = { version = "0.3.69", features = [
@@ -377,11 +380,12 @@ regex = "1.11.1"
 rquickjs = { version = "0.3.1" }
 dirs = "6.0.0"
 rayon = "1.10.0"
+aes-gcm = "0.10"
 sha2 = "0.10"
 shell-escape = "0.1.5"
 shellexpand = "3.1.1"
 warp-command-signatures = { git = "https://github.com/warpdotdev/command-signatures.git", rev = "00a032b8ea0ee5711e2077e39a92dc9ca2051cd3", default-features = false }
-winit = { git = "https://github.com/warpdotdev/winit.git", rev = "7ef01853ae3fe952e6014080a88dc4352662dfb1" }
+winit = { git = "https://github.com/chenx-dust/winit.git", rev = "7ef914a440ad203da05355e6c3f8c482766987ec" }
 x11rb = "0.13.0"
 mockito = "1.7.0"
 sysinfo = { version = "0.37.0", default-features = false, features = [
@@ -411,13 +415,10 @@ parquet = { version = "55.0.0", features = ["arrow"] }
 rmcp = { git = "https://github.com/warpdotdev/rmcp.git", rev = "c0f65dc441af7d714b9c453ac5e7ef641451abe3" }
 
 [profile.release]
-# Use line-tables-only (debug = 1) rather than full debuginfo (debug = 2 /
-# `true`). Line tables are enough to symbolicate panics and Sentry stack
-# traces with file/line info, but they omit the per-variable/type DWARF that
-# dominates DWARF size. Dropping the type info significantly reduces rustc's
-# peak memory during ThinLTO + codegen (which was OOM-killing release builds
-# on CI), at the cost of not being able to inspect locals/types when
-# attaching a debugger to a release binary.
+# 使用 line-tables-only(debug = 1),而不是完整 debuginfo(debug = 2 / `true`)。
+# 行号表足够为本地 crash stack 提供文件/行号,同时省略体积最大的变量/类型 DWARF。
+# 这能显著降低 ThinLTO + codegen 时 rustc 的峰值内存,代价是 release binary
+# 调试时无法查看 locals/types。
 debug = 1
 # Force the rust compiler to create a dSYM. Starting in 1.53 the default on MacOS is "unpacked".
 split-debuginfo = "packed"
@@ -544,7 +545,7 @@ tink-hybrid = { git = "https://github.com/warpdotdev/tink-rust", branch = "warpd
 tikv-jemallocator = { git = "https://github.com/warpdotdev/jemallocator.git", rev = "2ee30bfdf7059223b54810e4ea6c666f0a379e0b" }
 tikv-jemalloc-sys = { git = "https://github.com/warpdotdev/jemallocator.git", rev = "2ee30bfdf7059223b54810e4ea6c666f0a379e0b" }
 
-# OpenWarp 本地 fork — 解锁 DeepSeek thinking_mode `reasoning_effort` 顶层注入。
+# Zap 本地 fork — 解锁 DeepSeek thinking_mode `reasoning_effort` 顶层注入。
 # 上游 genai 0.6.0-beta.18 在 adapter_shared.rs:85 把 reasoning_effort 注入条件
 # 硬编码为 `adapter_kind == OpenAI`,DeepSeek 走 else 分支被吞,即便 client 端把
 # ChatOptions::reasoning_effort 设为 high/medium/low,HTTP body 顶层也不会出现该字段。
@@ -553,5 +554,6 @@ tikv-jemalloc-sys = { git = "https://github.com/warpdotdev/jemallocator.git", re
 genai = { path = "lib/rust-genai" }
 
 [patch."https://github.com/warpdotdev/warp-proto-apis.git"]
-# Uncomment for local development of warp-proto-apis
-# warp_multi_agent_api = { path = "../warp-proto-apis/apis/multi_agent/v1/gen/rust" }
+# Zap 已切到 zerx-lab fork(见上方 dependency 改动),保留这条 patch 以
+# 便其它 transitive deps 若意外引用上游 url 时也走 fork。
+warp_multi_agent_api = { git = "https://github.com/zerx-lab/warp-proto-apis.git", rev = "14ab9a71ea3e9521b2ffab2f97a64e7c21050669" }

@@ -158,7 +158,7 @@ impl UpdateModalBody {
             Text::new_inline(
                 "ESC".to_string(),
                 appearance.ui_font_family(),
-                appearance.ui_font_size() * 0.8,
+                appearance.ui_font_overline(),
             )
             .with_color(theme.active_ui_text_color().into())
             .finish(),
@@ -212,7 +212,7 @@ impl UpdateModalBody {
             .finish();
 
         let (title, description) = match option {
-            MCPServerUpdate::CloudTemplate {
+            MCPServerUpdate::TemplateObject {
                 publisher,
                 new_version_ts,
                 ..
@@ -267,7 +267,7 @@ impl UpdateModalBody {
                 Text::new(
                     description.clone(),
                     appearance.ui_font_family(),
-                    appearance.ui_font_size() * 0.85,
+                    appearance.ui_font_overline(),
                 )
                 .with_color(blended_colors::text_sub(theme, theme.surface_2()))
                 .finish(),
@@ -314,7 +314,7 @@ impl UpdateModalBody {
         let cancel_button = appearance
             .ui_builder()
             .button(ButtonVariant::Text, self.cancel_mouse_state.clone())
-            .with_text_label(crate::t!("settings-mcp-update-modal-cancel").into())
+            .with_text_label(crate::t!("settings-mcp-update-modal-cancel"))
             .with_style(UiComponentStyles {
                 font_weight: Some(Weight::Bold),
                 font_color: Some(appearance.theme().active_ui_text_color().into()),

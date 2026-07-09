@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use chrono::Local;
 use smol_str::SmolStr;
@@ -8,6 +7,8 @@ use warp_editor::render::model::LineCount;
 use warp_util::path::EscapeChar;
 use warpui::App;
 
+#[cfg(unix)]
+use super::cli_agent_search_dirs;
 use super::{
     build_diff_hunk_prompt, build_review_prompt, build_selection_line_range_prompt,
     build_selection_substring_prompt, CLIAgent, UBER_TEAM_UID,
@@ -18,8 +19,6 @@ use crate::code_review::comments::{
     AttachedReviewComment, AttachedReviewCommentTarget, CommentOrigin, LineDiffContent,
 };
 use crate::server::ids::ServerId;
-use crate::server::server_api::team::MockTeamClient;
-use crate::server::server_api::workspace::MockWorkspaceClient;
 use crate::workspaces::team::Team;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::workspaces::workspace::Workspace;
@@ -255,12 +254,14 @@ fn test_detect_known_agents() {
                 ("codex", CLIAgent::Codex),
                 ("deepseek", CLIAgent::DeepSeek),
                 ("deepseek-tui", CLIAgent::DeepSeek),
+                ("agy", CLIAgent::Antigravity),
                 ("amp", CLIAgent::Amp),
                 ("droid", CLIAgent::Droid),
                 ("opencode", CLIAgent::OpenCode),
                 ("copilot", CLIAgent::Copilot),
                 ("agent", CLIAgent::CursorCli),
                 ("goose", CLIAgent::Goose),
+                ("omp", CLIAgent::Omp),
             ] {
                 assert_eq!(
                     CLIAgent::detect(command, None, None, ctx),
@@ -422,14 +423,7 @@ fn workspace_with_team_uid(uid: &str) -> Workspace {
 fn test_detect_aifx_agent_run_claude_on_uber_team() {
     App::test((), |mut app| async move {
         let uber_workspace = workspace_with_team_uid(UBER_TEAM_UID);
-        app.add_singleton_model(|ctx| {
-            UserWorkspaces::mock(
-                Arc::new(MockTeamClient::new()),
-                Arc::new(MockWorkspaceClient::new()),
-                vec![uber_workspace],
-                ctx,
-            )
-        });
+        app.add_singleton_model(|ctx| UserWorkspaces::mock(vec![uber_workspace], ctx));
 
         app.update(|ctx| {
             assert_eq!(
@@ -449,14 +443,7 @@ fn test_detect_aifx_agent_run_claude_on_uber_team() {
 fn test_detect_aifx_agent_run_claude_via_alias_on_uber_team() {
     App::test((), |mut app| async move {
         let uber_workspace = workspace_with_team_uid(UBER_TEAM_UID);
-        app.add_singleton_model(|ctx| {
-            UserWorkspaces::mock(
-                Arc::new(MockTeamClient::new()),
-                Arc::new(MockWorkspaceClient::new()),
-                vec![uber_workspace],
-                ctx,
-            )
-        });
+        app.add_singleton_model(|ctx| UserWorkspaces::mock(vec![uber_workspace], ctx));
 
         app.update(|ctx| {
             let map = aliases(&[("ai", "aifx agent run claude")]);
@@ -517,14 +504,7 @@ fn test_from_serialized_name_falls_back_to_unknown() {
 fn test_detect_aifx_agent_run_claude_wrong_team() {
     App::test((), |mut app| async move {
         let other_workspace = workspace_with_team_uid("some-other-team-uid-01");
-        app.add_singleton_model(|ctx| {
-            UserWorkspaces::mock(
-                Arc::new(MockTeamClient::new()),
-                Arc::new(MockWorkspaceClient::new()),
-                vec![other_workspace],
-                ctx,
-            )
-        });
+        app.add_singleton_model(|ctx| UserWorkspaces::mock(vec![other_workspace], ctx));
 
         app.update(|ctx| {
             assert_eq!(
@@ -533,4 +513,26 @@ fn test_detect_aifx_agent_run_claude_wrong_team() {
             );
         });
     });
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_agent_search_dirs_include_common_gui_app_paths() {
+    let dirs: Vec<PathBuf> = cli_agent_search_dirs().collect();
+
+    assert!(dirs.contains(&PathBuf::from("/opt/homebrew/bin")));
+    assert!(dirs.contains(&PathBuf::from("/usr/local/bin")));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_agent_search_dirs_include_home_managed_bins() {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return;
+    };
+    let dirs: Vec<PathBuf> = cli_agent_search_dirs().collect();
+
+    assert!(dirs.contains(&home.join(".cargo/bin")));
+    assert!(dirs.contains(&home.join(".bun/bin")));
+    assert!(dirs.contains(&home.join(".local/bin")));
 }

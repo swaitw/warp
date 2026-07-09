@@ -174,6 +174,7 @@ impl Sessions {
                 | RemoteServerManagerEvent::RepoMetadataSnapshot { .. }
                 | RemoteServerManagerEvent::RepoMetadataUpdated { .. }
                 | RemoteServerManagerEvent::RepoMetadataDirectoryLoaded { .. }
+                | RemoteServerManagerEvent::BufferUpdated { .. }
                 | RemoteServerManagerEvent::BinaryCheckComplete { .. }
                 | RemoteServerManagerEvent::BinaryInstallComplete { .. }
                 | RemoteServerManagerEvent::ClientRequestFailed { .. }
@@ -831,19 +832,19 @@ impl SessionInfo {
 /// which happens *after* the session is bootstrapped.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BootstrapSessionType {
-    /// The session host is the same host where Warp is running.
+    /// The session host is the same host where Zap is running.
     Local,
 
-    /// The session host is a different host from where Warp is running.
+    /// The session host is a different host from where Zap is running.
     WarpifiedRemote,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SessionType {
-    /// The session host is the same host where Warp is running.
+    /// The session host is the same host where Zap is running.
     Local,
 
-    /// The session host is a different host from where Warp is running.
+    /// The session host is a different host from where Zap is running.
     /// Note that we only know this for sure when we Warpify a block.
     ///
     /// `host_id` is `Some` when the remote server feature flag is enabled and
@@ -1294,25 +1295,8 @@ impl Session {
                 log::warn!(
                     "Failed to read history using PowerShell commands: {powershell_error:?}"
                 );
-                #[cfg(feature = "crash_reporting")]
-                sentry::with_scope(
-                    |scope| {
-                        let mut context = std::collections::BTreeMap::new();
-                        context.insert(
-                            "powershell_error".to_string(),
-                            format!("{powershell_error:?}").into(),
-                        );
-                        scope.set_context(
-                            "powershell_history",
-                            sentry::protocol::Context::Other(context),
-                        );
-                    },
-                    || {
-                        sentry::capture_message(
-                            "Failed to read history using PowerShell commands",
-                            sentry::Level::Error,
-                        )
-                    },
+                log::error!(
+                    "Failed to read history using PowerShell commands: {powershell_error:?}"
                 );
                 Ok(contents)
             }
@@ -1541,7 +1525,7 @@ impl Display for Session {
     }
 }
 
-/// Returns the hostname for the local machine where Warp is running.
+/// Returns the hostname for the local machine where Zap is running.
 pub fn get_local_hostname() -> Result<String> {
     cfg_if::cfg_if! {
         if #[cfg(not(target_family = "wasm"))] {

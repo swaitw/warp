@@ -63,9 +63,6 @@ impl FileBasedMCPManager {
             } => {
                 self.remove_servers_for_root_provider(root_path, *provider, ctx);
             }
-            FileMCPWatcherEvent::CloudEnvMcpScanComplete { repo_path } => {
-                self.handle_cloud_environment_scan_complete(repo_path, ctx);
-            }
         }
     }
 
@@ -235,7 +232,7 @@ impl FileBasedMCPManager {
     /// config location.
     ///
     /// "Global" means the installation was detected outside of a user repository:
-    /// - For `MCPProvider::Warp`: the logical root for `~/.warp*/.mcp.json`.
+    /// - For `MCPProvider::Zap`: the logical root for `~/.warp*/.mcp.json`.
     /// - For any other provider: the user's home directory (e.g. `~/.claude.json`).
     ///
     /// Project-scoped installations (those detected inside a repo) are not considered
@@ -251,7 +248,7 @@ impl FileBasedMCPManager {
                         return false;
                     }
                     match provider {
-                        MCPProvider::Warp => Self::is_global_warp_root(root_path),
+                        MCPProvider::Zap => Self::is_global_warp_root(root_path),
                         MCPProvider::Claude | MCPProvider::Codex | MCPProvider::Agents => {
                             home_dir.as_ref().is_some_and(|home| root_path == home)
                         }
@@ -261,14 +258,14 @@ impl FileBasedMCPManager {
     }
 
     /// Returns `true` if the server identified by `hash` is referenced from the global
-    /// Warp config (`~/.warp/.mcp.json`). Global Warp servers always auto-spawn.
+    /// Zap config (`~/.warp/.mcp.json`). Global Zap servers always auto-spawn.
     fn is_global_warp_server(&self, hash: u64) -> bool {
         self.file_based_servers_by_root
             .iter()
             .any(|(root_path, provider_map)| {
                 Self::is_global_warp_root(root_path)
                     && provider_map
-                        .get(&MCPProvider::Warp)
+                        .get(&MCPProvider::Zap)
                         .is_some_and(|hashes| hashes.contains(&hash))
             })
     }
@@ -288,8 +285,8 @@ impl FileBasedMCPManager {
         let mcp_enabled = AISettings::as_ref(ctx).is_file_based_mcp_enabled(ctx);
 
         // Partition servers into three buckets based on scope:
-        // - Global Warp: always auto-spawn.
-        // - Global non-Warp: auto-spawn iff the toggle is on.
+        // - Global Zap: always auto-spawn.
+        // - Global non-Zap: auto-spawn iff the toggle is on.
         // - Project-scoped (any provider): never auto-spawn; require explicit opt-in
         //   via the "Detected from {provider}" section of the MCP settings.
         let mut to_spawn = Vec::new();
@@ -311,35 +308,9 @@ impl FileBasedMCPManager {
         }
     }
 
-    fn handle_cloud_environment_scan_complete(
-        &mut self,
-        repo_path: &PathBuf,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        // Retrieve UUIDs of all file-based MCP servers in the repository.
-        let server_uuids: Vec<Uuid> = self
-            .file_based_servers_by_root
-            .get(repo_path)
-            .map(|provider_map| {
-                provider_map
-                    .values()
-                    .flat_map(|hash_set| hash_set.iter())
-                    .filter_map(|hash| self.file_based_servers.get(hash))
-                    .map(|installation| installation.uuid())
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        // Pass the UUIDs of all detected file-based MCP servers to the AgentDriver.
-        ctx.emit(FileBasedMCPManagerEvent::CloudEnvMcpScanComplete {
-            repo_path: repo_path.clone(),
-            server_uuids,
-        });
-    }
-
     fn handle_file_based_mcp_enabled_change(&mut self, ctx: &mut ModelContext<Self>) {
         // Only global third-party servers are affected by the toggle:
-        // - Global Warp servers always spawn regardless of the toggle.
+        // - Global Zap servers always spawn regardless of the toggle.
         // - Project-scoped servers (any provider) are never auto-spawned and their
         //   running state is managed per-card via the MCP settings UI; toggling the
         //   setting must not spawn or despawn them.
@@ -360,7 +331,7 @@ impl FileBasedMCPManager {
                     .collect_vec(),
             });
         } else {
-            // Toggle on: spawn global third-party servers (global Warp servers are
+            // Toggle on: spawn global third-party servers (global Zap servers are
             // already running; project-scoped servers are unaffected).
             ctx.emit(FileBasedMCPManagerEvent::SpawnServers {
                 installations: global_third_party_servers,
@@ -415,7 +386,7 @@ impl FileBasedMCPManager {
     /// when its config does not specify `working_directory`.
     ///
     /// The spawn root is the directory the config was discovered in, with one
-    /// exception: global Warp installs are discovered in `~/.warp*/`, which
+    /// exception: global Zap installs are discovered in `~/.warp*/`, which
     /// isn't a useful cwd for spawned processes, so they are remapped to the
     /// home directory instead.
     /// - Project-scoped installations: the repo root.
@@ -435,9 +406,9 @@ impl FileBasedMCPManager {
             .sorted()
             .next()?;
 
-        // Global Warp installs live under `~/.warp*/`, which is internal Warp
+        // Global Zap installs live under `~/.warp*/`, which is internal Zap
         // state rather than a meaningful working directory. Map them to the
-        // home dir so all global installs (Warp and third-party) share a
+        // home dir so all global installs (Zap and third-party) share a
         // consistent cwd.
         if self.is_global_warp_server(hash) {
             return dirs::home_dir().or(Some(discovery_root));
@@ -455,10 +426,6 @@ pub enum FileBasedMCPManagerEvent {
     },
     PurgeCredentials {
         installation_hashes: Vec<u64>,
-    },
-    CloudEnvMcpScanComplete {
-        repo_path: PathBuf,
-        server_uuids: Vec<Uuid>,
     },
 }
 

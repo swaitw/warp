@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::OsString, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, ffi::OsString, path::PathBuf};
 
 use shell_words::quote as shell_quote;
 use uuid::Uuid;
@@ -12,7 +12,6 @@ use crate::ai::{
     },
     ambient_agents::{task::HarnessConfig, AgentConfigSnapshot, AmbientAgentTaskId},
 };
-use crate::server::server_api::ai::AIClient;
 use crate::terminal::cli_agent_sessions::plugin_manager::plugin_manager_for;
 use crate::terminal::shell::ShellType;
 
@@ -73,7 +72,6 @@ pub(super) async fn prepare_local_harness_child_launch(
     parent_run_id: Option<String>,
     shell_type: Option<ShellType>,
     startup_directory: Option<PathBuf>,
-    ai_client: Arc<dyn AIClient>,
 ) -> Result<PreparedLocalHarnessLaunch, String> {
     let Some(harness) = normalize_local_child_harness(&harness_type) else {
         let harness_name = harness_type.trim();
@@ -99,7 +97,7 @@ pub(super) async fn prepare_local_harness_child_launch(
                 .map_err(|error: AgentDriverError| error.to_string())?;
             // Local child harness panes inherit the user's existing local Claude
             // auth/session state. We still prepare Claude's config files here,
-            // but there are no Warp-managed secrets to materialize into the
+            // but there are no Zap-managed secrets to materialize into the
             // hidden child pane.
             let managed_secrets: HashMap<String, ManagedSecretValue> = HashMap::new();
             claude_harness
@@ -108,11 +106,6 @@ pub(super) async fn prepare_local_harness_child_launch(
             if let Some(manager) = plugin_manager_for(claude_harness.cli_agent()) {
                 if let Err(error) = manager.install().await {
                     log::warn!("Claude plugin installation failed for child harness: {error}");
-                }
-                if let Err(error) = manager.install_platform_plugin().await {
-                    log::warn!(
-                        "Claude platform plugin installation failed for child harness: {error}"
-                    );
                 }
             }
 
@@ -126,20 +119,11 @@ pub(super) async fn prepare_local_harness_child_launch(
         Harness::Gemini => unreachable!("normalize_local_child_harness filters out Gemini"),
     };
 
-    let task_id = ai_client
-        .create_agent_task(
-            prompt.clone(),
-            None,
-            parent_run_id.clone(),
-            local_child_task_config(harness),
-        )
-        .await
-        .map_err(|error| {
-            format!(
-                "Failed to create local {} child task: {error}",
-                harness.display_name()
-            )
-        })?;
+    // Zap(本地化,Phase 3b-4):本地 harness 启动子 task 不再走云端
+    // `create_agent_task` mutation,直接本地生成 UUID v4 作为 task_id。
+    // `local_child_task_config(harness)` 参数不再使用。
+    let _ = local_child_task_config(harness);
+    let task_id = AmbientAgentTaskId::new_local();
 
     Ok(PreparedLocalHarnessLaunch {
         command,

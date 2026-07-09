@@ -12,7 +12,7 @@
 //! 3. UI 回调里直接消费返回的 response,与原 `ServerApi` 路径完全等价
 //!
 //! 没有 BYOP 配置(`active_ai_model` 解码失败)→ `dispatch::*` 返回 `None`,
-//! 调用方静默 no-op(OpenWarp 已剥云,不再 fallback ServerApi)。
+//! 调用方静默 no-op(Zap 已剥云,不再 fallback ServerApi)。
 
 use minijinja::{context, Environment};
 use serde::Serialize;
@@ -135,7 +135,8 @@ pub struct RenderedRequest {
 
 pub mod prompt_suggestions {
     use super::*;
-    use warpui::{AppContext, EntityId};
+    use crate::settings::language::{Language, LanguageSettings};
+    use warpui::{AppContext, EntityId, SingletonEntity};
 
     pub struct Input {
         pub recent_blocks: Vec<BlockSnippet>,
@@ -150,7 +151,28 @@ pub mod prompt_suggestions {
         input: Input,
     ) -> Option<RenderedRequest> {
         let cfg = resolve_active_ai_oneshot(app, terminal_view_id)?;
-        let system = render("prompt_suggestions_system.j2", context! {});
+        let language = match *LanguageSettings::as_ref(app).language {
+            Language::English => "English",
+            Language::SimplifiedChinese => "Simplified Chinese",
+            Language::Japanese => "Japanese",
+            // Language::System follows the OS locale; resolve via the active i18n loader
+            // so Chinese/Japanese system-locale users still get CJK suggestions.
+            Language::System => {
+                let locale = crate::i18n::current_languages()
+                    .into_iter()
+                    .next()
+                    .map(|l| l.to_string())
+                    .unwrap_or_default();
+                if locale.starts_with("zh") {
+                    "Simplified Chinese"
+                } else if locale.starts_with("ja") {
+                    "Japanese"
+                } else {
+                    "English"
+                }
+            }
+        };
+        let system = render("prompt_suggestions_system.j2", context! { language => language });
         let user = render(
             "prompt_suggestions_user.j2",
             context! {
@@ -379,6 +401,12 @@ pub mod next_command {
     use super::*;
     use warpui::{AppContext, EntityId};
 
+    #[derive(Debug, Serialize)]
+    struct UserRuleCtx {
+        name: Option<String>,
+        content: String,
+    }
+
     pub struct Input {
         pub recent_blocks: Vec<BlockSnippet>,
         /// 已在 client 端从历史 DB 选出的相似命令上下文(可选)。
@@ -388,6 +416,8 @@ pub mod next_command {
         pub prefix: Option<String>,
         /// 之前已 reject 的建议(避免重复)。
         pub rejected_suggestions: Vec<String>,
+        /// 用户在 设置 → Agents → Rules 中配置的全局规则快照。
+        pub user_rules: Vec<(Option<String>, String)>,
     }
 
     /// Pre-spawn:解 BYOP 配置(需要 `&AppContext`)。`None` ⇒ 静默 no-op。
@@ -398,7 +428,14 @@ pub mod next_command {
     /// In-spawn:用 cfg + Input 渲染 prompt 并发请求。
     /// 模板渲染不依赖 AppContext,可在 spawn 内同步调用。
     pub async fn run_with(cfg: OneshotConfig, input: Input) -> Option<String> {
-        let system = render("next_command_system.j2", context! {});
+        let user_rule_ctxs: Vec<UserRuleCtx> = input
+            .user_rules
+            .into_iter()
+            .map(|(name, content)| UserRuleCtx { name, content })
+            .collect();
+        let system = render("next_command_system.j2", context! {
+            user_rules => user_rule_ctxs,
+        });
         let user = render(
             "next_command_user.j2",
             context! {

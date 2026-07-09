@@ -12,7 +12,7 @@ use warpui::{
         Container, CornerRadius, CrossAxisAlignment, EventHandler, Fill, Flex,
         FormattedTextElement, HyperlinkUrl, Icon, MainAxisAlignment, MainAxisSize,
         MouseStateHandle, ParentAnchor, ParentElement, Radius, SavePosition, ScrollbarWidth,
-        Shrinkable, Text, Wrap,
+        Expanded, Shrinkable, Text, Wrap,
     },
     keymap::Keystroke,
     platform::Cursor,
@@ -49,9 +49,6 @@ const TERMINAL_INPUT_SVG_PATH: &str = "bundled/svg/terminal-input.svg";
 const USER_ICON_SVG_PATH: &str = "bundled/svg/user.svg";
 const SAVE_WORKFLOW_ICON_PATH: &str = "bundled/svg/workflow.svg";
 
-const BODY_FONT_SIZE: f32 = 13.;
-const CODE_FONT_SIZE: f32 = 12.;
-const WARNING_MESSAGE_FONT_SIZE: f32 = 10.;
 
 const PANEL_LEFT_MARGIN: f32 = 15.;
 const DETAILS_BOTTOM_MARGIN: f32 = 12.;
@@ -66,7 +63,7 @@ const WHAT_TO_DO_NEXT_PROMPT: &str = "What should I do next?";
 const IN_FLIGHT_REQUEST_TEXT: &str = "Generating answer...";
 const ACCURACY_NOTICE_TEXT: &str = "AI responses can be inaccurate.";
 const MISSING_CONTEXT_NOTICE_TEXT: &str =
-    "Warp AI might forget earlier answers as conversations get long.";
+    "Zap AI might forget earlier answers as conversations get long.";
 
 lazy_static::lazy_static! {
     static ref SCROLL_BUFFER_OFFSET_PX: Pixels = (10.).into_pixels();
@@ -585,6 +582,7 @@ impl Transcript {
             icon,
             bottom_right_element,
             appearance,
+            false,
         )
     }
 
@@ -605,7 +603,7 @@ impl Transcript {
         .with_height(16.)
         .with_width(16.)
         .finish();
-        self.render_message(dialogue, background_color, icon, None, appearance)
+        self.render_message(dialogue, background_color, icon, None, appearance, true)
     }
 
     /// Renders a single message (whether that be a user's prompt or assistant's answer).
@@ -616,6 +614,7 @@ impl Transcript {
         icon: Box<dyn Element>,
         bottom_right_element: Option<Box<dyn Element>>,
         appearance: &Appearance,
+        align_right: bool,
     ) -> Box<dyn Element> {
         let theme = appearance.theme();
         let inline_code_bg_color = appearance.theme().surface_3().into_solid();
@@ -629,12 +628,13 @@ impl Transcript {
                         highlighted_hyperlink,
                     } => FormattedTextElement::new(
                         formatted_text.to_owned(),
-                        BODY_FONT_SIZE,
+                        appearance.ui_font_body_large(),
                         appearance.ui_font_family(),
                         appearance.monospace_font_family(),
                         theme.main_text_color(theme.surface_2()).into_solid(),
                         highlighted_hyperlink.clone(),
                     )
+                    .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
                     .with_inline_code_properties(
                         Some(theme.nonactive_ui_text_color().into()),
                         Some(inline_code_bg_color),
@@ -678,7 +678,7 @@ impl Transcript {
                                                         font_family_id: Some(
                                                             appearance.monospace_font_family(),
                                                         ),
-                                                        font_size: Some(CODE_FONT_SIZE),
+                                                        font_size: Some(appearance.ui_font_body()),
                                                         ..Default::default()
                                                     })
                                                     .build()
@@ -722,7 +722,7 @@ impl Transcript {
                 .ui_builder()
                 .wrappable_text(dialogue.raw.to_owned(), true)
                 .with_style(UiComponentStyles {
-                    font_size: Some(BODY_FONT_SIZE),
+                    font_size: Some(appearance.ui_font_body_large()),
                     ..Default::default()
                 })
                 .build()
@@ -743,22 +743,52 @@ impl Transcript {
             );
         }
 
-        let row = Flex::row()
-            .with_main_axis_size(MainAxisSize::Max)
-            .with_child(
-                Container::new(icon)
-                    .with_margin_right(12.)
-                    .with_margin_top(3.)
+        let icon_container = if align_right {
+            Container::new(icon)
+                .with_margin_left(12.)
+                .with_margin_top(3.)
+                .finish()
+        } else {
+            Container::new(icon)
+                .with_margin_right(12.)
+                .with_margin_top(3.)
+                .finish()
+        };
+
+        let row = if align_right {
+            Flex::row()
+                .with_main_axis_size(MainAxisSize::Max)
+                .with_child(
+                    Expanded::new(
+                        1.,
+                        Align::new(Container::new(final_col.finish()).finish())
+                            .right()
+                            .finish(),
+                    )
                     .finish(),
-            )
-            .with_child(Shrinkable::new(1., Container::new(final_col.finish()).finish()).finish());
+                )
+                .with_child(icon_container)
+        } else {
+            Flex::row()
+                .with_main_axis_size(MainAxisSize::Max)
+                .with_child(icon_container)
+                .with_child(
+                    Shrinkable::new(1., Container::new(final_col.finish()).finish()).finish(),
+                )
+        };
+
+        let (padding_left, padding_right) = if align_right {
+            (20., PANEL_LEFT_MARGIN)
+        } else {
+            (PANEL_LEFT_MARGIN, 20.)
+        };
 
         Container::new(row.finish())
             .with_background_color(background_color)
-            .with_padding_left(PANEL_LEFT_MARGIN)
+            .with_padding_left(padding_left)
             .with_padding_top(16.)
             .with_padding_bottom(16.)
-            .with_padding_right(20.)
+            .with_padding_right(padding_right)
             .finish()
     }
 
@@ -803,7 +833,7 @@ impl Transcript {
                 Text::new_inline(
                     message,
                     appearance.ui_font_family(),
-                    WARNING_MESSAGE_FONT_SIZE,
+                    appearance.ui_font_overline(),
                 )
                 .with_color(blended_colors::text_sub(
                     appearance.theme(),

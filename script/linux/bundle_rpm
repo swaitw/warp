@@ -15,29 +15,37 @@
 
 set -e
 
-# Extract channel suffix from BINARY_NAME
-if [ "$ARTIFACT" = "cli" ]; then
+# Extract channel suffix from BINARY_NAME (other channels) or use oss-specific naming.
+if [ "$RELEASE_CHANNEL" = "oss" ]; then
+  CHANNEL_SUFFIX=""
+  if [ "$ARTIFACT" = "app" ]; then
+    PACKAGE_NAME="zap"
+  else
+    PACKAGE_NAME="zap-cli"
+  fi
+  REPO_NAME="zap"
+  OPT_DIR="/opt/$PACKAGE_NAME"
+elif [ "$ARTIFACT" = "cli" ]; then
   CHANNEL_SUFFIX="${BINARY_NAME#oz}"
+  PACKAGE_NAME="oz$CHANNEL_SUFFIX"
+  REPO_NAME="warpdotdev$CHANNEL_SUFFIX"
+  OPT_DIR="/opt/warpdotdev/$PACKAGE_NAME"
 else
   CHANNEL_SUFFIX="${BINARY_NAME#warp}"
+  PACKAGE_NAME="warp-terminal$CHANNEL_SUFFIX"
+  REPO_NAME="warpdotdev$CHANNEL_SUFFIX"
+  OPT_DIR="/opt/warpdotdev/$PACKAGE_NAME"
 fi
-REPO_NAME="warpdotdev$CHANNEL_SUFFIX"
 
 # On Linux, we keep the `-stable` suffix for stable to avoid package conflicts.
 # The binary name is still `oz`, and the repo name is still `warpdotdev`.
 if [ "$ARTIFACT" = "cli" -a "$RELEASE_CHANNEL" = "stable" ]; then
   CHANNEL_SUFFIX="-stable"
+  PACKAGE_NAME="oz$CHANNEL_SUFFIX"
+  OPT_DIR="/opt/warpdotdev/$PACKAGE_NAME"
 fi
 
 ARTIFACT="${ARTIFACT:-app}"
-if [ "$ARTIFACT" = "app" ]; then
-  PACKAGE_NAME="warp-terminal$CHANNEL_SUFFIX"
-elif [ "$ARTIFACT" = "cli" ]; then
-  PACKAGE_NAME="oz$CHANNEL_SUFFIX"
-else
-  echo "::error ::Unknown ARTIFACT: $ARTIFACT (expected 'app' or 'cli')"
-  exit 1
-fi
 
 BUILD_ARCH="${BUILD_ARCH:-$(uname -m)}"
 if [ "$BUILD_ARCH" = "aarch64" ]; then
@@ -62,14 +70,20 @@ cleanup() {
 trap cleanup EXIT
 
 # Construct a directory that contains the build tree.
+# rpmbuild 在 _topdir 下需要 SPEC/RPMS/BUILD/BUILDROOT/SOURCES/SRPMS 六个目录,
+# 部分版本不会自动创建,事先建好避免「No such file or directory」。
 rm -rf "$RPMBUILD_DIR"
-mkdir -p "$RPMBUILD_DIR"/{SPEC,RPMS}
+mkdir -p "$RPMBUILD_DIR"/{SPEC,RPMS,BUILD,BUILDROOT,SOURCES,SRPMS}
 
 # Move the RPM-specific package metadata into the package directory.
-VERSION="$GIT_RELEASE_TAG"
+# 去掉标签的前导 `v`,与 deb 保持一致;RPM 的 Version 字段按惯例不带 `v` 前缀,
+# 同时也避免下游 `RPM_NAME` 拼接时混入 `v` 让文件名不规范。
+VERSION="${GIT_RELEASE_TAG#v}"
 RELEASE="1"
 sed \
     "s#@@CHANNEL_SUFFIX@@#$CHANNEL_SUFFIX#g; \
+     s#@@PACKAGE_NAME@@#$PACKAGE_NAME#g; \
+     s#@@OPT_DIR@@#$OPT_DIR#g; \
      s#@@BINARY_NAME@@#$BINARY_NAME#g; \
      s#@@VERSION@@#$VERSION#g; \
      s#@@RELEASE@@#$RELEASE#g; \
@@ -88,25 +102,9 @@ fakeroot rpmbuild -v -bb "$RPMBUILD_DIR/SPEC/warp.spec" --target="$ARCH" --defin
 RPM_NAME="$PACKAGE_NAME-$VERSION-$RELEASE.$ARCH.rpm"
 cp "$RPMBUILD_DIR/RPMS/$ARCH/$RPM_NAME" "$OUT_DIR"
 
-# If we're running on GitHub, sign the package using our signing key that
-# should have already been added to the gpg-agent with a preset passphrase.
+# Zap 不使用上游 Zap 的 RPM 签名 key；GitHub 构建只产出未签名本地包。
 if [ "${GITHUB_ACTIONS}" == "true" ]; then
-  # Import our signing key's public key into rpm so the signature can be
-  # verified.
-  sudo rpm --import https://releases.warp.dev/linux/keys/warp.asc
-
-  # We use batch mode with tty-based pin entry to ensure that the build doesn't
-  # hang waiting on user input if, for some reason, we failed to preset the
-  # passphrase for the signing key in the gpg-agent cache.
-  #
-  # Additionally, until we know that this works, don't let an error here fail
-  # the build.
-  rpmsign \
-    --verbose \
-    --addsign --key-id "linux-maintainers@warp.dev" \
-    --define "_gpg_sign_cmd_extra_args --batch --yes --pinentry-mode loopback" --define "_gpg_digest_algo sha256" \
-    "$OUT_DIR/$RPM_NAME" \
-    || true
+  echo "Skipping upstream Zap RPM signing for Zap."
 fi
 
 echo "Successfully built .rpm package at $OUT_DIR/$RPM_NAME!"

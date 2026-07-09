@@ -1,15 +1,10 @@
-use super::{workflow::Workflow, CloudWorkflowModel};
+use super::{workflow::Workflow, WorkflowObjectModel};
 use crate::{
-    cloud_object::{model::persistence::CloudModel, GenericCloudObject, Owner},
-    drive::OpenWarpDriveObjectSettings,
+    cloud_object::{model::persistence::ObjectStoreModel, GenericStoredObject, Owner},
+    drive::ZapDriveObjectSettings,
     pane_group::{PaneContent, WorkflowPane},
     safe_warn,
-    server::{
-        cloud_objects::update_manager::{
-            ObjectOperation, OperationSuccessType, UpdateManager, UpdateManagerEvent,
-        },
-        ids::{ClientId, SyncId},
-    },
+    server::ids::{ClientId, SyncId},
     workflows::{workflow_view::WorkflowView, WorkflowViewMode},
     PaneViewLocator, WindowId,
 };
@@ -43,12 +38,9 @@ pub enum WorkflowOpenSource {
 }
 
 impl WorkflowManager {
-    pub fn new(ctx: &mut ModelContext<Self>) -> Self {
-        ctx.subscribe_to_model(
-            &UpdateManager::handle(ctx),
-            Self::handle_update_manager_event,
-        );
-
+    pub fn new(_ctx: &mut ModelContext<Self>) -> Self {
+        // Zap:无云端 = 无 client_id→server_id 转换事件,原 UpdateManager
+        // 订阅 + handle_update_manager_event 为死代码,Phase 2c‑1 删除。
         WorkflowManager {
             panes_by_hashed_id: HashMap::new(),
         }
@@ -67,7 +59,7 @@ impl WorkflowManager {
     pub fn create_pane(
         &mut self,
         source: &WorkflowOpenSource,
-        settings: &OpenWarpDriveObjectSettings,
+        settings: &ZapDriveObjectSettings,
         mode: WorkflowViewMode,
         window_id: WindowId,
         ctx: &mut ModelContext<Self>,
@@ -76,7 +68,9 @@ impl WorkflowManager {
 
         match source {
             WorkflowOpenSource::Existing(workflow_id) => {
-                let workflow = CloudModel::as_ref(ctx).get_workflow(workflow_id).cloned();
+                let workflow = ObjectStoreModel::as_ref(ctx)
+                    .get_workflow(workflow_id)
+                    .cloned();
                 if let Some(workflow) = workflow {
                     view.update(ctx, |view, ctx| view.load(workflow, settings, mode, ctx));
                 } else {
@@ -116,13 +110,13 @@ impl WorkflowManager {
             } => {
                 view.update(ctx, |view, ctx| {
                     view.load(
-                        GenericCloudObject::new_local(
-                            CloudWorkflowModel::new(*workflow.clone()),
+                        GenericStoredObject::new_local(
+                            WorkflowObjectModel::new(*workflow.clone()),
                             *owner,
                             *initial_folder_id,
                             ClientId::default(),
                         ),
-                        &OpenWarpDriveObjectSettings::default(),
+                        &ZapDriveObjectSettings::default(),
                         mode,
                         ctx,
                     );
@@ -172,38 +166,6 @@ impl WorkflowManager {
                     "Ignoring duplicate registration of panes for {}",
                     workflow_id.uid()
                 );
-            }
-        }
-    }
-
-    fn handle_update_manager_event(
-        &mut self,
-        event: &UpdateManagerEvent,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let UpdateManagerEvent::ObjectOperationComplete { result } = event else {
-            return;
-        };
-
-        if !matches!(&result.success_type, OperationSuccessType::Success) {
-            return;
-        }
-        if let ObjectOperation::Create { .. } = result.operation {
-            let server_id = result.server_id.expect("Expect server id on success");
-            let Some(server_id) = CloudModel::as_ref(ctx)
-                .get_workflow_by_uid(&server_id.uid())
-                .and_then(|workflow| workflow.id.into_server())
-            else {
-                return;
-            };
-            let Some(client_id) = result.client_id else {
-                return;
-            };
-
-            if let Some(mut pane) = self.panes_by_hashed_id.remove(&client_id.to_string()) {
-                pane.workflow_id = SyncId::ServerId(server_id);
-                self.panes_by_hashed_id
-                    .insert(server_id.uid().clone(), pane);
             }
         }
     }

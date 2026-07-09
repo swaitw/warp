@@ -81,7 +81,7 @@ impl View for RootView {
         let callout = self.callout.render(
             appearance,
             CalloutParams {
-                title: "Meet your Warp input".into(),
+                title: "Meet your Zap input".into(),
                 text: "Your terminal input can detect natural language as well as commands.".into(),
                 step: StepStatus::new(1, 2),
                 right_button: CalloutButton {
@@ -147,6 +147,7 @@ fn mock_theme() -> WarpTheme {
         TerminalColors::new(normal, bright),
         None,
         Some("Onboarding Example".to_string()),
+        None,
     )
 }
 
@@ -168,7 +169,10 @@ fn build_appearance(
         ui_font_family,
         1.4,
         ai_font_family,
+        None,
         password_font_family,
+        12.0,
+        Default::default(),
     );
 
     appearance.set_ui_font_family(ui_font_family, ctx);

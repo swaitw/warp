@@ -2,22 +2,19 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{
-    cloud_object::{
-        model::{
-            generic_string_model::{GenericStringModel, GenericStringObjectId, StringModel},
-            json_model::{JsonModel, JsonSerializer},
-        },
-        GenericCloudObject, GenericStringObjectFormat, GenericStringObjectUniqueKey,
-        JsonObjectType, Revision, ServerCloudObject, UniquePer,
+use crate::cloud_object::{
+    model::{
+        generic_string_model::{GenericStringModel, GenericStringObjectId, StringModel},
+        json_model::{JsonModel, JsonSerializer},
     },
-    server::sync_queue::QueueItem,
+    GenericStoredObject, GenericStringObjectFormat, GenericStringObjectUniqueKey, JsonObjectType,
+    UniquePer,
 };
 
 use settings::{
     macros::define_settings_group, RespectUserSyncSetting, SupportedPlatforms, SyncToCloud,
 };
-define_settings_group!(CloudPreferencesSettings, settings: [
+define_settings_group!(PreferencesSettings, settings: [
    settings_sync_enabled: IsSettingsSyncEnabled {
        type: bool,
        default: false,
@@ -29,8 +26,8 @@ define_settings_group!(CloudPreferencesSettings, settings: [
    },
 ]);
 
-pub type CloudPreference = GenericCloudObject<GenericStringObjectId, CloudPreferenceModel>;
-pub type CloudPreferenceModel = GenericStringModel<Preference, JsonSerializer>;
+pub type PreferenceObject = GenericStoredObject<GenericStringObjectId, PreferenceObjectModel>;
+pub type PreferenceObjectModel = GenericStringModel<Preference, JsonSerializer>;
 
 /// Defines the platform that a preference was set on.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -134,7 +131,7 @@ impl Preference {
 
 /// Defines a based model for syncing cloud preferences.
 impl StringModel for Preference {
-    type CloudObjectType = CloudPreference;
+    type StoredObjectType = PreferenceObject;
 
     fn model_type_name(&self) -> &'static str {
         "Preference"
@@ -155,31 +152,12 @@ impl StringModel for Preference {
         false
     }
 
-    fn new_from_server_update(&self, server_cloud_object: &ServerCloudObject) -> Option<Self> {
-        if let ServerCloudObject::Preference(server_preference) = server_cloud_object {
-            return Some(server_preference.model.clone().string_model);
-        }
-        None
-    }
-
     fn model_format() -> GenericStringObjectFormat {
         GenericStringObjectFormat::Json(Self::json_object_type())
     }
 
     fn display_name(&self) -> String {
         self.model_type_name().to_owned()
-    }
-
-    fn update_object_queue_item(
-        &self,
-        revision_ts: Option<Revision>,
-        object: &CloudPreference,
-    ) -> Option<QueueItem> {
-        Some(QueueItem::UpdateCloudPreferences {
-            model: object.model().clone().into(),
-            id: object.id,
-            revision: revision_ts.or_else(|| object.metadata.revision.clone()),
-        })
     }
 
     fn should_clear_on_unique_key_conflict(&self) -> bool {

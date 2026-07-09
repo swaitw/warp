@@ -10,7 +10,7 @@ use warpui::{
 
 use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
 use crate::ai::agent::AIAgentOutputMessageType;
-use crate::ai::blocklist::agent_view::orchestration_conversation_links::conversation_navigation_card_with_icon;
+use crate::ai::blocklist::agent_view::conversation_navigation_links::conversation_navigation_card_with_icon;
 use crate::ai::blocklist::agent_view::{AgentViewController, AgentViewControllerEvent};
 use crate::ai::blocklist::BlocklistAIHistoryEvent;
 use crate::appearance::Appearance;
@@ -122,9 +122,7 @@ impl ChildAgentStatusCard {
     }
 
     /// Checks whether a child conversation transitioned to `InProgress` from a
-    /// non-`InProgress` state, mirroring the Started/Restarted lifecycle event
-    /// logic in `OrchestrationEventService::on_conversation_status_updated`.
-    /// If so, restores any dismissed card for that conversation.
+    /// non-`InProgress` state. If so, restores any dismissed card for that conversation.
     fn on_conversation_status_updated(
         &mut self,
         conversation_id: AIConversationId,
@@ -195,8 +193,13 @@ impl View for ChildAgentStatusCard {
                 continue;
             }
 
-            let agent_name = child.agent_name().unwrap_or("Agent").to_string();
-            let raw_title = child.title().unwrap_or_else(|| "Untitled".to_string());
+            let agent_name = child
+                .agent_name()
+                .map(str::to_string)
+                .unwrap_or_else(|| crate::t!("child-agent-default-name"));
+            let raw_title = child
+                .title()
+                .unwrap_or_else(|| crate::t!("common-untitled"));
             let status_icon = child.status().status_icon_and_color(appearance.theme());
 
             // T3-7:in_progress 子代理在 title 里 surface 当前 action,

@@ -1,15 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    cloud_object::{
-        model::{
-            generic_string_model::{GenericStringModel, GenericStringObjectId, StringModel},
-            json_model::{JsonModel, JsonSerializer},
-        },
-        GenericCloudObject, GenericStringObjectFormat, GenericStringObjectUniqueKey,
-        JsonObjectType, Revision, ServerCloudObject,
+use crate::cloud_object::{
+    model::{
+        generic_string_model::{GenericStringModel, GenericStringObjectId, StringModel},
+        json_model::{JsonModel, JsonSerializer},
     },
-    server::sync_queue::QueueItem,
+    GenericStoredObject, GenericStringObjectFormat, GenericStringObjectUniqueKey, JsonObjectType,
 };
 
 /// Data model for a workflow enum, one type of argument that can be inserted into a workflow
@@ -33,11 +29,11 @@ pub enum EnumVariants {
     Dynamic(String),     // contains the value of the shell command associated with the dynamic enum
 }
 
-pub type CloudWorkflowEnum = GenericCloudObject<GenericStringObjectId, CloudWorkflowEnumModel>;
-pub type CloudWorkflowEnumModel = GenericStringModel<WorkflowEnum, JsonSerializer>;
+pub type WorkflowEnumObject = GenericStoredObject<GenericStringObjectId, WorkflowEnumObjectModel>;
+pub type WorkflowEnumObjectModel = GenericStringModel<WorkflowEnum, JsonSerializer>;
 
 impl StringModel for WorkflowEnum {
-    type CloudObjectType = CloudWorkflowEnum;
+    type StoredObjectType = WorkflowEnumObject;
 
     fn model_type_name(&self) -> &'static str {
         "WorkflowEnum"
@@ -61,25 +57,6 @@ impl StringModel for WorkflowEnum {
 
     fn display_name(&self) -> String {
         self.model_type_name().to_owned()
-    }
-
-    fn update_object_queue_item(
-        &self,
-        revision_ts: Option<Revision>,
-        object: &Self::CloudObjectType,
-    ) -> Option<QueueItem> {
-        Some(QueueItem::UpdateWorkflowEnum {
-            model: object.model().clone().into(),
-            id: object.id,
-            revision: revision_ts.or_else(|| object.metadata.revision.clone()),
-        })
-    }
-
-    fn new_from_server_update(&self, server_cloud_object: &ServerCloudObject) -> Option<Self> {
-        if let ServerCloudObject::WorkflowEnum(server_workflow_enum) = server_cloud_object {
-            return Some(server_workflow_enum.model.clone().string_model);
-        }
-        None
     }
 
     fn uniqueness_key(&self) -> Option<GenericStringObjectUniqueKey> {

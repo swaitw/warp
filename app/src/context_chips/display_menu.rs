@@ -7,13 +7,10 @@ use instant::Instant;
 use pathfinder_geometry::vector::vec2f;
 
 use crate::{
-    ai::cloud_environments::CloudAmbientAgentEnvironment,
-    cloud_object::model::generic_string_model::StringModel,
     editor::{
         EditorOptions, EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys,
         TextOptions,
     },
-    server::ids::{ClientId, HashableId, ServerId, SyncId},
     ui_components::icons::Icon,
     view_components::copyable_text_field::{
         render_copyable_text_field, CopyButtonPlacement, CopyableTextFieldConfig,
@@ -107,7 +104,6 @@ const ENV_MENU_ITEM_HORIZONTAL_PADDING: f32 = 16.;
 const ENV_MENU_ITEM_VERTICAL_PADDING: f32 = 4.;
 const ENV_MENU_ICON_SIZE: f32 = 16.;
 const ENV_MENU_ICON_SLOT_SIZE: f32 = 16.;
-const ENV_MENU_ITEM_FONT_SIZE: f32 = 14.;
 const ENV_MENU_SEARCH_VERTICAL_PADDING: f32 = 4.;
 // Bottom padding under the search field. The model selector's bottom padding
 // is effectively `SEARCH_VERTICAL_PADDING (4) + MENU_CONTENT_VERTICAL_PADDING
@@ -262,7 +258,7 @@ impl DisplayChipMenu {
 
                     let text_options = match chip_menu_type {
                         ChipMenuType::Environments => {
-                            TextOptions::ui_text(Some(ENV_MENU_ITEM_FONT_SIZE), appearance)
+                            TextOptions::ui_text(Some(appearance.ui_font_subheading()), appearance)
                         }
                         ChipMenuType::Directories
                         | ChipMenuType::Branches
@@ -549,47 +545,15 @@ impl DisplayChipMenu {
     }
 
     fn should_show_environment_sidecar(&self) -> bool {
-        self.chip_menu_type == ChipMenuType::Environments
-            && !self.is_footer_selected()
-            && self.selected_index < self.filtered_items.len()
+        false
     }
 
-    fn parse_sync_id_lossy(s: &str) -> SyncId {
-        if let Some(hashed) = ClientId::from_hash(s) {
-            SyncId::ClientId(hashed)
-        } else {
-            SyncId::ServerId(ServerId::from_string_lossy(s))
-        }
-    }
-
-    fn environment_sidecar_data(&self, app: &AppContext) -> Option<EnvironmentSidecarData> {
+    fn environment_sidecar_data(&self) -> Option<EnvironmentSidecarData> {
         if !self.should_show_environment_sidecar() {
             return None;
         }
 
-        let item = self.filtered_items.get(self.selected_index)?.item.clone();
-        let sync_id = Self::parse_sync_id_lossy(&item.action_data());
-        let env = CloudAmbientAgentEnvironment::get_by_id(&sync_id, app)?;
-
-        let repo_names = env
-            .model()
-            .string_model
-            .github_repos
-            .iter()
-            .map(|repo| repo.repo.clone())
-            .collect::<Vec<_>>();
-        let repos_text = if repo_names.is_empty() {
-            "(none)".to_string()
-        } else {
-            repo_names.join(", ")
-        };
-
-        Some(EnvironmentSidecarData {
-            name: env.model().string_model.display_name(),
-            id: env.id.to_string(),
-            image: env.model().string_model.base_image.to_string(),
-            repos_text,
-        })
+        None
     }
 
     fn environment_sidecar_anchor_id(&self) -> Option<String> {
@@ -677,7 +641,7 @@ impl DisplayChipMenu {
         &self,
         app: &AppContext,
     ) -> Option<(Box<dyn Element>, OffsetPositioning)> {
-        let data = self.environment_sidecar_data(app)?;
+        let data = self.environment_sidecar_data()?;
         let position_id = self.environment_sidecar_anchor_id()?;
         let positioning = self.environment_sidecar_positioning(position_id, app)?;
         Some((self.render_environment_sidecar(&data, app), positioning))
@@ -869,7 +833,7 @@ impl DisplayChipMenu {
 
         let chip_menu_type = self.chip_menu_type;
         let (font_size, icon_size) = match chip_menu_type {
-            ChipMenuType::Environments => (ENV_MENU_ITEM_FONT_SIZE, ENV_MENU_ICON_SIZE),
+            ChipMenuType::Environments => (appearance.ui_font_subheading(), ENV_MENU_ICON_SIZE),
             ChipMenuType::Directories | ChipMenuType::Branches | ChipMenuType::CodeReview => {
                 let font_size = appearance.ui_font_size();
                 (font_size, font_size * 0.8)
@@ -999,7 +963,7 @@ impl DisplayChipMenu {
                     match self.chip_menu_type {
                         ChipMenuType::Environments => (
                             "No results",
-                            ENV_MENU_ITEM_FONT_SIZE,
+                            appearance.ui_font_subheading(),
                             ENV_MENU_ITEM_HORIZONTAL_PADDING,
                             ENV_MENU_ITEM_VERTICAL_PADDING,
                             internal_colors::text_sub(theme, theme.surface_2()),
@@ -1051,7 +1015,7 @@ impl DisplayChipMenu {
                         let is_selected = index == selected_index && !is_footer_hovered;
 
                         let font_size = if matches!(chip_menu_type, ChipMenuType::Environments) {
-                            ENV_MENU_ITEM_FONT_SIZE
+                            appearance.ui_font_subheading()
                         } else {
                             appearance.ui_font_size()
                         };

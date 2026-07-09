@@ -18,7 +18,7 @@ mod single_instance_manager;
 pub enum StartupArgsForwardingError {
     #[error("should not forward arguments after an auto-update")]
     IgnoredAfterAutoUpdate,
-    #[error("there is no other instance of Warp")]
+    #[error("there is no other instance of Zap")]
     NoExistingInstance,
     #[error("failed to construct url")]
     CouldNotCreateUrl(#[from] url::ParseError),
@@ -66,5 +66,13 @@ pub fn pass_startup_args_to_existing_instance(
 pub(super) fn init(_ctx: &mut AppContext) {
     #[cfg(feature = "release_bundle")]
     _ctx.add_singleton_model(SingleInstanceManager::new);
-    register_uri_handler();
+
+    // 注册表 URI handler 注册(warp:// 协议)是纯同步多次写 HKCU,
+    // 与主线程任何 UI 初始化都没依赖。冷启动耗时 ~30–60 ms,
+    // 丢到后台线程跳出关键路径。失败逻辑原本就是 log::error,
+    // 后台跳不会错过任何信息。
+    std::thread::Builder::new()
+        .name("warp-uri-handler-register".into())
+        .spawn(register_uri_handler)
+        .ok();
 }

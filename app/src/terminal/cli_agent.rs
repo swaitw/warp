@@ -3,19 +3,22 @@
 //! This module provides types for detecting and working with CLI-based AI agents
 //! like Claude Code, Gemini CLI, Codex, Amp, and Droid.
 
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::path::Path;
-
 use ai::skills::SkillProvider;
 use enum_iterator::Sequence;
 use markdown_parser::parse_markdown;
 use pathfinder_color::ColorU;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
+use std::borrow::Cow;
+use std::collections::HashMap;
+#[cfg(unix)]
+use std::collections::HashSet;
+use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
 use warp_editor::content::{buffer::Buffer, markdown::MarkdownStyle};
 
-use warpui::{AppContext, SingletonEntity};
+use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
 use crate::ai::agent::{AgentReviewCommentBatch, DiffSetHunk};
 use crate::ai::blocklist::CLAUDE_ORANGE;
@@ -103,6 +106,14 @@ const CURSOR_COLOR: ColorU = ColorU {
     a: 255,
 };
 
+/// Antigravity brand color (#7C3AED, purple from official banner accent)
+const ANTIGRAVITY_PURPLE: ColorU = ColorU {
+    r: 0x7C,
+    g: 0x3A,
+    b: 0xED,
+    a: 255,
+};
+
 /// Goose brand color (#101010, from Block's official Goose logo)
 const DEEPSEEK_COLOR: ColorU = ColorU {
     r: 53,
@@ -115,6 +126,14 @@ const GOOSE_COLOR: ColorU = ColorU {
     r: 16,
     g: 16,
     b: 16,
+    a: 255,
+};
+
+/// omp (oh-my-pi) brand color (#9b4dff, midpoint purple of the official pink→purple→blue gradient π logo)
+const OMP_COLOR: ColorU = ColorU {
+    r: 0x9b,
+    g: 0x4d,
+    b: 0xff,
     a: 255,
 };
 
@@ -133,6 +152,8 @@ pub enum CLIAgent {
     CursorCli,
     Goose,
     DeepSeek,
+    Antigravity,
+    Omp,
     /// Represents an unknown/custom CLI agent matched by user-configured regex patterns.
     Unknown,
 }
@@ -153,6 +174,8 @@ impl CLIAgent {
             CLIAgent::CursorCli => "agent",
             CLIAgent::Goose => "goose",
             CLIAgent::DeepSeek => "deepseek",
+            CLIAgent::Antigravity => "agy",
+            CLIAgent::Omp => "omp",
             CLIAgent::Unknown => "",
         }
     }
@@ -196,6 +219,8 @@ impl CLIAgent {
             CLIAgent::CursorCli => "Cursor",
             CLIAgent::Goose => "Goose",
             CLIAgent::DeepSeek => "DeepSeek",
+            CLIAgent::Antigravity => "Antigravity",
+            CLIAgent::Omp => "Omp",
             CLIAgent::Unknown => "CLI Agent",
         }
     }
@@ -215,6 +240,8 @@ impl CLIAgent {
             CLIAgent::CursorCli => Some(Icon::CursorLogo),
             CLIAgent::Goose => Some(Icon::GooseLogo),
             CLIAgent::DeepSeek => Some(Icon::DeepSeekLogo),
+            CLIAgent::Antigravity => Some(Icon::AntigravityLogo),
+            CLIAgent::Omp => Some(Icon::OmpLogo),
             CLIAgent::Unknown => None,
         }
     }
@@ -244,6 +271,8 @@ impl CLIAgent {
             CLIAgent::CursorCli => &[SkillProvider::Agents],
             CLIAgent::Goose => &[SkillProvider::Agents],
             CLIAgent::DeepSeek => &[SkillProvider::Agents],
+            CLIAgent::Antigravity => &[SkillProvider::Agents],
+            CLIAgent::Omp => &[SkillProvider::Agents],
             CLIAgent::Unknown => &[],
         }
     }
@@ -285,6 +314,8 @@ impl CLIAgent {
             CLIAgent::CursorCli => Some(CURSOR_COLOR),
             CLIAgent::Goose => Some(GOOSE_COLOR),
             CLIAgent::DeepSeek => Some(DEEPSEEK_COLOR),
+            CLIAgent::Antigravity => Some(ANTIGRAVITY_PURPLE),
+            CLIAgent::Omp => Some(OMP_COLOR),
             CLIAgent::Unknown => None,
         }
     }
@@ -547,9 +578,190 @@ impl From<CLIAgent> for CLIAgentType {
             CLIAgent::CursorCli => CLIAgentType::Cursor,
             CLIAgent::Goose => CLIAgentType::Goose,
             CLIAgent::DeepSeek => CLIAgentType::DeepSeek,
+            CLIAgent::Antigravity => CLIAgentType::Antigravity,
+            CLIAgent::Omp => CLIAgentType::Omp,
             CLIAgent::Unknown => CLIAgentType::Unknown,
         }
     }
+}
+
+// ── CLI Agent 安装状态 singleton model ──
+// 对齐 AntivirusInfo 模式:ctx.spawn 异步扫描 → 回调 emit 事件 → 订阅者自动刷新 UI
+
+/// CLI agent 安装扫描完成事件。
+pub enum CLIAgentInstallEvent {
+    /// 后台扫描完成，安装状态缓存已就绪。
+    ScanComplete,
+}
+
+/// Singleton model，跟踪 CLI agent 的安装状态。
+///
+/// 构造时通过 `ctx.spawn` 启动后台 PATH 扫描，扫描完成后 emit
+/// [`CLIAgentInstallEvent::ScanComplete`] 并自动同步 per-agent 设置。
+///
+/// 所有需要查询安装状态的 UI 代码应通过 `CLIAgentInstallModel::as_ref(ctx)`
+/// 读取，并订阅事件以在扫描完成后触发重绘。
+pub struct CLIAgentInstallModel {
+    /// None = 扫描尚未完成; Some = 已有结果。
+    cache: Option<HashMap<CLIAgent, bool>>,
+}
+
+impl CLIAgentInstallModel {
+    pub fn new(ctx: &mut ModelContext<Self>) -> Self {
+        ctx.spawn(
+            async move { scan_cli_agent_installations() },
+            Self::on_scan_complete,
+        );
+        Self { cache: None }
+    }
+
+    fn on_scan_complete(&mut self, results: HashMap<CLIAgent, bool>, ctx: &mut ModelContext<Self>) {
+        self.cache = Some(results.clone());
+
+        // 自动同步到 per-agent 设置
+        crate::settings::AISettings::handle(ctx).update(ctx, |settings, ctx| {
+            settings.sync_per_agent_from_scan(&results, ctx);
+        });
+
+        ctx.emit(CLIAgentInstallEvent::ScanComplete);
+    }
+
+    /// 查询某个 agent 是否已安装。扫描未完成时返回 false。
+    pub fn is_cli_agent_installed(&self, agent: CLIAgent) -> bool {
+        self.cache
+            .as_ref()
+            .map(|m| m.get(&agent).copied().unwrap_or(false))
+            .unwrap_or(false)
+    }
+
+    /// 扫描是否已完成。
+    pub fn is_scan_complete(&self) -> bool {
+        self.cache.is_some()
+    }
+
+    /// 获取安装状态快照。扫描未完成时返回 None。
+    pub fn snapshot(&self) -> Option<HashMap<CLIAgent, bool>> {
+        self.cache.clone()
+    }
+}
+
+impl Entity for CLIAgentInstallModel {
+    type Event = CLIAgentInstallEvent;
+}
+
+impl SingletonEntity for CLIAgentInstallModel {}
+
+/// 同步 PATH 搜索，检测所有 agent 是否安装。仅供 `ctx.spawn` 异步任务内部使用。
+#[cfg(unix)]
+fn scan_cli_agent_installations() -> HashMap<CLIAgent, bool> {
+    let search_dirs = cli_agent_search_dirs().collect::<Vec<_>>();
+    enum_iterator::all::<CLIAgent>()
+        .filter(|a| !matches!(a, CLIAgent::Unknown))
+        .map(|a| (a, cli_agent_is_on_path_with_dirs(a, &search_dirs)))
+        .collect()
+}
+
+/// 同步 PATH 搜索，检测所有 agent 是否安装。仅供 `ctx.spawn` 异步任务内部使用。
+#[cfg(windows)]
+fn scan_cli_agent_installations() -> HashMap<CLIAgent, bool> {
+    enum_iterator::all::<CLIAgent>()
+        .filter(|a| !matches!(a, CLIAgent::Unknown))
+        .map(|a| (a, cli_agent_is_on_path(a)))
+        .collect()
+}
+
+#[cfg(unix)]
+fn cli_agent_is_on_path_with_dirs(agent: CLIAgent, search_dirs: &[PathBuf]) -> bool {
+    match agent {
+        CLIAgent::Unknown => false,
+        CLIAgent::CursorCli => is_on_path_in_dirs("cursor-agent", search_dirs),
+        CLIAgent::DeepSeek => {
+            is_on_path_in_dirs("deepseek", search_dirs)
+                || is_on_path_in_dirs("deepseek-tui", search_dirs)
+        }
+        other => is_on_path_in_dirs(other.command_prefix(), search_dirs),
+    }
+}
+
+/// 内联 PATH 搜索，零进程、零闪窗。
+#[cfg(unix)]
+fn is_on_path_in_dirs(cmd: &str, search_dirs: &[PathBuf]) -> bool {
+    search_dirs.iter().any(|dir| dir.join(cmd).is_file())
+}
+
+#[cfg(unix)]
+fn cli_agent_search_dirs() -> impl Iterator<Item = PathBuf> {
+    let mut dirs = Vec::new();
+
+    if let Some(path_var) = std::env::var_os("PATH") {
+        dirs.extend(std::env::split_paths(&path_var));
+    }
+
+    extend_common_cli_dirs(&mut dirs);
+    dedupe_paths(dirs).into_iter()
+}
+
+#[cfg(unix)]
+fn extend_common_cli_dirs(dirs: &mut Vec<PathBuf>) {
+    dirs.extend([
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/opt/homebrew/sbin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/usr/local/sbin"),
+    ]);
+
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return;
+    };
+
+    dirs.extend([
+        home.join(".cargo/bin"),
+        home.join(".bun/bin"),
+        home.join(".local/bin"),
+    ]);
+
+    if let Ok(node_versions) = std::fs::read_dir(home.join(".nvm/versions/node")) {
+        dirs.extend(
+            node_versions
+                .filter_map(Result::ok)
+                .map(|entry| entry.path().join("bin")),
+        );
+    }
+}
+
+#[cfg(unix)]
+fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut seen = HashSet::with_capacity(paths.len());
+    let mut deduped = Vec::with_capacity(paths.len());
+    for path in paths {
+        if seen.insert(path.clone()) {
+            deduped.push(path);
+        }
+    }
+    deduped
+}
+
+#[cfg(windows)]
+fn cli_agent_is_on_path(agent: CLIAgent) -> bool {
+    match agent {
+        CLIAgent::Unknown => false,
+        CLIAgent::CursorCli => is_on_path("cursor-agent"),
+        CLIAgent::DeepSeek => is_on_path("deepseek") || is_on_path("deepseek-tui"),
+        other => is_on_path(other.command_prefix()),
+    }
+}
+
+#[cfg(windows)]
+fn is_on_path(cmd: &str) -> bool {
+    let pathext = std::env::var("PATHEXT").unwrap_or_else(|_| ".EXE;.CMD;.BAT".into());
+    let Ok(path_var) = std::env::var("PATH") else {
+        return false;
+    };
+    let exts: Vec<&str> = pathext.split(';').collect();
+    std::env::split_paths(&path_var).any(|dir| {
+        exts.iter()
+            .any(|ext| dir.join(format!("{}{}", cmd, ext)).is_file())
+    })
 }
 
 #[cfg(test)]

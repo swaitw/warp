@@ -299,7 +299,7 @@ impl InstallationModalBody {
             Text::new_inline(
                 "ESC".to_string(),
                 appearance.ui_font_family(),
-                appearance.ui_font_size() * 0.8,
+                appearance.ui_font_overline(),
             )
             .with_color(theme.active_ui_text_color().into())
             .finish(),
@@ -337,6 +337,7 @@ impl InstallationModalBody {
                     theme.active_ui_text_color().into(),
                     HighlightedHyperlink::default(),
                 )
+                .with_heading_to_font_size_multipliers(appearance.heading_font_size_multipliers().clone())
                 .with_hyperlink_font_color(appearance.theme().accent().into_solid())
                 .register_default_click_handlers(|url, _, ctx| {
                     ctx.open_url(&url.url);
@@ -444,7 +445,7 @@ impl InstallationModalBody {
         let cancel_button = appearance
             .ui_builder()
             .button(ButtonVariant::Text, self.cancel_mouse_state.clone())
-            .with_text_label(crate::t!("settings-mcp-install-modal-cancel").into())
+            .with_text_label(crate::t!("settings-mcp-install-modal-cancel"))
             .with_style(UiComponentStyles {
                 font_weight: Some(Weight::Bold),
                 font_color: Some(appearance.theme().active_ui_text_color().into()),

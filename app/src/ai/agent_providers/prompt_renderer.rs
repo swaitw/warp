@@ -25,9 +25,7 @@ use minijinja::{Environment, Value};
 use serde::Serialize;
 
 use crate::ai::agent::AIAgentContext;
-
-// ---------------------------------------------------------------------------
-// Template environment
+use crate::settings::AgentProviderApiType;
 // ---------------------------------------------------------------------------
 
 static ENV: OnceLock<Environment<'static>> = OnceLock::new();
@@ -49,6 +47,11 @@ fn build_env() -> Environment<'static> {
     )
     .expect("project_rules partial parses");
     env.add_template(
+        "partials/user_rules.j2",
+        include_str!("prompts/partials/user_rules.j2"),
+    )
+    .expect("user_rules partial parses");
+    env.add_template(
         "partials/tool_aliases.j2",
         include_str!("prompts/partials/tool_aliases.j2"),
     )
@@ -58,6 +61,11 @@ fn build_env() -> Environment<'static> {
         include_str!("prompts/partials/footer.j2"),
     )
     .expect("footer partial parses");
+    env.add_template(
+        "partials/thinking_language.j2",
+        include_str!("prompts/partials/thinking_language.j2"),
+    )
+    .expect("thinking_language partial parses");
     env.add_template(
         "partials/plan_mode.j2",
         include_str!("prompts/partials/plan_mode.j2"),
@@ -91,6 +99,7 @@ fn build_env() -> Environment<'static> {
             "system/trinity.j2",
             include_str!("prompts/system/trinity.j2"),
         ),
+        ("system/local.j2", include_str!("prompts/system/local.j2")),
     ] {
         env.add_template(name, src)
             .unwrap_or_else(|e| panic!("template {name} parses: {e}"));
@@ -110,19 +119,17 @@ fn env() -> &'static Environment<'static> {
 /// 按 model id 子串匹配选模板(对齐 opencode
 /// `packages/opencode/src/session/system.ts::provider`)。
 ///
-/// 匹配规则(顺序敏感,先到先得):
-/// - `gpt-4` / `o1` / `o3` / `o4` → beast(强自治 + sequential thinking)
-/// - 其他 `gpt` 中含 `codex` → codex(apply_file_diffs + 严格 final answer formatting)
-/// - 其他 `gpt` → gpt(pragmatic engineer + commentary/final 双通道)
-/// - `gemini-` → gemini(Core Mandates + Workflows + 大量 examples)
-/// - `claude` / `sonnet` / `opus` / `haiku` → anthropic(Claude Code 风格)
-/// - `trinity` → trinity(一 tool 一 message 风格)
-/// - `kimi` → kimi(SAME language + AGENTS.md)
-/// - 其他 → default.j2(兜底)
-///
-/// 全程 lowercase 后匹配,兼容 `GPT-4o` / `OPENAI/gpt-4o` / `Anthropic/Claude-3.5`
-/// 这种用户大小写写法。OpenRouter 形式 `provider/model` 也能正确命中。
-pub fn pick_template(model_id: &str) -> &'static str {
+/// Ollama / 本地 BYOP 走 [`pick_template`] 的 `local.j2` 短模板(见 `api_type` 参数),
+/// 避免 9k+ 的 default.j2 淹没小模型的对话上下文。
+pub fn pick_template(model_id: &str, api_type: AgentProviderApiType) -> &'static str {
+    if api_type == AgentProviderApiType::Ollama {
+        return "system/local.j2";
+    }
+    pick_template_by_model(model_id)
+}
+
+/// 按 model id 子串匹配选模板(不含 provider 级 override)。
+fn pick_template_by_model(model_id: &str) -> &'static str {
     let id = model_id.to_ascii_lowercase();
 
     if id.contains("gpt-4") || id.contains("o1") || id.contains("o3") || id.contains("o4") {
@@ -186,11 +193,24 @@ struct GitCtx {
 struct SkillCtx {
     name: String,
     description: String,
+    /// Absolute path to SKILL.md for filesystem skills; `None` for bundled skills.
+    /// Bundled skills are loaded via `AIAgentInput::InvokeSkill`, not `read_skill`,
+    /// so exposing `@warp-skill:<id>` here would mislead the model into calling a
+    /// path that always fails the BYOP `skill_by_reference` lookup.
+    path: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct ProjectRuleCtx {
     path: String,
+    content: String,
+}
+
+/// Zap BYOP 修复 Issue #116:全局 Rules(用户在 设置 → Agents → Rules 创建)
+/// 的扁平视图,喂给 `partials/user_rules.j2` 渲染进 system prompt。
+#[derive(Debug, Serialize)]
+struct UserRuleCtx {
+    name: Option<String>,
     content: String,
 }
 
@@ -207,6 +227,9 @@ struct PromptContext {
     git: Option<GitCtx>,
     skills: Vec<SkillCtx>,
     project_rules: Vec<ProjectRuleCtx>,
+    /// Zap BYOP 修复 Issue #116:由 caller(`render_system`)从
+    /// `RequestParams.user_rules` 注入,经 `partials/user_rules.j2` 渲染。
+    user_rules: Vec<UserRuleCtx>,
     current_time: String,
     model_id: String,
     /// 本轮真正喂给上游模型的 tool name 列表(由 `chat_stream::available_tool_names`
@@ -258,7 +281,7 @@ fn collect_prompt_context(model_id: &str, ctx: &[AIAgentContext]) -> PromptConte
             }
             AIAgentContext::CurrentTime { current_time } => {
                 // P0-1:与默认值保持一致,只保留自然日粒度。
-                // 上游 Warp 有可能传入精确到秒的 timestamp,这里统一压到“当前日期”。
+                // 上游 Zap 有可能传入精确到秒的 timestamp,这里统一压到“当前日期”。
                 out.current_time = current_time.format("%Y-%m-%d").to_string();
             }
             // 代码索引功能未实现,Codebase 上下文不进 system prompt。
@@ -281,9 +304,19 @@ fn collect_prompt_context(model_id: &str, ctx: &[AIAgentContext]) -> PromptConte
             }
             AIAgentContext::Skills { skills } => {
                 for s in skills {
+                    let path = match &s.reference {
+                        ai::skills::SkillReference::Path(p) => {
+                            Some(p.to_string_lossy().into_owned())
+                        }
+                        // Bundled skills load via InvokeSkill, not read_skill.
+                        // Omit skill_path to avoid guiding the model toward a
+                        // value that will always fail BYOP's skill_by_reference.
+                        ai::skills::SkillReference::BundledSkillId(_) => None,
+                    };
                     out.skills.push(SkillCtx {
                         name: s.name.clone(),
                         description: s.description.clone(),
+                        path,
                     });
                 }
             }
@@ -361,16 +394,25 @@ pub fn render_init_project_command(arguments: Option<&str>) -> String {
 /// 不要再硬编码"unavailable tools"黑名单 —— 模型看不到的工具自然不会调,
 /// 反过来用文本黑名单会让模型连真实可用的工具也不敢调。
 pub fn render_system(
+    api_type: AgentProviderApiType,
     model: &LLMId,
     ctx: &[AIAgentContext],
     available_tools: &[String],
     plan_mode: bool,
+    user_rules: &[(Option<String>, String)],
 ) -> String {
     let model_id = model_id_from_llm_id(model);
-    let template_name = pick_template(&model_id);
+    let template_name = pick_template(&model_id, api_type);
     let mut prompt_ctx = collect_prompt_context(&model_id, ctx);
     prompt_ctx.available_tools = available_tools.to_vec();
     prompt_ctx.plan_mode = plan_mode;
+    prompt_ctx.user_rules = user_rules
+        .iter()
+        .map(|(name, content)| UserRuleCtx {
+            name: name.clone(),
+            content: content.clone(),
+        })
+        .collect();
 
     let env = env();
     let tmpl = match env.get_template(template_name) {
@@ -398,7 +440,7 @@ fn fallback_init_project_command(arguments: &str) -> String {
 /// 渲染兜底 system(只在模板加载/渲染失败时用,不应在正常路径触发)。
 fn fallback_system(model_id: &str) -> String {
     format!(
-        "You are the AI coding agent inside OpenWarp, an AI Development Environment (ADE). \
+        "You are the AI coding agent inside Zap, an AI Development Environment (ADE). \
          Model: {model_id}. \
          Use the registered tools (run_shell_command / read_files / apply_file_diffs / grep / file_glob / ...) \
          to take actions on the user's behalf. Be concise."
@@ -417,6 +459,18 @@ mod tests {
         assert!(out.contains("Create or update `AGENTS.md`"), "{out}");
         assert!(out.contains("focus on test commands"), "{out}");
         assert!(out.contains("## Writing rules"), "{out}");
+    }
+
+    #[test]
+    fn pick_template_ollama_uses_local_template() {
+        assert_eq!(
+            pick_template("qwen2.5-coder", AgentProviderApiType::Ollama),
+            "system/local.j2"
+        );
+        assert_eq!(
+            pick_template("llama3.1", AgentProviderApiType::Ollama),
+            "system/local.j2"
+        );
     }
 
     #[test]
@@ -444,7 +498,11 @@ mod tests {
             ("my-custom-model", "system/default.j2"),
             ("", "system/default.j2"),
         ] {
-            assert_eq!(pick_template(id), want, "id={id}");
+            assert_eq!(
+                pick_template(id, AgentProviderApiType::OpenAi),
+                want,
+                "id={id}"
+            );
         }
     }
 
@@ -460,7 +518,11 @@ mod tests {
             ("google/gemini-2.5-flash", "system/gemini.j2"),
             ("moonshot/kimi-k2", "system/kimi.j2"),
         ] {
-            assert_eq!(pick_template(id), want, "id={id}");
+            assert_eq!(
+                pick_template(id, AgentProviderApiType::OpenAi),
+                want,
+                "id={id}"
+            );
         }
     }
 
@@ -473,7 +535,11 @@ mod tests {
             ("KIMI-K2", "system/kimi.j2"),
             ("Anthropic/Claude-3.5", "system/anthropic.j2"),
         ] {
-            assert_eq!(pick_template(id), want, "id={id}");
+            assert_eq!(
+                pick_template(id, AgentProviderApiType::OpenAi),
+                want,
+                "id={id}"
+            );
         }
     }
 
@@ -494,7 +560,14 @@ mod tests {
                 shell_version: Some("5.1".into()),
             }),
         ];
-        let out = render_system(&LLMId::from("byop:p:deepseek-chat"), &ctx, &[], false);
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:deepseek-chat"),
+            &ctx,
+            &[],
+            false,
+            &[],
+        );
         assert!(
             out.contains("Working directory: /home/user/project"),
             "{out}"
@@ -507,7 +580,7 @@ mod tests {
 
     #[test]
     fn render_produces_non_empty_for_all_families() {
-        // 任意 model id 都能渲染出非空字符串(包含 OpenWarp 自我标识)。
+        // 任意 model id 都能渲染出非空字符串(包含 Zap 自我标识)。
         for id in [
             "claude-sonnet-4-5",
             "gpt-4o",
@@ -519,21 +592,30 @@ mod tests {
             "weird-model",
         ] {
             let out = render_system(
+                AgentProviderApiType::OpenAi,
                 &LLMId::from(format!("byop:p:{id}").as_str()),
                 &[],
                 &[],
                 false,
+                &[],
             );
             assert!(
-                out.contains("OpenWarp"),
-                "id={id} should mention OpenWarp, got: {out}"
+                out.contains("Zap"),
+                "id={id} should mention Zap, got: {out}"
             );
         }
     }
 
     #[test]
     fn render_omits_skills_block_when_empty() {
-        let out = render_system(&LLMId::from("byop:p:deepseek-chat"), &[], &[], false);
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:deepseek-chat"),
+            &[],
+            &[],
+            false,
+            &[],
+        );
         // 没 skills 时 skills 区块不应出现
         assert!(
             !out.contains("Skills provide specialized instructions"),
@@ -541,10 +623,92 @@ mod tests {
         );
     }
 
+    /// Issue #169 回归:系统 prompt 中的 skill 区块必须包含 skill_path(绝对路径),
+    /// 而非仅 name/description,否则模型无法正确调用 read_skill 工具。
+    #[test]
+    fn render_includes_skill_path_for_read_skill_tool() {
+        use crate::ai::skills::SkillDescriptor;
+        use ai::skills::{SkillProvider, SkillReference, SkillScope};
+
+        let skill_path = "/home/user/.agents/skills/open-browser-use/SKILL.md";
+        let skill = SkillDescriptor {
+            reference: SkillReference::Path(skill_path.into()),
+            name: "open-browser-use".into(),
+            description: "Automates Chrome browser operations.".into(),
+            scope: SkillScope::Project,
+            provider: SkillProvider::Agents,
+            icon_override: None,
+        };
+        let ctx = vec![AIAgentContext::Skills {
+            skills: vec![skill],
+        }];
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:deepseek-chat"),
+            &ctx,
+            &[],
+            false,
+            &[],
+        );
+        assert!(
+            out.contains(skill_path),
+            "system prompt must expose the skill_path so the model can pass it to read_skill; got: {out}"
+        );
+    }
+
+    /// Issue #169 后续:bundled skill 的 BundledSkillId 变体在 BYOP 路径下不可通过
+    /// read_skill 加载(走 InvokeSkill),因此 system prompt 中不应输出 <skill_path>
+    /// 以避免模型使用必然失败的 @warp-skill:{id} 值。
+    #[test]
+    fn render_omits_skill_path_for_bundled_skill() {
+        use crate::ai::skills::SkillDescriptor;
+        use ai::skills::{SkillProvider, SkillReference, SkillScope};
+        use warp_core::ui::icons::Icon;
+
+        let skill = SkillDescriptor {
+            reference: SkillReference::BundledSkillId("find-skills".into()),
+            name: "find-skills".into(),
+            description: "Help discover and install new agent skills.".into(),
+            scope: SkillScope::Bundled,
+            provider: SkillProvider::Zap,
+            icon_override: Some(Icon::WarpLogoLight),
+        };
+        let ctx = vec![AIAgentContext::Skills {
+            skills: vec![skill],
+        }];
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:deepseek-chat"),
+            &ctx,
+            &[],
+            false,
+            &[],
+        );
+        assert!(
+            out.contains("find-skills"),
+            "bundled skill name should still appear in prompt: {out}"
+        );
+        assert!(
+            !out.contains("@warp-skill:"),
+            "bundled skill must NOT emit <skill_path> to avoid misleading the model: {out}"
+        );
+        assert!(
+            !out.contains("<skill_path>"),
+            "no <skill_path> tag should be rendered for bundled skills: {out}"
+        );
+    }
+
     #[test]
     fn fallback_does_not_panic() {
         // render_system 永远不会 panic,失败也走 fallback_system
-        let out = render_system(&LLMId::from("byop:p:any"), &[], &[], false);
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:any"),
+            &[],
+            &[],
+            false,
+            &[],
+        );
         assert!(!out.is_empty());
     }
 
@@ -557,7 +721,14 @@ mod tests {
             "websearch".into(),
             "mcp__github__create_issue".into(),
         ];
-        let out = render_system(&LLMId::from("byop:p:deepseek-chat"), &[], &tools, false);
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:deepseek-chat"),
+            &[],
+            &tools,
+            false,
+            &[],
+        );
         for name in &tools {
             assert!(
                 out.contains(name),
@@ -574,13 +745,27 @@ mod tests {
     #[test]
     fn render_omits_tool_list_when_empty() {
         // tool_names 为空(理论上不会发生,兜底:不渲染白名单段)
-        let out = render_system(&LLMId::from("byop:p:deepseek-chat"), &[], &[], false);
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:deepseek-chat"),
+            &[],
+            &[],
+            false,
+            &[],
+        );
         assert!(!out.contains("Available Tools"), "{out}");
     }
 
     #[test]
     fn plan_mode_off_omits_plan_block() {
-        let out = render_system(&LLMId::from("byop:p:deepseek-chat"), &[], &[], false);
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:deepseek-chat"),
+            &[],
+            &[],
+            false,
+            &[],
+        );
         assert!(
             !out.contains("Plan Mode (Read-Only)"),
             "plan_mode=false 不应包含 Plan Mode 段: {out}"
@@ -600,10 +785,12 @@ mod tests {
             "weird-model",
         ] {
             let out = render_system(
+                AgentProviderApiType::OpenAi,
                 &LLMId::from(format!("byop:p:{id}").as_str()),
                 &[],
                 &[],
                 true,
+                &[],
             );
             assert!(
                 out.contains("Plan Mode (Read-Only)"),
@@ -614,5 +801,195 @@ mod tests {
                 "id={id} plan_mode=true 应包含 Stop and wait 引导: {out}"
             );
         }
+    }
+
+    // Issue #116:全局 Rules(用户在 设置 → Agents → Rules 创建)必须注入 system prompt。
+    // 下面三个用例覆盖 `partials/user_rules.j2` 的关键分支。
+
+    #[test]
+    fn render_omits_user_rules_block_when_empty() {
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:deepseek-chat"),
+            &[],
+            &[],
+            false,
+            &[],
+        );
+        assert!(
+            !out.contains("# User rules"),
+            "user_rules 为空时不应渲染 user rules 区块: {out}"
+        );
+    }
+
+    #[test]
+    fn render_includes_user_rules_when_present() {
+        let rules = vec![(
+            Some("My rule".to_string()),
+            "Always use snake_case in Rust.".to_string(),
+        )];
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:deepseek-chat"),
+            &[],
+            &[],
+            false,
+            &rules,
+        );
+        assert!(
+            out.contains("# User rules"),
+            "应渲染 user rules 区块: {out}"
+        );
+        assert!(out.contains("## My rule"), "应包含规则名: {out}");
+        assert!(
+            out.contains("Always use snake_case in Rust."),
+            "应包含规则内容: {out}"
+        );
+    }
+
+    #[test]
+    fn render_includes_user_rules_across_all_template_families() {
+        // user_rules.j2 经 footer.j2 注入,所有 system 模板族都引用了 footer。
+        // 这个回归用例确保 anthropic / beast / codex / gemini / kimi / trinity /
+        // default 任一模板族都会渲染 user rules,不会因为某条家族没拉 footer 而漏注入。
+        let rules = vec![(Some("家族覆盖".to_string()), "snake_case only.".to_string())];
+        for id in [
+            "claude-sonnet-4-5",
+            "gpt-4o",
+            "gpt-5-codex",
+            "gemini-2.5-pro",
+            "kimi-k2",
+            "trinity-v1",
+            "deepseek-chat",
+            "weird-model",
+        ] {
+            let out = render_system(
+                AgentProviderApiType::OpenAi,
+                &LLMId::from(format!("byop:p:{id}").as_str()),
+                &[],
+                &[],
+                false,
+                &rules,
+            );
+            assert!(
+                out.contains("snake_case only."),
+                "id={id} 应包含 user rule 内容: {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn render_user_rules_separates_multiple_rules_with_blank_line() {
+        // 多条规则之间应有空行分隔(`{% if not loop.last %}`),最后一条之后不留空行。
+        let rules = vec![
+            (Some("R1".to_string()), "first content".to_string()),
+            (Some("R2".to_string()), "second content".to_string()),
+            (Some("R3".to_string()), "third content".to_string()),
+        ];
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:deepseek-chat"),
+            &[],
+            &[],
+            false,
+            &rules,
+        );
+
+        // 两条规则之间应至少包含一个 "blank line"(两个相邻换行)。
+        // 不写死具体换行数,因为 minijinja 的 trim_blocks/lstrip_blocks 默认行为
+        // 决定的具体换行数容易随模板微调而变(reviewer 实测出过 3 个换行的形态)。
+        // 我们要的契约是"有视觉空行 + 顺序正确"。
+        let pos_r1 = out.find("first content").expect("找不到 R1 content");
+        let pos_r2 = out.find("## R2").expect("找不到 R2 标题");
+        let pos_r3 = out.find("## R3").expect("找不到 R3 标题");
+        assert!(pos_r1 < pos_r2 && pos_r2 < pos_r3, "顺序应保持: {out}");
+        let between_r1_r2 = &out[pos_r1 + "first content".len()..pos_r2];
+        let between_r2_r3 = &out[pos_r2..pos_r3];
+        assert!(
+            between_r1_r2.contains("\n\n"),
+            "R1 与 R2 之间应有空行,实际:{between_r1_r2:?}"
+        );
+        assert!(
+            between_r2_r3.contains("\n\n"),
+            "R2 与 R3 之间应有空行,实际:{between_r2_r3:?}"
+        );
+    }
+
+    #[test]
+    fn render_user_rules_handles_no_name() {
+        let rules = vec![(None, "Be terse.".to_string())];
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:deepseek-chat"),
+            &[],
+            &[],
+            false,
+            &rules,
+        );
+        assert!(out.contains("# User rules"), "{out}");
+        assert!(out.contains("Be terse."), "{out}");
+        // 无 name 时不应渲染空的 `## ` 标题行
+        assert!(
+            !out.contains("## \n"),
+            "无 name 时不应渲染空的 '## ' 标题: {out}"
+        );
+    }
+
+    #[test]
+    fn render_includes_thinking_language_across_all_template_families() {
+        // thinking_language.j2 经 footer.j2 注入,所有 system 模板族都引用了 footer。
+        // 回归用例确保 8 族模板都会渲染 thinking_language,不会因为某条家族没拉 footer
+        // 而漏注入,导致 LLM 在中文用户提问时仍用英文思考。
+        // 8 族对应: anthropic / gpt / beast / codex / gemini / kimi / trinity / default
+        for id in [
+            "claude-sonnet-4-5",
+            "gpt-3.5-turbo",
+            "gpt-4o",
+            "gpt-5-codex",
+            "gemini-2.5-pro",
+            "kimi-k2",
+            "trinity-v1",
+            "weird-model",
+        ] {
+            let out = render_system(
+                AgentProviderApiType::OpenAi,
+                &LLMId::from(format!("byop:p:{id}").as_str()),
+                &[],
+                &[],
+                false,
+                &[],
+            );
+            assert!(
+                out.contains("# Thinking language"),
+                "id={id} 应渲染 thinking_language 区块: {out}"
+            );
+            assert!(
+                out.contains("internal reasoning"),
+                "id={id} 应包含 thinking_language 锚点: {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn render_thinking_language_precedes_tool_aliases() {
+        // meta-rule 应在工具列表之前,不被 user_rules / project_rules 覆盖。
+        // 需要传一个非空 tool 列表,否则 tool_aliases.j2 整个块被 {% if available_tools %} 跳过。
+        let tools = vec!["read_files".to_string()];
+        let out = render_system(
+            AgentProviderApiType::OpenAi,
+            &LLMId::from("byop:p:claude-sonnet-4-5"),
+            &[],
+            &tools,
+            false,
+            &[],
+        );
+        let pos_thinking = out
+            .find("# Thinking language")
+            .expect("应包含 thinking_language");
+        let pos_tools = out.find("# Available Tools").expect("应包含 tool_aliases");
+        assert!(
+            pos_thinking < pos_tools,
+            "thinking_language 应在 tool_aliases 之前: thinking={pos_thinking}, tools={pos_tools}\n{out}"
+        );
     }
 }

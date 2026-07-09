@@ -1,12 +1,10 @@
 use crate::{
     cloud_object::{
-        model::persistence::CloudModel, CloudObjectEventEntrypoint, CloudObjectLocation, Space,
+        model::persistence::ObjectStoreModel, update_manager::UpdateManager, Space,
+        StoredObjectEventEntrypoint, StoredObjectLocation,
     },
     network::{NetworkStatus, NetworkStatusKind},
-    server::{
-        cloud_objects::{listener::Listener, update_manager::UpdateManager},
-        ids::ClientId,
-    },
+    server::ids::ClientId,
     util::bindings::keybinding_name_to_display_string,
     workflows::workflow::Workflow,
     workspaces::{team::Team, user_workspaces::UserWorkspaces, workspace::Workspace},
@@ -43,7 +41,7 @@ pub fn go_online() -> TestStep {
 }
 
 pub fn join_a_workspace() -> TestStep {
-    TestStep::new("Join a Warp Drive workspace")
+    TestStep::new("Join a Zap Drive workspace")
         .with_action(move |app, _, _| {
             UserWorkspaces::handle(app).update(app, |user_workspaces, ctx| {
                 let workspace_uid = "workspace_uid123456789".to_string().into();
@@ -104,18 +102,18 @@ pub fn create_a_personal_workflow() -> TestStep {
                         .expect("User UID must be set in tests"),
                     None,
                     ClientId::default(),
-                    CloudObjectEventEntrypoint::ManagementUI,
+                    StoredObjectEventEntrypoint::ManagementUI,
                     true,
                     ctx,
                 )
             })
         })
         .add_assertion(move |app, _| {
-            CloudModel::handle(app).read(app, |cloud_model, ctx| {
+            ObjectStoreModel::handle(app).read(app, |object_store_model, ctx| {
                 async_assert!(
-                    cloud_model
+                    object_store_model
                         .active_cloud_objects_in_location_without_descendents(
-                            CloudObjectLocation::Space(Space::Personal),
+                            StoredObjectLocation::Space(Space::Personal),
                             ctx,
                         )
                         .count()
@@ -143,30 +141,5 @@ pub fn assert_binding_display_string(
     )
 }
 
-pub fn assert_websocket_has_started() -> TestStep {
-    TestStep::new("Assert a websocket has started").add_named_assertion(
-        "subscription abort handle should exist",
-        move |app, _| {
-            Listener::handle(app).read(app, |listener, _| {
-                async_assert!(
-                    listener.has_current_subscription_abort_handle(),
-                    "subscription has started"
-                )
-            })
-        },
-    )
-}
-
-pub fn assert_websocket_has_not_started() -> TestStep {
-    TestStep::new("Assert a websocket has not started").add_named_assertion(
-        "subscription abort handle should not exist",
-        move |app, _| {
-            Listener::handle(app).read(app, |listener, _| {
-                async_assert!(
-                    !listener.has_current_subscription_abort_handle(),
-                    "subscription has not started"
-                )
-            })
-        },
-    )
-}
+// Zap(本地化,Phase 2d-4a-1):原 `assert_websocket_has_started` / `assert_websocket_has_not_started`
+// 断言依赖物理删除的 `Listener` singleton,无调用方,一并移除。
